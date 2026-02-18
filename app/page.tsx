@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Facehash } from 'facehash';
 import { Menu, Pin, Plus } from 'lucide-react';
 
@@ -80,6 +81,7 @@ function pendingLabel(total: number) {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [appName, setAppName] = useState('OpenGram');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -451,6 +453,7 @@ export default function Home() {
                 key={chat.id}
                 chat={chat}
                 agentName={agent?.name ?? 'Unknown Agent'}
+                onOpen={() => router.push(`/chats/${chat.id}`)}
                 onArchive={() => archiveChat(chat)}
                 onLongPress={(point) => setContextMenu({ chatId: chat.id, ...point })}
               />
@@ -603,11 +606,12 @@ export default function Home() {
 type ChatRowProps = {
   chat: Chat;
   agentName: string;
+  onOpen: () => void;
   onArchive: () => void;
   onLongPress: (point: { x: number; y: number }) => void;
 };
 
-function ChatRow({ chat, agentName, onArchive, onLongPress }: ChatRowProps) {
+function ChatRow({ chat, agentName, onOpen, onArchive, onLongPress }: ChatRowProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartXRef = useRef(0);
@@ -615,6 +619,7 @@ function ChatRow({ chat, agentName, onArchive, onLongPress }: ChatRowProps) {
   const dragBaseOffsetRef = useRef(0);
   const pointerIdRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimerRef.current !== null) {
@@ -634,10 +639,12 @@ function ChatRow({ chat, agentName, onArchive, onLongPress }: ChatRowProps) {
       dragStartYRef.current = event.clientY;
       dragBaseOffsetRef.current = offsetX;
       setIsDragging(false);
+      longPressTriggeredRef.current = false;
       event.currentTarget.setPointerCapture(event.pointerId);
       clearLongPressTimer();
       longPressTimerRef.current = window.setTimeout(() => {
         if (!isDragging) {
+          longPressTriggeredRef.current = true;
           onLongPress({ x: event.clientX, y: event.clientY });
         }
       }, 520);
@@ -684,9 +691,19 @@ function ChatRow({ chat, agentName, onArchive, onLongPress }: ChatRowProps) {
       }
       if (swipeEnd.shouldArchive) {
         onArchive();
+        return;
+      }
+
+      if (!isDragging && !longPressTriggeredRef.current) {
+        if (offsetX < 0) {
+          setOffsetX(0);
+          return;
+        }
+
+        onOpen();
       }
     },
-    [clearLongPressTimer, isDragging, offsetX, onArchive],
+    [clearLongPressTimer, isDragging, offsetX, onArchive, onOpen],
   );
 
   useEffect(() => {
