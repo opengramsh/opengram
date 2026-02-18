@@ -28,6 +28,8 @@ type StreamManagerState = {
   reconnectAttempt: number;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   lastPersistedCursor: string | null;
+  activeCursor: string | null;
+  activeConnectionOpened: boolean;
 };
 
 const CURSOR_STORAGE_KEY = 'opengram.sse.cursor';
@@ -74,6 +76,18 @@ function safeWriteCursorToStorage(cursor: string) {
 
   try {
     window.localStorage.setItem(CURSOR_STORAGE_KEY, cursor);
+  } catch {
+    // localStorage can be blocked; keep in-memory cursor.
+  }
+}
+
+function safeClearCursorFromStorage() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(CURSOR_STORAGE_KEY);
   } catch {
     // localStorage can be blocked; keep in-memory cursor.
   }
@@ -130,6 +144,8 @@ function createInitialState(): StreamManagerState {
     reconnectAttempt: 0,
     reconnectTimer: null,
     lastPersistedCursor: safeReadCursorFromStorage(),
+    activeCursor: null,
+    activeConnectionOpened: false,
   };
 }
 
@@ -152,6 +168,8 @@ function closeSource(state: StreamManagerState) {
 
   state.source.close();
   state.source = null;
+  state.activeCursor = null;
+  state.activeConnectionOpened = false;
 }
 
 function clearReconnectTimer(state: StreamManagerState) {
@@ -198,8 +216,11 @@ function ensureConnected(state: StreamManagerState) {
 
   const source = new EventSource(buildStreamUrl(state.lastPersistedCursor));
   state.source = source;
+  state.activeCursor = state.lastPersistedCursor;
+  state.activeConnectionOpened = false;
 
   source.onopen = () => {
+    state.activeConnectionOpened = true;
     state.reconnectAttempt = 0;
   };
 
@@ -208,6 +229,12 @@ function ensureConnected(state: StreamManagerState) {
       closeSource(state);
       clearReconnectTimer(state);
       return;
+    }
+
+    if (state.activeCursor && !state.activeConnectionOpened) {
+      // Cursor may be stale (retention/db reset); retry once without it.
+      state.lastPersistedCursor = null;
+      safeClearCursorFromStorage();
     }
 
     closeSource(state);
@@ -257,4 +284,6 @@ export function resetEventsStreamForTests() {
   closeSource(state);
   state.reconnectAttempt = 0;
   state.lastPersistedCursor = null;
+  state.activeCursor = null;
+  state.activeConnectionOpened = false;
 }

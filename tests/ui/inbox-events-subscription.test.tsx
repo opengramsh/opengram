@@ -102,6 +102,74 @@ describe('inbox event subscriptions', () => {
     vi.unstubAllGlobals();
   });
 
+  it('refreshes pending summary only for request events', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === '/api/v1/config') {
+        return new Response(
+          JSON.stringify({
+            appName: 'OpenGram',
+            customStates: ['Open', 'Closed'],
+            defaultModelIdForNewChats: 'model-a',
+            agents: [{ id: 'agent-a', name: 'Agent A', description: 'Alpha' }],
+            models: [{ id: 'model-a', name: 'Model A', description: 'Alpha' }],
+          }),
+          { status: 200 },
+        );
+      }
+
+      if (url.startsWith('/api/v1/chats/pending-summary')) {
+        return new Response(JSON.stringify({ pending_requests_total: 0 }), { status: 200 });
+      }
+
+      if (url.startsWith('/api/v1/chats?')) {
+        return new Response(JSON.stringify({ data: [], cursor: { next: null, hasMore: false } }), { status: 200 });
+      }
+
+      if (url === '/api/v1/chats/chat-live') {
+        return new Response(
+          JSON.stringify({
+            ...baseChat,
+            id: 'chat-live',
+            title: 'Live chat',
+            is_archived: false,
+          }),
+          { status: 200 },
+        );
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+
+    render(<Home />);
+    await screen.findByText('All states');
+
+    const pendingSummaryCallCount = () =>
+      fetchMock.mock.calls.filter(([input]) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        return url.startsWith('/api/v1/chats/pending-summary');
+      }).length;
+
+    const initialSummaryCalls = pendingSummaryCallCount();
+
+    await emitEvent('chat.updated', { chatId: 'chat-live' });
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          return url === '/api/v1/chats/chat-live';
+        }),
+      ).toBe(true);
+    });
+    expect(pendingSummaryCallCount()).toBe(initialSummaryCalls);
+
+    await emitEvent('request.created', { chatId: 'chat-live' });
+    await waitFor(() => {
+      expect(pendingSummaryCallCount()).toBe(initialSummaryCalls + 1);
+    });
+  });
+
   it('uses latest filter values when a single-chat refresh resolves after filter change', async () => {
     let resolveSingleChatFetch: ((value: Response) => void) | null = null;
     const singleChatFetch = new Promise<Response>((resolve) => {

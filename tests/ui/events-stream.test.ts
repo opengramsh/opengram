@@ -111,6 +111,7 @@ describe('events stream singleton', () => {
     const unsub = subscribeToEventsStream(() => {});
     const first = MockEventSource.instances[0];
     expect(first).toBeTruthy();
+    first?.onopen?.(new Event('open'));
 
     first?.emit('message.streaming.chunk', {
       id: 'evt-chunk',
@@ -135,6 +136,25 @@ describe('events stream singleton', () => {
     expect(MockEventSource.instances[1]?.url).toBe(
       '/api/v1/events/stream?ephemeral=true&cursor=evt-persisted',
     );
+
+    unsub();
+  });
+
+  it('drops stale persisted cursor after immediate connection failure', () => {
+    localStorage.setItem('opengram.sse.cursor', 'evt-stale');
+    delete (globalThis as typeof globalThis & { __opengramEventsStreamSingleton__?: unknown })
+      .__opengramEventsStreamSingleton__;
+
+    const unsub = subscribeToEventsStream(() => {});
+    const first = MockEventSource.instances[0];
+    expect(first?.url).toBe('/api/v1/events/stream?ephemeral=true&cursor=evt-stale');
+
+    first?.emitError();
+    vi.advanceTimersByTime(500);
+
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1]?.url).toBe('/api/v1/events/stream?ephemeral=true');
+    expect(localStorage.getItem('opengram.sse.cursor')).toBeNull();
 
     unsub();
   });

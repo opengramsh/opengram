@@ -380,6 +380,11 @@ export default function Home() {
   useEffect(() => {
     const unsubscribe = subscribeToEventsStream((event: FrontendStreamEvent) => {
       const chatIdFromEvent = typeof event.payload.chatId === 'string' ? event.payload.chatId : null;
+      const refreshesPendingSummary = (
+        event.type === 'request.created'
+        || event.type === 'request.resolved'
+        || event.type === 'request.cancelled'
+      );
 
       if (
         event.type === 'chat.created'
@@ -394,14 +399,26 @@ export default function Home() {
         || event.type === 'request.cancelled'
       ) {
         if (!chatIdFromEvent) {
-          void refreshChats();
+          if (refreshesPendingSummary) {
+            void refreshChats();
+            return;
+          }
+
+          void loadChats().catch(() => setError('Failed to load inbox data.'));
           return;
         }
 
-        void Promise.all([
-          refreshSingleInboxChat(chatIdFromEvent).catch(() => refreshChats()),
-          loadPendingSummary().catch(() => setPendingRequestsTotal(0)),
-        ]);
+        if (refreshesPendingSummary) {
+          void Promise.all([
+            refreshSingleInboxChat(chatIdFromEvent).catch(() => loadChats()),
+            loadPendingSummary().catch(() => setPendingRequestsTotal(0)),
+          ]);
+          return;
+        }
+
+        void refreshSingleInboxChat(chatIdFromEvent).catch(() => {
+          void loadChats().catch(() => setError('Failed to load inbox data.'));
+        });
         return;
       }
 
@@ -419,7 +436,7 @@ export default function Home() {
     return () => {
       unsubscribe();
     };
-  }, [loadPendingSummary, refreshChats, refreshSingleInboxChat]);
+  }, [loadChats, loadPendingSummary, refreshChats, refreshSingleInboxChat]);
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col bg-background pb-36">
