@@ -88,7 +88,16 @@ describe('search API', () => {
         'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)',
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       ].join(' '),
-    ).run('555555555555555555555', chatId, 'agent', 'agent-default', now, now, 'hello planet search', 'complete');
+    ).run(
+      '555555555555555555555',
+      chatId,
+      'agent',
+      'agent-default',
+      now,
+      now,
+      '<img src=x onerror=alert(1)> hello planet search',
+      'complete',
+    );
     db.prepare(
       [
         'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)',
@@ -106,6 +115,8 @@ describe('search API', () => {
     expect(body.messages).toHaveLength(1);
     expect(body.messages[0].id).toBe('555555555555555555555');
     expect(body.messages[0].snippet).toContain('<mark>planet</mark>');
+    expect(body.messages[0].snippet).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(body.messages[0].snippet).not.toContain('<img');
     expect(body.messages[0].chat_id).toBe(chatId);
   });
 
@@ -278,6 +289,22 @@ describe('search API', () => {
         code: 'VALIDATION_ERROR',
         message: 'Invalid full-text search query.',
         details: { field: 'q' },
+      },
+    });
+  });
+
+  it('returns internal error for non-FTS query failures', async () => {
+    db.exec('DROP TABLE messages_fts');
+
+    const response = await searchGet(
+      createRequest('http://localhost/api/v1/search?q=planet&scope=messages'),
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Unexpected server error.',
       },
     });
   });

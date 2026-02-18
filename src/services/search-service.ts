@@ -60,6 +60,9 @@ type SearchResult = {
   hasMore: boolean;
 };
 
+const SEARCH_HIGHLIGHT_OPEN = '__opengram_search_mark_open__';
+const SEARCH_HIGHLIGHT_CLOSE = '__opengram_search_mark_close__';
+
 function withDb<T>(callback: (db: Database.Database) => T): T {
   const db = createSqliteConnection();
   try {
@@ -96,6 +99,21 @@ function normalizeQuery(value: string | null): string {
 
 function escapeLikeQuery(value: string) {
   return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function sanitizeHighlightedSnippet(value: string) {
+  return escapeHtml(value)
+    .replaceAll(SEARCH_HIGHLIGHT_OPEN, '<mark>')
+    .replaceAll(SEARCH_HIGHLIGHT_CLOSE, '</mark>');
 }
 
 function resultTypeRank(resultType: ResultType) {
@@ -202,10 +220,9 @@ function queryMessageMatches(
 
     const message = error.message.toLowerCase();
     return (
-      message.includes('fts5')
+      message.includes('fts5: syntax error')
       || message.includes('malformed match')
       || message.includes('unterminated string')
-      || message.includes('syntax error')
     );
   };
 
@@ -218,7 +235,7 @@ function queryMessageMatches(
           'm.chat_id,',
           'c.title AS chat_title,',
           'm.created_at AS sort_at,',
-          "snippet(messages_fts, 2, '<mark>', '</mark>', '…', 20) AS snippet",
+          'snippet(messages_fts, 2, ?, ?, \'…\', 20) AS snippet',
           'FROM messages_fts',
           'JOIN messages m ON m.id = messages_fts.message_id',
           'JOIN chats c ON c.id = m.chat_id',
@@ -228,7 +245,13 @@ function queryMessageMatches(
           'LIMIT ?',
         ].join(' '),
       )
-      .all(query, ...cursorClause.values, limit + 1) as MessageSearchRow[];
+      .all(
+        SEARCH_HIGHLIGHT_OPEN,
+        SEARCH_HIGHLIGHT_CLOSE,
+        query,
+        ...cursorClause.values,
+        limit + 1,
+      ) as MessageSearchRow[];
 
     return rows.map((row) => ({
       resultType: 'message' as const,
@@ -238,7 +261,7 @@ function queryMessageMatches(
         id: row.id,
         chat_id: row.chat_id,
         chat_title: row.chat_title,
-        snippet: row.snippet,
+        snippet: sanitizeHighlightedSnippet(row.snippet),
       },
     }));
   } catch (error) {
