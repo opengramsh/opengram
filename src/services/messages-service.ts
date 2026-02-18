@@ -610,3 +610,11 @@ export function resetStreamingTimeoutSweeperForTests() {
     delete scopedGlobal[STREAM_SWEEPER_GLOBAL_KEY];
   }
 }
+
+export function isStreamingTimeoutSweeperRunningForTests() {
+  const scopedGlobal = globalThis as typeof globalThis & {
+    [STREAM_SWEEPER_GLOBAL_KEY]?: ReturnType<typeof setInterval>;
+  };
+
+  return Boolean(scopedGlobal[STREAM_SWEEPER_GLOBAL_KEY]);
+}
