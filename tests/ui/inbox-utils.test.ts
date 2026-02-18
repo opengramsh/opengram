@@ -31,11 +31,12 @@ describe('inbox utils', () => {
     expect(formatInboxTimestamp(messageDate, now)).toBe(expectedDay);
   });
 
-  it('formats older dates as yyyy-mm-dd', () => {
+  it('formats older dates as locale short date', () => {
     const now = new Date(2026, 1, 18, 20, 30, 0);
     const messageDate = new Date(2026, 0, 3, 12, 0, 0);
+    const expected = new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(messageDate);
 
-    expect(formatInboxTimestamp(messageDate, now)).toBe('2026-01-03');
+    expect(formatInboxTimestamp(messageDate, now)).toBe(expected);
   });
 
   it('builds chats query params from active filters', () => {

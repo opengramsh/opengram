@@ -12,6 +12,7 @@ import { POST as archivePost } from '@/app/api/v1/chats/[chatId]/archive/route';
 import { POST as markReadPost } from '@/app/api/v1/chats/[chatId]/mark-read/route';
 import { POST as markUnreadPost } from '@/app/api/v1/chats/[chatId]/mark-unread/route';
 import { POST as unarchivePost } from '@/app/api/v1/chats/[chatId]/unarchive/route';
+import { GET as pendingSummaryGet } from '@/app/api/v1/chats/pending-summary/route';
 import { GET as chatsGet, POST as chatsPost } from '@/app/api/v1/chats/route';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 
@@ -533,6 +534,53 @@ describe('chats API', () => {
 
     expect(response.status).toBe(404);
     expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns global pending summary for inbox and excludes archived chats', async () => {
+    const first = await createChat({ title: 'pending-open' });
+    const second = await createChat({ title: 'pending-archived' });
+    const firstChatId = first.json.id as string;
+    const secondChatId = second.json.id as string;
+    const now = Date.now();
+
+    db.prepare(
+      [
+        'INSERT INTO requests (id, chat_id, type, status, title, config, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('123456789012345678910', firstChatId, 'text_input', 'pending', 'Need decision', '{}', now);
+    db.prepare(
+      [
+        'INSERT INTO requests (id, chat_id, type, status, title, config, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('123456789012345678911', secondChatId, 'text_input', 'pending', 'Need archive decision', '{}', now);
+
+    await markUnreadPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${firstChatId}/mark-unread`, 'POST'),
+      routeContext(firstChatId),
+    );
+    await markUnreadPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${secondChatId}/mark-unread`, 'POST'),
+      routeContext(secondChatId),
+    );
+    await archivePost(
+      createJsonRequest(`http://localhost/api/v1/chats/${secondChatId}/archive`, 'POST'),
+      routeContext(secondChatId),
+    );
+
+    const inboxSummaryResponse = await pendingSummaryGet(
+      createJsonRequest('http://localhost/api/v1/chats/pending-summary?archived=false', 'GET'),
+    );
+    const inboxSummaryBody = await inboxSummaryResponse.json();
+    expect(inboxSummaryResponse.status).toBe(200);
+    expect(inboxSummaryBody.pending_requests_total).toBe(1);
+
+    const allSummaryResponse = await pendingSummaryGet(
+      createJsonRequest('http://localhost/api/v1/chats/pending-summary', 'GET'),
+    );
+    const allSummaryBody = await allSummaryResponse.json();
+    expect(allSummaryBody.pending_requests_total).toBe(2);
   });
 });
 

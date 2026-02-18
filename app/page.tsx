@@ -7,7 +7,6 @@ import { Menu, Pin, Plus } from 'lucide-react';
 import {
   buildChatsQuery,
   formatInboxTimestamp,
-  getPendingRequestsTotal,
   sortInboxChats,
 } from '@/src/lib/inbox';
 
@@ -23,6 +22,14 @@ type ConfigResponse = {
   appName: string;
   customStates: string[];
   agents: Agent[];
+  models: Model[];
+  defaultModelIdForNewChats: string;
+};
+
+type Model = {
+  id: string;
+  name: string;
+  description: string;
 };
 
 type Chat = {
@@ -73,12 +80,20 @@ function pendingLabel(total: number) {
 export default function Home() {
   const [appName, setAppName] = useState('OpenGram');
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
   const [customStates, setCustomStates] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
+  const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [selectedState, setSelectedState] = useState('');
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false);
+  const [newChatAgentId, setNewChatAgentId] = useState('');
+  const [newChatModelId, setNewChatModelId] = useState('');
+  const [newChatFirstMessage, setNewChatFirstMessage] = useState('');
+  const [newChatError, setNewChatError] = useState<string | null>(null);
+  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -91,8 +106,6 @@ export default function Home() {
     }
     return map;
   }, [agents]);
-
-  const pendingRequestsTotal = useMemo(() => getPendingRequestsTotal(chats), [chats]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -126,7 +139,22 @@ export default function Home() {
     const config = (await response.json()) as ConfigResponse;
     setAppName(config.appName || 'OpenGram');
     setAgents(config.agents ?? []);
+    setModels(config.models ?? []);
     setCustomStates(config.customStates ?? []);
+    const fallbackAgentId = config.agents[0]?.id ?? '';
+    const fallbackModelId = config.defaultModelIdForNewChats || config.models[0]?.id || '';
+    setNewChatAgentId((current) => current || fallbackAgentId);
+    setNewChatModelId((current) => current || fallbackModelId);
+  }, []);
+
+  const loadPendingSummary = useCallback(async () => {
+    const response = await fetch('/api/v1/chats/pending-summary?archived=false', { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Pending summary request failed with status ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { pending_requests_total?: number };
+    setPendingRequestsTotal(Math.max(0, payload.pending_requests_total ?? 0));
   }, []);
 
   const loadChats = useCallback(async () => {
@@ -168,12 +196,16 @@ export default function Home() {
   }, [loadConfig]);
 
   useEffect(() => {
+    loadPendingSummary().catch(() => setPendingRequestsTotal(0));
+  }, [loadPendingSummary]);
+
+  useEffect(() => {
     loadChats().catch(() => setError('Failed to load inbox data.'));
   }, [loadChats]);
 
   const refreshChats = useCallback(async () => {
-    await loadChats();
-  }, [loadChats]);
+    await Promise.all([loadChats(), loadPendingSummary()]);
+  }, [loadChats, loadPendingSummary]);
 
   const mutateChat = useCallback(
     async (chatId: string, updater: (chat: Chat) => Chat | null, request: () => Promise<Response>) => {
@@ -195,12 +227,54 @@ export default function Home() {
         if (!response.ok) {
           throw new Error('mutation failed');
         }
+        await loadPendingSummary();
       } catch {
         await refreshChats();
       }
     },
-    [refreshChats],
+    [loadPendingSummary, refreshChats],
   );
+
+  const openNewChatSheet = useCallback(() => {
+    const fallbackAgentId = agents[0]?.id ?? '';
+    const fallbackModelId = models[0]?.id ?? '';
+    setNewChatAgentId((current) => current || fallbackAgentId);
+    setNewChatModelId((current) => current || fallbackModelId);
+    setNewChatError(null);
+    setIsNewChatOpen(true);
+  }, [agents, models]);
+
+  const createNewChat = useCallback(async () => {
+    if (!newChatAgentId || !newChatModelId || isCreatingNewChat) {
+      return;
+    }
+
+    setIsCreatingNewChat(true);
+    setNewChatError(null);
+    try {
+      const response = await fetch('/api/v1/chats', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentIds: [newChatAgentId],
+          modelId: newChatModelId,
+          firstMessage: newChatFirstMessage.trim() || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create chat');
+      }
+
+      setIsNewChatOpen(false);
+      setNewChatFirstMessage('');
+      await refreshChats();
+    } catch {
+      setNewChatError('Failed to create chat.');
+    } finally {
+      setIsCreatingNewChat(false);
+    }
+  }, [isCreatingNewChat, newChatAgentId, newChatModelId, newChatFirstMessage, refreshChats]);
 
   const markChatRead = useCallback(
     async (chat: Chat) => {
@@ -444,10 +518,82 @@ export default function Home() {
           type="button"
           aria-label="New chat"
           className="grid h-11 w-11 place-items-center rounded-2xl bg-[hsl(151,100%,43%)] text-black shadow-lg shadow-[hsl(151,100%,43%)]/30"
+          onClick={openNewChatSheet}
         >
           <Plus size={19} strokeWidth={2.5} />
         </button>
       </div>
+
+      {isNewChatOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setIsNewChatOpen(false)}>
+          <div
+            className="liquid-glass absolute inset-x-0 bottom-0 rounded-t-3xl border-x border-t border-border p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-sm font-semibold text-foreground">New Chat</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Choose agent, model, and optional first message.</p>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Agent</span>
+                <select
+                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70"
+                  value={newChatAgentId}
+                  onChange={(event) => setNewChatAgentId(event.target.value)}
+                >
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Model</span>
+                <select
+                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70"
+                  value={newChatModelId}
+                  onChange={(event) => setNewChatModelId(event.target.value)}
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">First message (optional)</span>
+                <textarea
+                  rows={3}
+                  value={newChatFirstMessage}
+                  onChange={(event) => setNewChatFirstMessage(event.target.value)}
+                  className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/70"
+                  placeholder="Start with a message..."
+                />
+              </label>
+              {newChatError && <p className="text-xs text-red-300">{newChatError}</p>}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="h-10 flex-1 rounded-xl border border-border bg-card text-sm font-medium text-foreground"
+                  onClick={() => setIsNewChatOpen(false)}
+                  disabled={isCreatingNewChat}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                  onClick={() => void createNewChat()}
+                  disabled={isCreatingNewChat || !newChatAgentId || !newChatModelId}
+                >
+                  {isCreatingNewChat ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -598,7 +744,9 @@ function ChatRow({ chat, agentName, onArchive, onLongPress }: ChatRowProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className={`truncate text-sm ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}>
+              <p
+                className={`line-clamp-2 text-sm leading-5 ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}
+              >
                 {chat.title}
               </p>
               <p className="truncate text-xs text-muted-foreground">{agentName}</p>

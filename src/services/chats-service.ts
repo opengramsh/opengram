@@ -52,6 +52,10 @@ type ListChatsResult = {
   hasMore: boolean;
 };
 
+type PendingSummaryResult = {
+  pendingRequestsTotal: number;
+};
+
 function assertStringArray(value: unknown, fieldName: string) {
   if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
     throw validationError(`${fieldName} must be an array of strings.`, { field: fieldName });
@@ -398,6 +402,32 @@ export function listChats(url: URL): ListChatsResult {
     nextCursor: hasMore ? nextCursor : null,
     hasMore,
   };
+}
+
+export function getPendingSummary(url: URL): PendingSummaryResult {
+  const params = url.searchParams;
+  const conditions: string[] = [];
+  const queryParams: unknown[] = [];
+
+  const archived = params.get('archived');
+  if (archived !== null) {
+    if (archived !== 'true' && archived !== 'false') {
+      throw validationError('archived must be true or false.', { field: 'archived' });
+    }
+
+    conditions.push('is_archived = ?');
+    queryParams.push(archived === 'true' ? 1 : 0);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const total = withDb((db) => {
+    const row = db
+      .prepare(`SELECT COALESCE(SUM(pending_requests_count), 0) as total FROM chats ${where}`)
+      .get(...queryParams) as { total: number | null };
+    return row.total ?? 0;
+  });
+
+  return { pendingRequestsTotal: Math.max(0, total) };
 }
 
 export function getChat(chatId: string) {
