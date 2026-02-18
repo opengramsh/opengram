@@ -1,9 +1,17 @@
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, extname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { extname, join, posix, resolve, sep } from 'node:path';
+
 import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
+import sharp from 'sharp';
 
-import { notFoundError, validationError } from '@/src/api/http';
+import {
+  notFoundError,
+  payloadTooLargeError,
+  unsupportedMediaTypeError,
+  validationError,
+} from '@/src/api/http';
+import { encodeMediaCursor, type MediaListCursor } from '@/src/api/pagination';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { createSqliteConnection } from '@/src/db/client';
 import { emitEvent } from '@/src/services/events-service';
@@ -30,6 +38,19 @@ type CreateMediaInput = {
   contentType: string;
   kind?: MediaKind;
   messageId?: string;
+};
+
+type ListChatMediaInput = {
+  kind?: MediaKind;
+  messageId?: string;
+  limit: number;
+  cursor: MediaListCursor | null;
+};
+
+type ListChatMediaResult = {
+  data: ReturnType<typeof serializeMedia>[];
+  nextCursor: string | null;
+  hasMore: boolean;
 };
 
 function withDb<T>(callback: (db: Database.Database) => T): T {
@@ -61,8 +82,20 @@ function serializeMedia(record: MediaRecord) {
 }
 
 function resolveDataRoot() {
-  const dbPath = process.env.DATABASE_URL ?? './data/opengram.db';
-  return dirname(dbPath);
+  const envRoot = process.env.OPENGRAM_DATA_ROOT?.trim();
+  return resolve(envRoot || '/opt/opengram/data');
+}
+
+function resolveStoragePath(relativePath: string) {
+  const dataRoot = resolveDataRoot();
+  const absolutePath = resolve(dataRoot, relativePath);
+  const normalizedRoot = dataRoot.endsWith(sep) ? dataRoot : `${dataRoot}${sep}`;
+
+  if (absolutePath !== dataRoot && !absolutePath.startsWith(normalizedRoot)) {
+    throw validationError('Invalid storage path.');
+  }
+
+  return absolutePath;
 }
 
 function sanitizeFileName(value: string) {
@@ -102,7 +135,7 @@ function ensureAllowedContentType(contentType: string) {
   });
 
   if (!matched) {
-    throw validationError('Uploaded file type is not allowed.', {
+    throw unsupportedMediaTypeError('Uploaded file type is not allowed.', {
       field: 'file',
       contentType,
     });
@@ -127,7 +160,15 @@ function ensureChatAndMessage(db: Database.Database, chatId: string, messageId: 
   }
 }
 
-export function createMedia(input: CreateMediaInput) {
+async function createThumbnail(fileBytes: Uint8Array) {
+  return sharp(fileBytes)
+    .rotate()
+    .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toBuffer();
+}
+
+export async function createMedia(input: CreateMediaInput) {
   const config = loadOpengramConfig();
   if (!input.contentType) {
     throw validationError('file content type is required.', { field: 'file' });
@@ -138,7 +179,10 @@ export function createMedia(input: CreateMediaInput) {
   }
 
   if (input.fileBytes.length > config.maxUploadBytes) {
-    throw validationError('file exceeds maxUploadBytes.', { field: 'file' });
+    throw payloadTooLargeError('file exceeds maxUploadBytes.', {
+      field: 'file',
+      maxUploadBytes: config.maxUploadBytes,
+    });
   }
 
   ensureAllowedContentType(input.contentType);
@@ -147,26 +191,44 @@ export function createMedia(input: CreateMediaInput) {
     throw validationError('kind must be image, audio, or file.', { field: 'kind' });
   }
 
+  withDb((db) => {
+    ensureChatAndMessage(db, input.chatId, input.messageId);
+  });
+
   const mediaId = nanoid();
   const safeName = sanitizeFileName(input.fileName);
   const extension = extname(safeName) || '.bin';
-  const relativePath = join('uploads', input.chatId, `${mediaId}${extension}`);
-  const absolutePath = join(resolveDataRoot(), relativePath);
+  const relativePath = posix.join('uploads', input.chatId, `${mediaId}${extension}`);
+  const absolutePath = resolveStoragePath(relativePath);
+
+  const thumbnailBuffer = kind === 'image' ? await createThumbnail(input.fileBytes) : null;
+  const relativeThumbnailPath = thumbnailBuffer
+    ? posix.join('uploads', input.chatId, 'thumbnails', `${mediaId}.webp`)
+    : null;
+  const absoluteThumbnailPath = relativeThumbnailPath ? resolveStoragePath(relativeThumbnailPath) : null;
+
   const now = Date.now();
 
   return withDb((db) => {
     ensureChatAndMessage(db, input.chatId, input.messageId);
-    mkdirSync(dirname(absolutePath), { recursive: true });
+
+    mkdirSync(join(resolveDataRoot(), 'uploads', input.chatId), { recursive: true });
+    if (absoluteThumbnailPath) {
+      mkdirSync(join(resolveDataRoot(), 'uploads', input.chatId, 'thumbnails'), { recursive: true });
+    }
 
     let fileWritten = false;
+    let thumbnailWritten = false;
+
     try {
       writeFileSync(absolutePath, input.fileBytes);
       fileWritten = true;
-    } catch (error) {
-      throw error;
-    }
 
-    try {
+      if (thumbnailBuffer && absoluteThumbnailPath) {
+        writeFileSync(absoluteThumbnailPath, thumbnailBuffer);
+        thumbnailWritten = true;
+      }
+
       db.prepare(
         [
           'INSERT INTO media (',
@@ -178,7 +240,7 @@ export function createMedia(input: CreateMediaInput) {
         input.chatId,
         input.messageId ?? null,
         relativePath,
-        null,
+        relativeThumbnailPath,
         safeName,
         input.contentType,
         input.fileBytes.length,
@@ -193,6 +255,15 @@ export function createMedia(input: CreateMediaInput) {
           // Best-effort cleanup for failed DB writes after file creation.
         }
       }
+
+      if (thumbnailWritten && absoluteThumbnailPath) {
+        try {
+          unlinkSync(absoluteThumbnailPath);
+        } catch {
+          // Best-effort cleanup for failed DB writes after thumbnail creation.
+        }
+      }
+
       throw error;
     }
 
@@ -209,7 +280,7 @@ export function createMedia(input: CreateMediaInput) {
   });
 }
 
-export function listChatMedia(chatId: string, kind?: MediaKind, messageId?: string) {
+export function listChatMedia(chatId: string, input: ListChatMediaInput): ListChatMediaResult {
   return withDb((db) => {
     const chat = db.prepare('SELECT id FROM chats WHERE id = ?').get(chatId) as { id: string } | undefined;
     if (!chat) {
@@ -219,14 +290,19 @@ export function listChatMedia(chatId: string, kind?: MediaKind, messageId?: stri
     const filters = ['chat_id = ?'];
     const args: unknown[] = [chatId];
 
-    if (kind) {
+    if (input.kind) {
       filters.push('kind = ?');
-      args.push(kind);
+      args.push(input.kind);
     }
 
-    if (messageId) {
+    if (input.messageId) {
       filters.push('message_id = ?');
-      args.push(messageId);
+      args.push(input.messageId);
+    }
+
+    if (input.cursor) {
+      filters.push('(created_at < ? OR (created_at = ? AND id < ?))');
+      args.push(input.cursor.createdAt, input.cursor.createdAt, input.cursor.id);
     }
 
     const rows = db
@@ -234,12 +310,23 @@ export function listChatMedia(chatId: string, kind?: MediaKind, messageId?: stri
         [
           'SELECT * FROM media',
           `WHERE ${filters.join(' AND ')}`,
-          'ORDER BY created_at ASC, id ASC',
+          'ORDER BY created_at DESC, id DESC',
+          'LIMIT ?',
         ].join(' '),
       )
-      .all(...args) as MediaRecord[];
+      .all(...args, input.limit + 1) as MediaRecord[];
 
-    return rows.map(serializeMedia);
+    const hasMore = rows.length > input.limit;
+    const pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+    const lastRow = pageRows.at(-1);
+
+    return {
+      data: pageRows.map(serializeMedia),
+      hasMore,
+      nextCursor: hasMore && lastRow
+        ? encodeMediaCursor({ createdAt: lastRow.created_at, id: lastRow.id })
+        : null,
+    };
   });
 }
 
@@ -254,20 +341,70 @@ export function getMedia(mediaId: string) {
   });
 }
 
-export function readMediaFile(mediaId: string) {
+function getMediaRecord(db: Database.Database, mediaId: string): MediaRecord {
+  const media = db.prepare('SELECT * FROM media WHERE id = ?').get(mediaId) as MediaRecord | undefined;
+  if (!media) {
+    throw notFoundError('Media not found.', { mediaId });
+  }
+
+  return media;
+}
+
+export function getMediaFileDescriptor(mediaId: string) {
   return withDb((db) => {
-    const media = db.prepare('SELECT * FROM media WHERE id = ?').get(mediaId) as MediaRecord | undefined;
-    if (!media) {
-      throw notFoundError('Media not found.', { mediaId });
+    const media = getMediaRecord(db, mediaId);
+    const absolutePath = resolveStoragePath(media.storage_path);
+
+    if (!existsSync(absolutePath)) {
+      throw notFoundError('Media file not found on disk.', { mediaId });
     }
 
-    const absolutePath = join(resolveDataRoot(), media.storage_path);
-    const content = readFileSync(absolutePath);
-
     return {
-      content,
-      filename: media.filename,
+      absolutePath,
+      byteSize: media.byte_size,
       contentType: media.content_type,
+      filename: media.filename,
     };
   });
+}
+
+function thumbnailContentTypeFromPath(path: string) {
+  if (path.endsWith('.webp')) {
+    return 'image/webp';
+  }
+
+  if (path.endsWith('.png')) {
+    return 'image/png';
+  }
+
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+
+  return 'application/octet-stream';
+}
+
+export function getThumbnailDescriptor(mediaId: string) {
+  return withDb((db) => {
+    const media = getMediaRecord(db, mediaId);
+    if (media.kind !== 'image' || media.thumbnail_path === null) {
+      throw notFoundError('Thumbnail not found.', { mediaId });
+    }
+
+    const absolutePath = resolveStoragePath(media.thumbnail_path);
+    if (!existsSync(absolutePath)) {
+      throw notFoundError('Thumbnail file not found on disk.', { mediaId });
+    }
+
+    return {
+      absolutePath,
+      contentType: thumbnailContentTypeFromPath(media.thumbnail_path),
+      filename: `${media.id}-thumbnail${extname(media.thumbnail_path) || '.bin'}`,
+    };
+  });
+}
+
+export function readMediaSlice(absolutePath: string, start: number, endInclusive: number) {
+  const content = readFileSync(absolutePath);
+  return content.subarray(start, endInclusive + 1);
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { parseJsonBody, toErrorResponse, validationError } from '@/src/api/http';
+import { parseMediaPagination } from '@/src/api/pagination';
+import { parseJsonBody, successCollection, toErrorResponse, validationError } from '@/src/api/http';
 import { enforceWriteGuards } from '@/src/api/write-controls';
 import { createMedia, listChatMedia } from '@/src/services/media-service';
 
@@ -19,6 +20,7 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const chatId = await resolveChatId(context);
     const url = new URL(request.url);
+    const { limit, cursor } = parseMediaPagination(url.searchParams);
     const kindParam = url.searchParams.get('kind');
     const messageId = url.searchParams.get('messageId') ?? undefined;
 
@@ -26,8 +28,13 @@ export async function GET(request: Request, context: RouteContext) {
       throw validationError('kind must be image, audio, or file.', { field: 'kind' });
     }
 
-    const media = listChatMedia(chatId, kindParam ?? undefined, messageId);
-    return NextResponse.json({ data: media });
+    const result = listChatMedia(chatId, {
+      kind: kindParam ?? undefined,
+      messageId,
+      limit,
+      cursor,
+    });
+    return successCollection(result.data, result.nextCursor, result.hasMore);
   } catch (error) {
     return toErrorResponse(error);
   }
@@ -63,7 +70,7 @@ export async function POST(request: Request, context: RouteContext) {
         throw validationError('kind must be image, audio, or file.', { field: 'kind' });
       }
 
-      const media = createMedia({
+      const media = await createMedia({
         chatId,
         fileName: file.name,
         fileBytes: buffer,
@@ -95,7 +102,7 @@ export async function POST(request: Request, context: RouteContext) {
       throw validationError('base64Data is required.', { field: 'base64Data' });
     }
 
-    const media = createMedia({
+    const media = await createMedia({
       chatId,
       fileName: body.fileName,
       fileBytes: Uint8Array.from(Buffer.from(body.base64Data, 'base64')),

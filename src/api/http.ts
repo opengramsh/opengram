@@ -53,6 +53,14 @@ export function rateLimitedError(message: string, retryAfterSeconds: number, det
   });
 }
 
+export function payloadTooLargeError(message: string, details?: unknown) {
+  return new ApiError(413, 'PAYLOAD_TOO_LARGE', message, details);
+}
+
+export function unsupportedMediaTypeError(message: string, details?: unknown) {
+  return new ApiError(415, 'UNSUPPORTED_MEDIA_TYPE', message, details);
+}
+
 export function internalError(message: string, details?: unknown) {
   return new ApiError(500, 'INTERNAL_ERROR', message, details);
 }

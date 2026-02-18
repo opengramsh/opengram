@@ -35,6 +35,16 @@ export type ParsedSearchPagination = {
   cursor: SearchCursor | null;
 };
 
+export type MediaListCursor = {
+  createdAt: number;
+  id: string;
+};
+
+export type ParsedMediaPagination = {
+  limit: number;
+  cursor: MediaListCursor | null;
+};
+
 function toBase64Url(value: string) {
   return Buffer.from(value, 'utf8').toString('base64url');
 }
@@ -157,6 +167,43 @@ export function parseSearchPagination(params: URLSearchParams): ParsedSearchPagi
 
   const rawCursor = params.get('cursor');
   const cursor = rawCursor ? decodeSearchCursor(rawCursor) : null;
+
+  return {
+    limit,
+    cursor,
+  };
+}
+
+export function encodeMediaCursor(payload: MediaListCursor) {
+  return toBase64Url(JSON.stringify(payload));
+}
+
+export function decodeMediaCursor(rawCursor: string): MediaListCursor {
+  try {
+    const parsed = JSON.parse(fromBase64Url(rawCursor)) as Partial<MediaListCursor>;
+    if (typeof parsed.createdAt !== 'number' || typeof parsed.id !== 'string') {
+      throw new Error('Invalid cursor payload.');
+    }
+
+    return {
+      createdAt: parsed.createdAt,
+      id: parsed.id,
+    };
+  } catch {
+    throw validationError('Invalid cursor value.', { field: 'cursor' });
+  }
+}
+
+export function parseMediaPagination(params: URLSearchParams): ParsedMediaPagination {
+  const rawLimit = params.get('limit');
+  const limit = rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit);
+
+  if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_LIMIT) {
+    throw validationError('limit must be an integer between 1 and 100.', { field: 'limit' });
+  }
+
+  const rawCursor = params.get('cursor');
+  const cursor = rawCursor ? decodeMediaCursor(rawCursor) : null;
 
   return {
     limit,
