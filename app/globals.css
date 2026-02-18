@@ -55,3 +55,10 @@ body {
   color: hsl(var(--foreground));
   font-family: var(--font-sans);
 }
+
+.liquid-glass {
+  background: rgba(18, 18, 20, 0.55);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 -8px 24px rgba(0, 0, 0, 0.35);
+}
