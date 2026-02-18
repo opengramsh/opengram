@@ -6,14 +6,18 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..", "..");
-const migrationPath = join(repoRoot, "drizzle", "0000_initial.sql");
-const migrationSql = readFileSync(migrationPath, "utf8");
+const initialMigrationSql = readFileSync(join(repoRoot, "drizzle", "0000_initial.sql"), "utf8");
+const ftsTriggerUpgradeSql = readFileSync(
+  join(repoRoot, "drizzle", "0001_messages_fts_trigger_upgrade.sql"),
+  "utf8",
+);
 
 function createDatabase() {
   const tempDir = mkdtempSync(join(tmpdir(), "opengram-db-"));
   const dbPath = join(tempDir, "test.db");
   const db = new Database(dbPath);
-  db.exec(migrationSql);
+  db.exec(initialMigrationSql);
+  db.exec(ftsTriggerUpgradeSql);
   return db;
 }
 
@@ -140,6 +144,67 @@ describe("migration", () => {
       .prepare("SELECT message_id FROM messages_fts WHERE messages_fts MATCH 'completion'")
       .get() as { message_id: string };
     expect(after.message_id).toBe(messageId);
+  });
+
+  it("upgrades legacy FTS triggers so streaming placeholders are no longer indexed", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "opengram-db-legacy-upgrade-"));
+    const dbPath = join(tempDir, "test.db");
+    const db = new Database(dbPath);
+    const now = Date.now();
+    const chatId = "123456789012345678901";
+    const legacyMessageId = "123456789012345678904";
+    const upgradedMessageId = "123456789012345678905";
+
+    db.exec(initialMigrationSql);
+
+    db.exec(`
+      DROP TRIGGER IF EXISTS \`messages_ai\`;
+      DROP TRIGGER IF EXISTS \`messages_au_nonnull\`;
+      DROP TRIGGER IF EXISTS \`messages_au_null\`;
+
+      CREATE TRIGGER \`messages_ai\` AFTER INSERT ON \`messages\`
+      BEGIN
+        INSERT INTO \`messages_fts\` (\`message_id\`, \`chat_id\`, \`content_final\`)
+        VALUES (\`new\`.\`id\`, \`new\`.\`chat_id\`, COALESCE(\`new\`.\`content_final\`, ''));
+      END;
+
+      CREATE TRIGGER \`messages_au_nonnull\` AFTER UPDATE OF \`content_final\`, \`chat_id\` ON \`messages\`
+      BEGIN
+        DELETE FROM \`messages_fts\` WHERE \`message_id\` = \`old\`.\`id\`;
+        INSERT INTO \`messages_fts\` (\`message_id\`, \`chat_id\`, \`content_final\`)
+        VALUES (\`new\`.\`id\`, \`new\`.\`chat_id\`, COALESCE(\`new\`.\`content_final\`, ''));
+      END;
+    `);
+
+    db.prepare(
+      "INSERT INTO chats (id, title, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(chatId, "FTS Chat", "model-a", now, now);
+
+    db.prepare(
+      [
+        "INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ].join(" "),
+    ).run(legacyMessageId, chatId, "agent", "agent:one", now, now, null, "streaming");
+
+    const beforeUpgrade = db
+      .prepare("SELECT message_id FROM messages_fts WHERE message_id = ?")
+      .get(legacyMessageId) as { message_id: string } | undefined;
+    expect(beforeUpgrade?.message_id).toBe(legacyMessageId);
+
+    db.exec(ftsTriggerUpgradeSql);
+
+    db.prepare(
+      [
+        "INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ].join(" "),
+    ).run(upgradedMessageId, chatId, "agent", "agent:one", now + 1, now + 1, null, "streaming");
+
+    const afterUpgrade = db
+      .prepare("SELECT message_id FROM messages_fts WHERE message_id = ?")
+      .get(upgradedMessageId) as { message_id: string } | undefined;
+    expect(afterUpgrade).toBeUndefined();
   });
 
   it("keeps WAL pragma in sqlite client setup", () => {

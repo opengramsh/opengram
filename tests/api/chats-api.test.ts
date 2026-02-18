@@ -38,14 +38,32 @@ function createJsonRequest(url: string, method: string, body?: unknown) {
 }
 
 function setInstanceSecretConfig(secret: string) {
+  setConfigOverrides({
+    security: {
+      instanceSecretEnabled: true,
+      instanceSecret: secret,
+    },
+  });
+}
+
+function setConfigOverrides(overrides: { security?: Record<string, unknown>; server?: Record<string, unknown> }) {
   const baseConfig = JSON.parse(readFileSync(join(repoRoot, 'config', 'opengram.config.json'), 'utf8'));
   const tempDir = mkdtempSync(join(tmpdir(), 'opengram-config-'));
   const configPath = join(tempDir, 'opengram.config.json');
 
-  baseConfig.security = {
-    instanceSecretEnabled: true,
-    instanceSecret: secret,
-  };
+  if (overrides.security) {
+    baseConfig.security = {
+      ...baseConfig.security,
+      ...overrides.security,
+    };
+  }
+
+  if (overrides.server) {
+    baseConfig.server = {
+      ...baseConfig.server,
+      ...overrides.server,
+    };
+  }
 
   writeFileSync(configPath, JSON.stringify(baseConfig), 'utf8');
   process.env.OPENGRAM_CONFIG_PATH = configPath;
@@ -388,6 +406,69 @@ describe('chats API', () => {
 
     expect(conflictResponse.status).toBe(409);
     expect(conflictBody.error.code).toBe('CONFLICT');
+  });
+
+  it('handles concurrent idempotent create without duplicate side effects', async () => {
+    const requestFactory = () => new Request('http://localhost/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'chat-create-concurrent',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+        title: 'same',
+      }),
+    });
+
+    const [responseA, responseB] = await Promise.all([chatsPost(requestFactory()), chatsPost(requestFactory())]);
+    const bodyA = await responseA.json();
+    const bodyB = await responseB.json();
+
+    expect(responseA.status).toBe(201);
+    expect(responseB.status).toBe(201);
+    expect(bodyA.id).toBe(bodyB.id);
+
+    const countRow = db.prepare('SELECT COUNT(*) AS count FROM chats').get() as { count: number };
+    expect(countRow.count).toBe(1);
+  });
+
+  it('prunes idempotency keys using configurable ttl from config', async () => {
+    setConfigOverrides({
+      server: {
+        idempotencyTtlSeconds: 1,
+      },
+    });
+
+    const staleResponse = JSON.stringify({
+      state: 'completed',
+      requestHash: 'stale-request-hash',
+      responseBody: { id: 'stale-chat-id' },
+    });
+
+    db.prepare(
+      'INSERT INTO idempotency_keys (key, response, status_code, created_at) VALUES (?, ?, ?, ?)',
+    ).run('ttl-key', staleResponse, 201, Date.now() - 10_000);
+
+    const response = await chatsPost(
+      new Request('http://localhost/api/v1/chats', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': 'ttl-key',
+        },
+        body: JSON.stringify({
+          agentIds: ['agent-default'],
+          modelId: 'model-default',
+          title: 'fresh',
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.id).not.toBe('stale-chat-id');
   });
 
   it('enforces write bearer auth when instance secret is enabled', async () => {

@@ -29,6 +29,7 @@ export async function GET() {
         publicBaseUrl: config.server.publicBaseUrl,
         port: config.server.port,
         streamTimeoutSeconds: config.server.streamTimeoutSeconds,
+        idempotencyTtlSeconds: config.server.idempotencyTtlSeconds,
       },
       hooks: config.hooks.map((hook) => ({
         url: hook.url,

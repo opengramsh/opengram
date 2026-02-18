@@ -3,9 +3,13 @@ import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import { conflictError, validationError } from '@/src/api/http';
+import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { createSqliteConnection } from '@/src/db/client';
 
-const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1_000;
+const DEFAULT_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1_000;
+const IDEMPOTENCY_IN_PROGRESS_STATUS_CODE = 0;
+const IDEMPOTENCY_POLL_INTERVAL_MS = 25;
+const IDEMPOTENCY_POLL_TIMEOUT_MS = 2_000;
 
 type IdempotencyRow = {
   response: string;
@@ -17,8 +21,28 @@ type StoredIdempotencyResponse = {
   responseBody: unknown;
 };
 
+type InProgressIdempotencyResponse = {
+  requestHash: string;
+};
+
+type ParsedStoredResponse =
+  | { state: 'completed'; payload: StoredIdempotencyResponse | { requestHash: null; responseBody: unknown } }
+  | { state: 'in_progress'; payload: InProgressIdempotencyResponse };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function getIdempotencyTtlMs() {
+  const config = loadOpengramConfig();
+  const ttlMs = config.server.idempotencyTtlSeconds * 1_000;
+  return Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : DEFAULT_IDEMPOTENCY_TTL_MS;
 }
 
 function canonicalizeJson(value: unknown): string {
@@ -42,59 +66,72 @@ function requestHashFromBody(requestBody: unknown) {
 
 function parseStoredResponse(
   stored: string,
-): StoredIdempotencyResponse | { requestHash: null; responseBody: unknown } {
+): ParsedStoredResponse {
   const parsed = JSON.parse(stored) as unknown;
   if (
     isRecord(parsed)
+    && parsed.state === 'in_progress'
+    && typeof parsed.requestHash === 'string'
+  ) {
+    return {
+      state: 'in_progress',
+      payload: {
+        requestHash: parsed.requestHash,
+      },
+    };
+  }
+
+  if (
+    isRecord(parsed)
+    && parsed.state === 'completed'
     && typeof parsed.requestHash === 'string'
     && Object.hasOwn(parsed, 'responseBody')
   ) {
     return {
-      requestHash: parsed.requestHash,
-      responseBody: parsed.responseBody,
+      state: 'completed',
+      payload: {
+        requestHash: parsed.requestHash,
+        responseBody: parsed.responseBody,
+      },
     };
   }
 
   return {
-    requestHash: null,
-    responseBody: parsed,
+    state: 'completed',
+    payload: {
+      requestHash: null,
+      responseBody: parsed,
+    },
   };
 }
 
 function assertCompatibleIdempotencyPayload(
   key: string,
   expectedRequestHash: string,
-  storedResponse: string,
+  parsedStoredResponse: ParsedStoredResponse,
 ) {
-  const parsed = parseStoredResponse(storedResponse);
-  if (parsed.requestHash !== null && parsed.requestHash !== expectedRequestHash) {
+  const requestHash = parsedStoredResponse.payload.requestHash;
+  if (requestHash !== null && requestHash !== expectedRequestHash) {
     throw conflictError('Idempotency-Key already used with a different request payload.', {
       field: 'Idempotency-Key',
       key,
     });
   }
 
-  return parsed.responseBody;
+  if (parsedStoredResponse.state === 'in_progress') {
+    return null;
+  }
+
+  return parsedStoredResponse.payload.responseBody;
 }
 
-function loadIdempotentReplay(
-  key: string,
-  expectedRequestHash: string,
-): NextResponse<unknown> | null {
+function loadIdempotencyRow(key: string): IdempotencyRow | undefined {
   const db = createSqliteConnection();
 
   try {
-    db.prepare('DELETE FROM idempotency_keys WHERE created_at < ?').run(Date.now() - IDEMPOTENCY_TTL_MS);
-
-    const row = db
+    return db
       .prepare('SELECT response, status_code FROM idempotency_keys WHERE key = ?')
       .get(key) as IdempotencyRow | undefined;
-    if (!row) {
-      return null;
-    }
-
-    const responseBody = assertCompatibleIdempotencyPayload(key, expectedRequestHash, row.response);
-    return NextResponse.json(responseBody, { status: row.status_code });
   } finally {
     db.close();
   }
@@ -126,7 +163,19 @@ export function replayIdempotentResponse(
     return null;
   }
 
-  return loadIdempotentReplay(key, requestHashFromBody(requestBody));
+  const requestHash = requestHashFromBody(requestBody);
+  const row = loadIdempotencyRow(key);
+  if (!row) {
+    return null;
+  }
+
+  const parsedStoredResponse = parseStoredResponse(row.response);
+  const replayBody = assertCompatibleIdempotencyPayload(key, requestHash, parsedStoredResponse);
+  if (parsedStoredResponse.state === 'in_progress') {
+    return null;
+  }
+
+  return NextResponse.json(replayBody, { status: row.status_code });
 }
 
 export function storeIdempotentResponse(
@@ -139,13 +188,15 @@ export function storeIdempotentResponse(
     return null;
   }
 
+  const ttlMs = getIdempotencyTtlMs();
   const requestHash = requestHashFromBody(requestBody);
   const db = createSqliteConnection();
 
   try {
-    db.prepare('DELETE FROM idempotency_keys WHERE created_at < ?').run(Date.now() - IDEMPOTENCY_TTL_MS);
+    db.prepare('DELETE FROM idempotency_keys WHERE created_at < ?').run(Date.now() - ttlMs);
 
     const serialized = JSON.stringify({
+      state: 'completed',
       requestHash,
       responseBody,
     });
@@ -168,10 +219,137 @@ export function storeIdempotentResponse(
         throw error;
       }
 
-      const replayBody = assertCompatibleIdempotencyPayload(key, requestHash, row.response);
+      const parsedStoredResponse = parseStoredResponse(row.response);
+      const replayBody = assertCompatibleIdempotencyPayload(key, requestHash, parsedStoredResponse);
+      if (parsedStoredResponse.state === 'in_progress') {
+        return null;
+      }
+
       return NextResponse.json(replayBody, { status: row.status_code });
     }
   } finally {
     db.close();
   }
+}
+
+function reserveIdempotencyKey(
+  key: string,
+  requestHash: string,
+): 'reserved' | { replay: NextResponse<unknown> } | 'wait' {
+  const ttlMs = getIdempotencyTtlMs();
+  const now = Date.now();
+  const db = createSqliteConnection();
+
+  try {
+    db.prepare('DELETE FROM idempotency_keys WHERE created_at < ?').run(now - ttlMs);
+
+    const reservationPayload = JSON.stringify({
+      state: 'in_progress',
+      requestHash,
+    });
+
+    try {
+      db.prepare(
+        'INSERT INTO idempotency_keys (key, response, status_code, created_at) VALUES (?, ?, ?, ?)',
+      ).run(key, reservationPayload, IDEMPOTENCY_IN_PROGRESS_STATUS_CODE, now);
+      return 'reserved';
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const existing = db
+        .prepare('SELECT response, status_code FROM idempotency_keys WHERE key = ?')
+        .get(key) as IdempotencyRow | undefined;
+
+      if (!existing) {
+        return 'wait';
+      }
+
+      const parsedStoredResponse = parseStoredResponse(existing.response);
+      const replayBody = assertCompatibleIdempotencyPayload(key, requestHash, parsedStoredResponse);
+      if (parsedStoredResponse.state === 'in_progress') {
+        return 'wait';
+      }
+
+      return {
+        replay: NextResponse.json(replayBody, { status: existing.status_code }),
+      };
+    }
+  } finally {
+    db.close();
+  }
+}
+
+function commitIdempotencyResponse(
+  key: string,
+  requestHash: string,
+  statusCode: number,
+  responseBody: unknown,
+) {
+  const db = createSqliteConnection();
+
+  try {
+    const serialized = JSON.stringify({
+      state: 'completed',
+      requestHash,
+      responseBody,
+    });
+
+    db.prepare('UPDATE idempotency_keys SET response = ?, status_code = ?, created_at = ? WHERE key = ?')
+      .run(serialized, statusCode, Date.now(), key);
+  } finally {
+    db.close();
+  }
+}
+
+function rollbackIdempotencyReservation(key: string) {
+  const db = createSqliteConnection();
+
+  try {
+    db.prepare('DELETE FROM idempotency_keys WHERE key = ? AND status_code = ?')
+      .run(key, IDEMPOTENCY_IN_PROGRESS_STATUS_CODE);
+  } finally {
+    db.close();
+  }
+}
+
+export async function executeWithIdempotency<T>(
+  key: string | null,
+  requestBody: unknown,
+  successStatusCode: number,
+  execute: () => T | Promise<T>,
+) {
+  if (!key) {
+    const responseBody = await execute();
+    return NextResponse.json(responseBody, { status: successStatusCode });
+  }
+
+  const requestHash = requestHashFromBody(requestBody);
+  const timeoutAt = Date.now() + IDEMPOTENCY_POLL_TIMEOUT_MS;
+
+  while (Date.now() < timeoutAt) {
+    const reservationResult = reserveIdempotencyKey(key, requestHash);
+    if (reservationResult === 'reserved') {
+      try {
+        const responseBody = await execute();
+        commitIdempotencyResponse(key, requestHash, successStatusCode, responseBody);
+        return NextResponse.json(responseBody, { status: successStatusCode });
+      } catch (error) {
+        rollbackIdempotencyReservation(key);
+        throw error;
+      }
+    }
+
+    if (reservationResult !== 'wait') {
+      return reservationResult.replay;
+    }
+
+    await sleep(IDEMPOTENCY_POLL_INTERVAL_MS);
+  }
+
+  throw conflictError('Idempotency request is already in progress. Retry shortly.', {
+    field: 'Idempotency-Key',
+    key,
+  });
 }

@@ -49,6 +49,7 @@ export type ServerConfig = {
   port: number;
   streamTimeoutSeconds: number;
   corsOrigins: string[];
+  idempotencyTtlSeconds: number;
 };
 
 export type HookConfig = {
@@ -101,6 +102,7 @@ const defaultConfig: OpengramConfig = {
     port: 3000,
     streamTimeoutSeconds: 60,
     corsOrigins: [],
+    idempotencyTtlSeconds: 24 * 60 * 60,
   },
   hooks: [],
 };
@@ -193,6 +195,10 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
     if (!config.push.vapidPublicKey || !config.push.vapidPrivateKey || !config.push.subject) {
       throw new Error("Config validation error: push keys and subject are required when push.enabled=true.");
     }
+  }
+
+  if (!Number.isInteger(config.server.idempotencyTtlSeconds) || config.server.idempotencyTtlSeconds <= 0) {
+    throw new Error("Config validation error: server.idempotencyTtlSeconds must be a positive integer.");
   }
 
   return config;
