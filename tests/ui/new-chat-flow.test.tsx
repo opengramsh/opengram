@@ -8,6 +8,7 @@ import Home from '@/app/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => '/',
 }));
 
 vi.mock('facehash', () => ({

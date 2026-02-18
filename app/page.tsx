@@ -3,13 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Facehash } from 'facehash';
-import { Menu, Pin, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import {
   buildChatsQuery,
-  formatInboxTimestamp,
-  resolveInboxSwipeEnd,
-  shouldStartInboxSwipeDrag,
   sortInboxChats,
 } from '@/src/lib/inbox';
 import {
@@ -17,61 +14,9 @@ import {
   selectNewChatAgentId,
   selectNewChatModelId,
 } from '@/src/lib/new-chat';
-
-type Agent = {
-  id: string;
-  name: string;
-  description: string;
-  avatarUrl?: string;
-  defaultModelId?: string;
-};
-
-type ConfigResponse = {
-  appName: string;
-  customStates: string[];
-  agents: Agent[];
-  models: Model[];
-  defaultModelIdForNewChats: string;
-};
-
-type Model = {
-  id: string;
-  name: string;
-  description: string;
-};
-
-type Chat = {
-  id: string;
-  is_archived: boolean;
-  custom_state: string | null;
-  title: string;
-  tags: string[];
-  pinned: boolean;
-  agent_ids: string[];
-  model_id: string;
-  last_message_preview: string | null;
-  last_message_role: string | null;
-  pending_requests_count: number;
-  last_read_at: string | null;
-  unread_count: number;
-  created_at: string;
-  updated_at: string;
-  last_message_at: string | null;
-};
-
-type ChatsResponse = {
-  data: Chat[];
-  cursor: {
-    next: string | null;
-    hasMore: boolean;
-  };
-};
-
-type ContextMenuState = {
-  chatId: string;
-  x: number;
-  y: number;
-};
+import { ChatList } from '@/src/components/chats/chat-list';
+import type { Agent, Chat, ChatsResponse, ConfigResponse } from '@/src/components/chats/types';
+import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 
 function chipClass(active: boolean) {
   if (active) {
@@ -106,7 +51,6 @@ export default function Home() {
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const fetchIdRef = useRef(0);
 
   const agentsById = useMemo(() => {
@@ -133,19 +77,6 @@ export default function Home() {
       clearTimeout(timer);
     };
   }, [searchInput]);
-
-  useEffect(() => {
-    function closeMenu() {
-      setContextMenu(null);
-    }
-
-    window.addEventListener('pointerdown', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-    return () => {
-      window.removeEventListener('pointerdown', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-    };
-  }, []);
 
   const loadConfig = useCallback(async () => {
     const response = await fetch('/api/v1/config', { cache: 'no-store' });
@@ -374,36 +305,11 @@ export default function Home() {
     [mutateChat],
   );
 
-  const unarchiveChat = useCallback(
-    async (chat: Chat) => {
-      await mutateChat(
-        chat.id,
-        (current) => ({
-          ...current,
-          is_archived: false,
-        }),
-        () =>
-          fetch(`/api/v1/chats/${chat.id}/unarchive`, {
-            method: 'POST',
-          }),
-      );
-    },
-    [mutateChat],
-  );
-
-  const chatForMenu = contextMenu ? chats.find((chat) => chat.id === contextMenu.chatId) : undefined;
-
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col bg-background pb-36">
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-md">
         <div className="grid grid-cols-[36px_1fr_36px] items-center">
-          <button
-            type="button"
-            className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-card text-muted-foreground"
-            aria-label="Open menu"
-          >
-            <Menu size={16} />
-          </button>
+          <HamburgerMenu />
           <div className="text-center">
             <h1 className="text-sm font-semibold tracking-wide text-foreground">{appName}</h1>
             <p className="text-xs text-muted-foreground">{pendingLabel(pendingRequestsTotal)}</p>
@@ -462,79 +368,19 @@ export default function Home() {
         )}
       </section>
 
-      <main className="flex-1 overflow-y-auto px-2 py-2">
-        {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading inbox...</p>}
-        {!loading && error && <p className="px-4 py-6 text-sm text-red-300">{error}</p>}
-        {!loading && !error && chats.length === 0 && (
-          <p className="px-4 py-8 text-sm text-muted-foreground">No chats match the current filters.</p>
-        )}
-        {!loading &&
-          !error &&
-          chats.map((chat) => {
-            const firstAgentId = chat.agent_ids[0];
-            const agent = firstAgentId ? agentsById.get(firstAgentId) : undefined;
-            return (
-              <ChatRow
-                key={chat.id}
-                chat={chat}
-                agentName={agent?.name ?? 'Unknown Agent'}
-                onOpen={() => router.push(`/chats/${chat.id}`)}
-                onArchive={() => archiveChat(chat)}
-                onLongPress={(point) => setContextMenu({ chatId: chat.id, ...point })}
-              />
-            );
-          })}
-      </main>
-
-      {contextMenu && chatForMenu && (
-        <div
-          className="fixed z-40 min-w-48 rounded-2xl border border-border bg-card p-1 shadow-2xl shadow-black/40"
-          style={{
-            top: Math.min(contextMenu.y, window.innerHeight - 180),
-            left: Math.min(contextMenu.x, window.innerWidth - 220),
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            onClick={() => {
-              setContextMenu(null);
-              if (chatForMenu.unread_count > 0) {
-                void markChatRead(chatForMenu);
-              } else {
-                void markChatUnread(chatForMenu);
-              }
-            }}
-          >
-            {chatForMenu.unread_count > 0 ? 'Mark as read' : 'Mark as unread'}
-          </button>
-          <button
-            type="button"
-            className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            onClick={() => {
-              setContextMenu(null);
-              void togglePin(chatForMenu);
-            }}
-          >
-            {chatForMenu.pinned ? 'Unpin' : 'Pin'}
-          </button>
-          <button
-            type="button"
-            className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            onClick={() => {
-              setContextMenu(null);
-              if (chatForMenu.is_archived) {
-                void unarchiveChat(chatForMenu);
-              } else {
-                void archiveChat(chatForMenu);
-              }
-            }}
-          >
-            {chatForMenu.is_archived ? 'Unarchive' : 'Archive'}
-          </button>
-        </div>
-      )}
+      <ChatList
+        chats={chats}
+        agentsById={agentsById}
+        loading={loading}
+        error={error}
+        emptyLabel="No chats match the current filters."
+        rowActionLabel="Archive"
+        onOpenChat={(chat) => router.push(`/chats/${chat.id}`)}
+        onMarkRead={markChatRead}
+        onMarkUnread={markChatUnread}
+        onTogglePin={togglePin}
+        onToggleArchive={archiveChat}
+      />
 
       <div className="liquid-glass fixed inset-x-0 bottom-0 z-30 mx-auto flex w-full max-w-3xl items-center gap-3 px-4 py-3">
         <input
@@ -651,176 +497,6 @@ export default function Home() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-type ChatRowProps = {
-  chat: Chat;
-  agentName: string;
-  onOpen: () => void;
-  onArchive: () => void;
-  onLongPress: (point: { x: number; y: number }) => void;
-};
-
-function ChatRow({ chat, agentName, onOpen, onArchive, onLongPress }: ChatRowProps) {
-  const [offsetX, setOffsetX] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartXRef = useRef(0);
-  const dragStartYRef = useRef(0);
-  const dragBaseOffsetRef = useRef(0);
-  const pointerIdRef = useRef<number | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
-  const longPressTriggeredRef = useRef(false);
-
-  const clearLongPressTimer = useCallback(() => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-
-  const handlePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.pointerType === 'mouse' && event.button !== 0) {
-        return;
-      }
-
-      pointerIdRef.current = event.pointerId;
-      dragStartXRef.current = event.clientX;
-      dragStartYRef.current = event.clientY;
-      dragBaseOffsetRef.current = offsetX;
-      setIsDragging(false);
-      longPressTriggeredRef.current = false;
-      event.currentTarget.setPointerCapture(event.pointerId);
-      clearLongPressTimer();
-      longPressTimerRef.current = window.setTimeout(() => {
-        if (!isDragging) {
-          longPressTriggeredRef.current = true;
-          onLongPress({ x: event.clientX, y: event.clientY });
-        }
-      }, 520);
-    },
-    [clearLongPressTimer, isDragging, offsetX, onLongPress],
-  );
-
-  const handlePointerMove = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (pointerIdRef.current !== event.pointerId) {
-        return;
-      }
-
-      const deltaX = event.clientX - dragStartXRef.current;
-      const deltaY = event.clientY - dragStartYRef.current;
-      if (!isDragging) {
-        if (!shouldStartInboxSwipeDrag(deltaX, deltaY, dragBaseOffsetRef.current)) {
-          clearLongPressTimer();
-          return;
-        }
-
-        setIsDragging(true);
-        clearLongPressTimer();
-      }
-
-      const next = Math.max(-132, Math.min(0, dragBaseOffsetRef.current + deltaX));
-      setOffsetX(next);
-    },
-    [clearLongPressTimer, isDragging],
-  );
-
-  const handlePointerEnd = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (pointerIdRef.current !== event.pointerId) {
-        return;
-      }
-
-      pointerIdRef.current = null;
-      clearLongPressTimer();
-      const swipeEnd = resolveInboxSwipeEnd(offsetX, isDragging);
-      setOffsetX(swipeEnd.nextOffset);
-      if (isDragging) {
-        setIsDragging(false);
-      }
-      if (swipeEnd.shouldArchive) {
-        onArchive();
-        return;
-      }
-
-      if (!isDragging && !longPressTriggeredRef.current) {
-        if (offsetX < 0) {
-          setOffsetX(0);
-          return;
-        }
-
-        onOpen();
-      }
-    },
-    [clearLongPressTimer, isDragging, offsetX, onArchive, onOpen],
-  );
-
-  useEffect(() => {
-    return () => {
-      clearLongPressTimer();
-    };
-  }, [clearLongPressTimer]);
-
-  const unread = chat.unread_count > 0;
-  const unreadBadge =
-    chat.unread_count > 1 ? (
-      <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
-        {chat.unread_count}
-      </span>
-    ) : chat.unread_count === 1 ? (
-      <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-    ) : null;
-
-  return (
-    <div className="relative mx-2 mb-2 overflow-hidden rounded-2xl">
-      <button
-        type="button"
-        className="absolute inset-y-1 right-1 z-0 rounded-xl bg-red-500/90 px-4 text-xs font-semibold text-white"
-        onClick={onArchive}
-      >
-        Archive
-      </button>
-      <div
-        className="relative z-10 flex cursor-default items-center gap-3 rounded-2xl border border-border/80 bg-card px-3 py-3 transition-transform duration-150"
-        style={{ transform: `translateX(${offsetX}px)` }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          onLongPress({ x: event.clientX, y: event.clientY });
-        }}
-      >
-        <div className="shrink-0">
-          <Facehash name={agentName} size={44} interactive={false} className="rounded-xl text-black" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p
-                className={`line-clamp-2 text-sm leading-5 ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}
-              >
-                {chat.title}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">{agentName}</p>
-            </div>
-            <div className="flex flex-col items-end gap-1 pt-0.5">
-              <p className="text-[11px] text-muted-foreground">{formatInboxTimestamp(chat.last_message_at)}</p>
-              {chat.pinned && <Pin size={11} className="text-primary" />}
-            </div>
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <p className="truncate text-xs text-muted-foreground">
-              {chat.last_message_preview?.trim() || 'No messages yet'}
-            </p>
-            {unreadBadge}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
