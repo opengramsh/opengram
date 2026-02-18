@@ -1,0 +1,219 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
+export type OpengramConfig = {
+  appName: string;
+  maxUploadBytes: number;
+  allowedMimeTypes: string[];
+  titleMaxChars: number;
+  defaultCustomState: string;
+  customStates: string[];
+  defaultModelIdForNewChats: string;
+  agents: AgentConfig[];
+  models: ModelConfig[];
+  push: PushConfig;
+  security: SecurityConfig;
+  server: ServerConfig;
+  hooks: HookConfig[];
+};
+
+export type AgentConfig = {
+  id: string;
+  name: string;
+  description: string;
+  avatarUrl?: string;
+  defaultModelId?: string;
+};
+
+export type ModelConfig = {
+  id: string;
+  name: string;
+  description: string;
+  metadata?: Record<string, string>;
+};
+
+export type PushConfig = {
+  enabled: boolean;
+  vapidPublicKey: string;
+  vapidPrivateKey: string;
+  subject: string;
+};
+
+export type SecurityConfig = {
+  instanceSecretEnabled: boolean;
+  instanceSecret: string;
+};
+
+export type ServerConfig = {
+  publicBaseUrl: string;
+  port: number;
+  streamTimeoutSeconds: number;
+  corsOrigins: string[];
+};
+
+export type HookConfig = {
+  url: string;
+  events: string[];
+  headers?: Record<string, string>;
+  signingSecret?: string;
+  timeoutMs?: number;
+  maxRetries?: number;
+};
+
+const DEFAULT_CONFIG_RELATIVE_PATH = "./config/opengram.config.json";
+const PROD_CONFIG_PATH = "/opt/opengram/config/opengram.config.json";
+
+const defaultConfig: OpengramConfig = {
+  appName: "OpenGram",
+  maxUploadBytes: 50_000_000,
+  allowedMimeTypes: ["image/*", "audio/*", "application/pdf", "text/plain"],
+  titleMaxChars: 48,
+  defaultCustomState: "Open",
+  customStates: ["Open"],
+  defaultModelIdForNewChats: "model-default",
+  agents: [
+    {
+      id: "agent-default",
+      name: "Default Agent",
+      description: "Default local development agent.",
+      defaultModelId: "model-default",
+    },
+  ],
+  models: [
+    {
+      id: "model-default",
+      name: "Default Model",
+      description: "Default local development model.",
+    },
+  ],
+  push: {
+    enabled: false,
+    vapidPublicKey: "",
+    vapidPrivateKey: "",
+    subject: "",
+  },
+  security: {
+    instanceSecretEnabled: false,
+    instanceSecret: "",
+  },
+  server: {
+    publicBaseUrl: "http://localhost:3000",
+    port: 3000,
+    streamTimeoutSeconds: 60,
+    corsOrigins: [],
+  },
+  hooks: [],
+};
+
+function resolveConfigPath(configPath?: string) {
+  if (configPath) {
+    return path.resolve(configPath);
+  }
+
+  if (process.env.OPENGRAM_CONFIG_PATH) {
+    return path.resolve(process.env.OPENGRAM_CONFIG_PATH);
+  }
+
+  return process.env.NODE_ENV === "production"
+    ? PROD_CONFIG_PATH
+    : path.resolve(DEFAULT_CONFIG_RELATIVE_PATH);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function mergeConfig(defaults: OpengramConfig, incoming: Record<string, unknown>): OpengramConfig {
+  const merged: OpengramConfig = {
+    ...defaults,
+    ...incoming,
+    push: {
+      ...defaults.push,
+      ...(isRecord(incoming.push) ? incoming.push : {}),
+    },
+    security: {
+      ...defaults.security,
+      ...(isRecord(incoming.security) ? incoming.security : {}),
+    },
+    server: {
+      ...defaults.server,
+      ...(isRecord(incoming.server) ? incoming.server : {}),
+    },
+    hooks: Array.isArray(incoming.hooks) ? (incoming.hooks as HookConfig[]) : defaults.hooks,
+    agents: Array.isArray(incoming.agents) ? (incoming.agents as AgentConfig[]) : defaults.agents,
+    models: Array.isArray(incoming.models) ? (incoming.models as ModelConfig[]) : defaults.models,
+    customStates: Array.isArray(incoming.customStates)
+      ? (incoming.customStates as string[])
+      : defaults.customStates,
+    allowedMimeTypes: Array.isArray(incoming.allowedMimeTypes)
+      ? (incoming.allowedMimeTypes as string[])
+      : defaults.allowedMimeTypes,
+  };
+
+  return merged;
+}
+
+function validateConfig(config: OpengramConfig): OpengramConfig {
+  if (!config.defaultModelIdForNewChats) {
+    throw new Error("Config validation error: defaultModelIdForNewChats is required.");
+  }
+
+  if (!config.models.length) {
+    throw new Error("Config validation error: at least one model is required.");
+  }
+
+  if (!config.agents.length) {
+    throw new Error("Config validation error: at least one agent is required.");
+  }
+
+  const modelIds = new Set(config.models.map((model) => model.id));
+  if (!modelIds.has(config.defaultModelIdForNewChats)) {
+    throw new Error(
+      "Config validation error: defaultModelIdForNewChats must match one configured model id.",
+    );
+  }
+
+  for (const agent of config.agents) {
+    if (agent.defaultModelId && !modelIds.has(agent.defaultModelId)) {
+      throw new Error(
+        `Config validation error: agent "${agent.id}" references unknown defaultModelId "${agent.defaultModelId}".`,
+      );
+    }
+  }
+
+  if (!config.customStates.includes(config.defaultCustomState)) {
+    config.customStates = [...config.customStates, config.defaultCustomState];
+  }
+
+  if (config.security.instanceSecretEnabled && !config.security.instanceSecret) {
+    throw new Error("Config validation error: security.instanceSecret is required when enabled.");
+  }
+
+  if (config.push.enabled) {
+    if (!config.push.vapidPublicKey || !config.push.vapidPrivateKey || !config.push.subject) {
+      throw new Error("Config validation error: push keys and subject are required when push.enabled=true.");
+    }
+  }
+
+  return config;
+}
+
+export function loadOpengramConfig(configPath?: string): OpengramConfig {
+  const resolvedPath = resolveConfigPath(configPath);
+  const hasFile = existsSync(resolvedPath);
+  if (!hasFile) {
+    return validateConfig(structuredClone(defaultConfig));
+  }
+
+  const raw = readFileSync(resolvedPath, "utf8");
+  const parsed = JSON.parse(raw) as unknown;
+
+  if (!isRecord(parsed)) {
+    throw new Error(`Config validation error: expected JSON object at ${resolvedPath}.`);
+  }
+
+  const merged = mergeConfig(structuredClone(defaultConfig), parsed);
+  return validateConfig(merged);
+}
+
+export const OPEN_GRAM_DEFAULT_CONFIG = defaultConfig;

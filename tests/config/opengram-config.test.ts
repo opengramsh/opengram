@@ -1,0 +1,52 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path, { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import { loadOpengramConfig, OPEN_GRAM_DEFAULT_CONFIG } from "@/src/config/opengram-config";
+
+function writeConfigFile(content: unknown) {
+  const tempDir = mkdtempSync(join(tmpdir(), "opengram-config-"));
+  const filePath = path.join(tempDir, "opengram.config.json");
+  writeFileSync(filePath, JSON.stringify(content, null, 2));
+  return filePath;
+}
+
+describe("loadOpengramConfig", () => {
+  it("returns defaults when config file does not exist", () => {
+    const config = loadOpengramConfig("/tmp/non-existent-opengram-config.json");
+    expect(config).toEqual(OPEN_GRAM_DEFAULT_CONFIG);
+  });
+
+  it("merges partial config with defaults", () => {
+    const filePath = writeConfigFile({
+      appName: "OpenGram Dev",
+      server: {
+        port: 3300,
+      },
+    });
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.appName).toBe("OpenGram Dev");
+    expect(config.server.port).toBe(3300);
+    expect(config.server.streamTimeoutSeconds).toBe(60);
+  });
+
+  it("rejects invalid defaultModelIdForNewChats", () => {
+    const filePath = writeConfigFile({
+      models: [
+        {
+          id: "model-a",
+          name: "A",
+          description: "A",
+        },
+      ],
+      defaultModelIdForNewChats: "unknown-model",
+    });
+
+    expect(() => loadOpengramConfig(filePath)).toThrow(
+      /defaultModelIdForNewChats must match one configured model id/,
+    );
+  });
+});
