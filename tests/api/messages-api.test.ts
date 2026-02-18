@@ -121,6 +121,12 @@ describe('messages API', () => {
     expect(body.content_final).toBeNull();
     expect(body.content_partial).toBeNull();
     expect(body.model_id).toBe('model-default');
+
+    const fts = db.prepare('SELECT message_id FROM messages_fts WHERE message_id = ?').get(body.id) as
+      | { message_id: string }
+      | undefined;
+
+    expect(fts).toBeUndefined();
   });
 
   it('rejects invalid senderId for role agent', async () => {

@@ -108,6 +108,40 @@ describe("migration", () => {
     expect(row.message_id).toBe(messageId);
   });
 
+  it("does not index null content_final until content is set", () => {
+    const db = createDatabase();
+    const now = Date.now();
+    const chatId = "123456789012345678901";
+    const messageId = "123456789012345678903";
+
+    db.prepare(
+      "INSERT INTO chats (id, title, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(chatId, "FTS Chat", "model-a", now, now);
+
+    db.prepare(
+      [
+        "INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ].join(" "),
+    ).run(messageId, chatId, "agent", "agent:one", now, now, null, "streaming");
+
+    const before = db
+      .prepare("SELECT message_id FROM messages_fts WHERE message_id = ?")
+      .get(messageId) as { message_id: string } | undefined;
+    expect(before).toBeUndefined();
+
+    db.prepare("UPDATE messages SET content_final = ?, stream_state = ? WHERE id = ?").run(
+      "indexed after completion",
+      "complete",
+      messageId,
+    );
+
+    const after = db
+      .prepare("SELECT message_id FROM messages_fts WHERE messages_fts MATCH 'completion'")
+      .get() as { message_id: string };
+    expect(after.message_id).toBe(messageId);
+  });
+
   it("keeps WAL pragma in sqlite client setup", () => {
     const clientSource = readFileSync(join(repoRoot, "src", "db", "client.ts"), "utf8");
     expect(clientSource).toMatch(/journal_mode\s*=\s*WAL/);
