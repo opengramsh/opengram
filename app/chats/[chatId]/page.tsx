@@ -93,6 +93,8 @@ type MediaResponse = {
   data: MediaItem[];
 };
 
+type MediaFilter = 'all' | 'image' | 'audio' | 'file';
+
 type TagSuggestion = {
   name: string;
   usage_count: number;
@@ -200,6 +202,46 @@ function formatBytes(bytes: number) {
   return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
 }
 
+function mediaSortAsc(a: MediaItem, b: MediaItem) {
+  if (a.created_at === b.created_at) {
+    return a.id.localeCompare(b.id);
+  }
+
+  return a.created_at.localeCompare(b.created_at);
+}
+
+function buildInlineMessageMedia(messages: Message[], mediaByMessageId: Map<string, MediaItem[]>, mediaById: Map<string, MediaItem>) {
+  const map = new Map<string, MediaItem[]>();
+
+  for (const message of messages) {
+    const merged: MediaItem[] = [];
+    const seenIds = new Set<string>();
+
+    for (const item of mediaByMessageId.get(message.id) ?? []) {
+      if (seenIds.has(item.id)) {
+        continue;
+      }
+      seenIds.add(item.id);
+      merged.push(item);
+    }
+
+    const traceMediaId = mediaIdFromTrace(message);
+    if (traceMediaId) {
+      const traced = mediaById.get(traceMediaId);
+      if (traced && !seenIds.has(traced.id)) {
+        merged.push(traced);
+      }
+    }
+
+    if (merged.length > 0) {
+      merged.sort(mediaSortAsc);
+      map.set(message.id, merged);
+    }
+  }
+
+  return map;
+}
+
 export default function ChatPage() {
   const params = useParams<{ chatId: string }>();
   const chatId = params?.chatId;
@@ -221,7 +263,8 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
   const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
-  const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'audio' | 'file'>('all');
+  const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
+  const [viewerMediaId, setViewerMediaId] = useState<string | null>(null);
   const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [isUpdatingChatSettings, setIsUpdatingChatSettings] = useState(false);
@@ -295,6 +338,11 @@ export default function ChatPage() {
     return map;
   }, [media]);
 
+  const inlineMessageMedia = useMemo(
+    () => buildInlineMessageMedia(messages, mediaByMessageId, mediaById),
+    [messages, mediaById, mediaByMessageId],
+  );
+
   const filteredGalleryMedia = useMemo(() => {
     if (mediaFilter === 'all') {
       return media;
@@ -302,6 +350,21 @@ export default function ChatPage() {
 
     return media.filter((item) => item.kind === mediaFilter);
   }, [media, mediaFilter]);
+
+  const galleryImageMedia = useMemo(
+    () => filteredGalleryMedia.filter((item) => item.kind === 'image'),
+    [filteredGalleryMedia],
+  );
+
+  const galleryListMedia = useMemo(
+    () => filteredGalleryMedia.filter((item) => item.kind === 'audio' || item.kind === 'file'),
+    [filteredGalleryMedia],
+  );
+
+  const viewerMedia = useMemo(
+    () => (viewerMediaId ? mediaById.get(viewerMediaId) : undefined),
+    [mediaById, viewerMediaId],
+  );
 
   const scrollToBottom = useCallback((smooth = false) => {
     const feed = feedRef.current;
@@ -1136,21 +1199,58 @@ export default function ChatPage() {
         {!loading &&
           !error &&
           messages.map((message) => {
-            const inlineMedia = mediaByMessageId.get(message.id) ?? [];
-            const traceMedia = mediaIdFromTrace(message);
-            const tracedMediaItem = traceMedia ? mediaById.get(traceMedia) : undefined;
-            const audioItems = [
-              ...inlineMedia.filter((item) => item.kind === 'audio'),
-              ...(tracedMediaItem && tracedMediaItem.kind === 'audio' ? [tracedMediaItem] : []),
-            ];
+            const attachments = inlineMessageMedia.get(message.id) ?? [];
+            const imageItems = attachments.filter((item) => item.kind === 'image');
+            const audioItems = attachments.filter((item) => item.kind === 'audio');
+            const fileItems = attachments.filter((item) => item.kind === 'file');
 
             return (
               <div key={message.id} className="mb-2 flex w-full">
                 <div className={messageBubbleClass(message.role)}>
                   {messageText(message)}
+                  {imageItems.length > 0 && (
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      {imageItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className="block overflow-hidden rounded-lg border border-border/70"
+                          aria-label={`Open image ${item.filename || item.id}`}
+                          onClick={() => setViewerMediaId(item.id)}
+                        >
+                          <Image
+                            src={`/api/v1/files/${item.id}/thumbnail`}
+                            alt={item.filename || 'Image attachment'}
+                            width={220}
+                            height={160}
+                            unoptimized
+                            className="h-28 w-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {audioItems.length > 0 && (
-                    <div className="pt-2">
-                      <audio controls className="h-8 w-full max-w-xs" src={`/api/v1/files/${audioItems[0]?.id}`} />
+                    <div className="space-y-2 pt-2">
+                      {audioItems.map((item) => (
+                        <audio key={item.id} controls className="h-8 w-full max-w-xs" src={`/api/v1/files/${item.id}`} />
+                      ))}
+                    </div>
+                  )}
+                  {fileItems.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      {fileItems.map((item) => (
+                        <a
+                          key={item.id}
+                          href={`/api/v1/files/${item.id}`}
+                          download
+                          aria-label={`Download ${item.filename || 'attachment'}`}
+                          className="block rounded-lg border border-border/70 bg-muted/30 px-2 py-1.5"
+                        >
+                          <p className="truncate text-xs text-foreground">{item.filename || 'Attachment'}</p>
+                          <p className="text-[11px] text-muted-foreground">{formatBytes(item.byte_size || 0)}</p>
+                        </a>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1441,6 +1541,8 @@ export default function ChatPage() {
       {isMediaGalleryOpen && (
         <div className="fixed inset-0 z-50 bg-black/45" onClick={() => setIsMediaGalleryOpen(false)}>
           <div
+            role="dialog"
+            aria-label="Media gallery"
             className="liquid-glass absolute inset-x-0 bottom-0 max-h-[78dvh] overflow-hidden rounded-t-3xl border-x border-t border-border px-4 pb-4 pt-3"
             onClick={(event) => event.stopPropagation()}
           >
@@ -1472,31 +1574,32 @@ export default function ChatPage() {
                 <p className="py-4 text-sm text-muted-foreground">No media for this filter.</p>
               )}
 
-              {filteredGalleryMedia.some((item) => item.kind === 'image') && (
+              {galleryImageMedia.length > 0 && (
                 <div className="mb-3">
                   <div className="grid grid-cols-3 gap-2">
-                    {filteredGalleryMedia
-                      .filter((item) => item.kind === 'image')
-                      .map((item) => (
-                        <a key={item.id} href={`/api/v1/files/${item.id}`} target="_blank" rel="noreferrer">
+                    {galleryImageMedia.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-label={`View image ${item.filename || item.id}`}
+                          onClick={() => setViewerMediaId(item.id)}
+                        >
                           <Image
-                            src={`/api/v1/files/${item.id}`}
+                            src={`/api/v1/files/${item.id}/thumbnail`}
                             alt={item.filename || 'Image attachment'}
                             width={240}
                             height={240}
                             unoptimized
                             className="h-24 w-full rounded-lg border border-border/70 object-cover"
                           />
-                        </a>
+                        </button>
                       ))}
                   </div>
                 </div>
               )}
 
               <div className="space-y-2">
-                {filteredGalleryMedia
-                  .filter((item) => item.kind === 'audio' || item.kind === 'file')
-                  .map((item) => (
+                {galleryListMedia.map((item) => (
                     <div key={item.id} className="rounded-xl border border-border bg-card p-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
@@ -1505,7 +1608,12 @@ export default function ChatPage() {
                             {item.kind === 'audio' ? 'Audio' : 'File'} • {formatBytes(item.byte_size || 0)}
                           </p>
                         </div>
-                        <a href={`/api/v1/files/${item.id}`} download className="text-xs text-primary">
+                        <a
+                          href={`/api/v1/files/${item.id}`}
+                          download
+                          aria-label={`Download ${item.filename || 'attachment'}`}
+                          className="text-xs text-primary"
+                        >
                           Download
                         </a>
                       </div>
@@ -1515,6 +1623,43 @@ export default function ChatPage() {
                     </div>
                   ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewerMedia?.kind === 'image' && (
+        <div className="fixed inset-0 z-[70] bg-black/90 px-3 py-6" onClick={() => setViewerMediaId(null)}>
+          <div
+            role="dialog"
+            aria-label="Image viewer"
+            className="mx-auto flex h-full w-full max-w-3xl flex-col"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="truncate text-sm text-white">{viewerMedia.filename || 'Image viewer'}</p>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/api/v1/files/${viewerMedia.id}`}
+                  download
+                  aria-label={`Download ${viewerMedia.filename || 'image'}`}
+                  className="text-xs text-white/90"
+                >
+                  Download
+                </a>
+                <button type="button" className="text-xs text-white/80" onClick={() => setViewerMediaId(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="relative min-h-0 flex-1 overflow-auto rounded-2xl border border-white/20 bg-black/40">
+              <Image
+                src={`/api/v1/files/${viewerMedia.id}`}
+                alt={viewerMedia.filename || 'Image viewer'}
+                fill
+                unoptimized
+                className="object-contain"
+              />
             </div>
           </div>
         </div>
