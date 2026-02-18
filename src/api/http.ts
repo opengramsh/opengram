@@ -14,12 +14,20 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: ApiErrorCode;
   readonly details?: unknown;
+  readonly headers?: HeadersInit;
 
-  constructor(status: number, code: ApiErrorCode, message: string, details?: unknown) {
+  constructor(
+    status: number,
+    code: ApiErrorCode,
+    message: string,
+    details?: unknown,
+    headers?: HeadersInit,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
     this.details = details;
+    this.headers = headers;
   }
 }
 
@@ -29,6 +37,20 @@ export function validationError(message: string, details?: unknown) {
 
 export function notFoundError(message: string, details?: unknown) {
   return new ApiError(404, 'NOT_FOUND', message, details);
+}
+
+export function unauthorizedError(message: string, details?: unknown) {
+  return new ApiError(401, 'UNAUTHORIZED', message, details);
+}
+
+export function conflictError(message: string, details?: unknown) {
+  return new ApiError(409, 'CONFLICT', message, details);
+}
+
+export function rateLimitedError(message: string, retryAfterSeconds: number, details?: unknown) {
+  return new ApiError(429, 'RATE_LIMITED', message, details, {
+    'Retry-After': String(retryAfterSeconds),
+  });
 }
 
 export function internalError(message: string, details?: unknown) {
@@ -59,7 +81,10 @@ export function toErrorResponse(error: unknown) {
           details: error.details,
         },
       },
-      { status: error.status },
+      {
+        status: error.status,
+        headers: error.headers,
+      },
     );
   }
 
@@ -75,9 +100,16 @@ export function toErrorResponse(error: unknown) {
 }
 
 export async function parseJsonBody<T>(request: Request): Promise<T> {
+  let parsed: unknown;
   try {
-    return (await request.json()) as T;
+    parsed = await request.json();
   } catch {
     throw validationError('Invalid JSON body.');
   }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw validationError('JSON body must be an object.');
+  }
+
+  return parsed as T;
 }

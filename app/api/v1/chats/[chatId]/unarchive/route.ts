@@ -1,12 +1,14 @@
 import { successOk, toErrorResponse } from '@/src/api/http';
+import { enforceWriteGuards } from '@/src/api/write-controls';
 import { unarchiveChat } from '@/src/services/chats-service';
 
 type RouteContext = {
   params: Promise<{ chatId: string }> | { chatId: string };
 };
 
-export async function POST(_: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   try {
+    enforceWriteGuards(request);
     const { chatId } = await context.params;
     unarchiveChat(chatId);
     return successOk();

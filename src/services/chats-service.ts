@@ -188,8 +188,8 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
   if (chat.last_read_at === null) {
     unreadCount = (
       db
-        .prepare('SELECT COUNT(*) as count FROM messages WHERE chat_id = ? AND role = ?')
-        .get(chatId, 'agent') as { count: number }
+        .prepare("SELECT COUNT(*) as count FROM messages WHERE chat_id = ? AND role != 'user'")
+        .get(chatId) as { count: number }
     ).count;
   } else {
     unreadCount = (
@@ -197,10 +197,10 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
         .prepare(
           [
             'SELECT COUNT(*) as count FROM messages',
-            'WHERE chat_id = ? AND role = ? AND created_at > ?',
+            "WHERE chat_id = ? AND role != 'user' AND created_at > ?",
           ].join(' '),
         )
-        .get(chatId, 'agent', chat.last_read_at) as { count: number }
+        .get(chatId, chat.last_read_at) as { count: number }
     ).count;
   }
 
@@ -254,6 +254,10 @@ export function createChat(input: CreateChatInput) {
 
   if (input.customState !== undefined && typeof input.customState !== 'string') {
     throw validationError('customState must be a string.', { field: 'customState' });
+  }
+
+  if (input.firstMessage !== undefined && typeof input.firstMessage !== 'string') {
+    throw validationError('firstMessage must be a string.', { field: 'firstMessage' });
   }
 
   if (input.title !== undefined && typeof input.title !== 'string') {
@@ -349,12 +353,19 @@ export function listChats(url: URL): ListChatsResult {
       [
         '(',
         'pinned < ? OR',
-        '(pinned = ? AND updated_at < ?) OR',
-        '(pinned = ? AND updated_at = ? AND id < ?)',
+        '(pinned = ? AND COALESCE(last_message_at, 0) < ?) OR',
+        '(pinned = ? AND COALESCE(last_message_at, 0) = ? AND id < ?)',
         ')',
       ].join(' '),
     );
-    queryParams.push(cursor.pinned, cursor.pinned, cursor.updatedAt, cursor.pinned, cursor.updatedAt, cursor.id);
+    queryParams.push(
+      cursor.pinned,
+      cursor.pinned,
+      cursor.lastMessageAt,
+      cursor.pinned,
+      cursor.lastMessageAt,
+      cursor.id,
+    );
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -364,7 +375,7 @@ export function listChats(url: URL): ListChatsResult {
         [
           'SELECT * FROM chats',
           where,
-          'ORDER BY pinned DESC, updated_at DESC, id DESC',
+          'ORDER BY pinned DESC, COALESCE(last_message_at, 0) DESC, id DESC',
           'LIMIT ?',
         ].join(' '),
       )
@@ -377,7 +388,7 @@ export function listChats(url: URL): ListChatsResult {
   const nextCursor = last
     ? encodeCursor({
         pinned: last.pinned,
-        updatedAt: last.updated_at,
+        lastMessageAt: last.last_message_at ?? 0,
         id: last.id,
       })
     : null;

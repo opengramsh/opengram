@@ -5,7 +5,7 @@ const MAX_LIMIT = 100;
 
 export type ChatListCursor = {
   pinned: number;
-  updatedAt: number;
+  lastMessageAt: number;
   id: string;
 };
 
@@ -31,7 +31,7 @@ export function decodeCursor(rawCursor: string): ChatListCursor {
     const parsed = JSON.parse(fromBase64Url(rawCursor)) as Partial<ChatListCursor>;
     if (
       typeof parsed.pinned !== 'number'
-      || typeof parsed.updatedAt !== 'number'
+      || typeof parsed.lastMessageAt !== 'number'
       || typeof parsed.id !== 'string'
     ) {
       throw new Error('Invalid cursor payload.');
@@ -39,7 +39,7 @@ export function decodeCursor(rawCursor: string): ChatListCursor {
 
     return {
       pinned: parsed.pinned,
-      updatedAt: parsed.updatedAt,
+      lastMessageAt: parsed.lastMessageAt,
       id: parsed.id,
     };
   } catch {

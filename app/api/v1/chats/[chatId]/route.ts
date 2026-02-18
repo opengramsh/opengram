@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { parseJsonBody, toErrorResponse } from '@/src/api/http';
+import { enforceWriteGuards } from '@/src/api/write-controls';
 import { getChat, updateChat } from '@/src/services/chats-service';
 
 type UpdateChatRequest = {
@@ -32,6 +33,7 @@ export async function GET(_: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
+    enforceWriteGuards(request);
     const chatId = await resolveChatId(context);
     const body = await parseJsonBody<UpdateChatRequest>(request);
     const updated = updateChat(chatId, body);
