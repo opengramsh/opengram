@@ -24,6 +24,17 @@ export type ParsedMessagePagination = {
   cursor: MessageListCursor | null;
 };
 
+export type SearchCursor = {
+  sortAt: number;
+  resultType: 'chat' | 'message';
+  id: string;
+};
+
+export type ParsedSearchPagination = {
+  limit: number;
+  cursor: SearchCursor | null;
+};
+
 function toBase64Url(value: string) {
   return Buffer.from(value, 'utf8').toString('base64url');
 }
@@ -104,6 +115,48 @@ export function parseMessagePagination(params: URLSearchParams): ParsedMessagePa
 
   const rawCursor = params.get('cursor');
   const cursor = rawCursor ? decodeMessageCursor(rawCursor) : null;
+
+  return {
+    limit,
+    cursor,
+  };
+}
+
+export function encodeSearchCursor(payload: SearchCursor) {
+  return toBase64Url(JSON.stringify(payload));
+}
+
+export function decodeSearchCursor(rawCursor: string): SearchCursor {
+  try {
+    const parsed = JSON.parse(fromBase64Url(rawCursor)) as Partial<SearchCursor>;
+    if (
+      typeof parsed.sortAt !== 'number'
+      || typeof parsed.id !== 'string'
+      || (parsed.resultType !== 'chat' && parsed.resultType !== 'message')
+    ) {
+      throw new Error('Invalid cursor payload.');
+    }
+
+    return {
+      sortAt: parsed.sortAt,
+      resultType: parsed.resultType,
+      id: parsed.id,
+    };
+  } catch {
+    throw validationError('Invalid cursor value.', { field: 'cursor' });
+  }
+}
+
+export function parseSearchPagination(params: URLSearchParams): ParsedSearchPagination {
+  const rawLimit = params.get('limit');
+  const limit = rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit);
+
+  if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_LIMIT) {
+    throw validationError('limit must be an integer between 1 and 100.', { field: 'limit' });
+  }
+
+  const rawCursor = params.get('cursor');
+  const cursor = rawCursor ? decodeSearchCursor(rawCursor) : null;
 
   return {
     limit,
