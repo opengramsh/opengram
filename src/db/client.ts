@@ -3,9 +3,11 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 
 import { schema } from './schema';
 
-const DEFAULT_DB_PATH = process.env.DATABASE_URL ?? './data/opengram.db';
+function getDefaultDbPath() {
+  return process.env.DATABASE_URL ?? './data/opengram.db';
+}
 
-export function createSqliteConnection(dbPath: string = DEFAULT_DB_PATH) {
+export function createSqliteConnection(dbPath: string = getDefaultDbPath()) {
   const sqlite = new Database(dbPath);
 
   // Required baseline pragmas for predictable SQLite behavior in production.
@@ -15,7 +17,7 @@ export function createSqliteConnection(dbPath: string = DEFAULT_DB_PATH) {
   return sqlite;
 }
 
-export function createDb(dbPath: string = DEFAULT_DB_PATH) {
+export function createDb(dbPath: string = getDefaultDbPath()) {
   const sqlite = createSqliteConnection(dbPath);
   return drizzle(sqlite, { schema });
 }

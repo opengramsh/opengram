@@ -110,6 +110,6 @@ describe("migration", () => {
 
   it("keeps WAL pragma in sqlite client setup", () => {
     const clientSource = readFileSync(join(repoRoot, "src", "db", "client.ts"), "utf8");
-    expect(clientSource).toMatch(/journal_mode\\s*=\\s*WAL/);
+    expect(clientSource).toMatch(/journal_mode\s*=\s*WAL/);
   });
 });
