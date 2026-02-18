@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { GET as eventsStreamGet } from '@/app/api/v1/events/stream/route';
-import { emitEvent, resetEventSubscribersForTests } from '@/src/services/events-service';
+import { emitEvent, getEventSubscriberCountForTests, resetEventSubscribersForTests } from '@/src/services/events-service';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
 const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
@@ -241,5 +241,19 @@ describe('events stream API', () => {
 
     const output = await readSseOutput(authorized, abort, (value) => value.includes(': stream opened'), 1);
     expect(output).toContain(': stream opened');
+  });
+
+  it('does not retain subscribers when the request is already aborted', async () => {
+    const abort = new AbortController();
+    abort.abort();
+
+    const response = await eventsStreamGet(
+      new Request('http://localhost/api/v1/events/stream?ephemeral=true', {
+        signal: abort.signal,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(getEventSubscriberCountForTests()).toBe(0);
   });
 });

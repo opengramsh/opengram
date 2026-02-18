@@ -75,28 +75,56 @@ export async function GET(request: Request) {
         const replayHighWaterRowid = getLatestEventRowid();
         let keepAlive: ReturnType<typeof setInterval> | null = null;
         let unsubscribe: (() => void) | null = null;
-
-        const send = (value: string) => {
+        const close = () => {
           if (closed) {
             return;
           }
-          controller.enqueue(encoder.encode(value));
-        };
 
-        const close = () => {
+          closed = true;
+          request.signal.removeEventListener('abort', close);
           if (keepAlive) {
             clearInterval(keepAlive);
+            keepAlive = null;
           }
           if (unsubscribe) {
             unsubscribe();
+            unsubscribe = null;
           }
-          if (!closed) {
+
+          try {
             controller.close();
-            closed = true;
+          } catch {
+            // noop: controller may already be closed/errored.
+          }
+        };
+
+        request.signal.addEventListener('abort', close, { once: true });
+        if (request.signal.aborted) {
+          close();
+          return;
+        }
+
+        const send = (value: string) => {
+          if (closed || request.signal.aborted) {
+            close();
+            return false;
+          }
+
+          try {
+            controller.enqueue(encoder.encode(value));
+            return true;
+          } catch {
+            close();
+            return false;
           }
         };
 
         unsubscribe = subscribeToEvents(ephemeral, (event) => {
+          if (closed || request.signal.aborted) {
+            close();
+            return;
+          }
+
           if (replaying) {
             if (queuedLiveEvents.length >= MAX_QUEUED_LIVE_EVENTS_DURING_REPLAY) {
               replayQueueOverflowed = true;
@@ -109,7 +137,9 @@ export async function GET(request: Request) {
           send(toSseChunk(event));
         });
 
-        send(': stream opened\n\n');
+        if (!send(': stream opened\n\n')) {
+          return;
+        }
 
         if (replayCursorRowid === null) {
           replayCursorRowid = replayHighWaterRowid;
@@ -117,9 +147,16 @@ export async function GET(request: Request) {
 
         let replayBatchCursorRowid = replayCursorRowid;
         while (true) {
+          if (closed || request.signal.aborted) {
+            close();
+            return;
+          }
+
           const replayBatch = listEventsAfterRowid(replayBatchCursorRowid, limit, replayHighWaterRowid);
           for (const event of replayBatch) {
-            send(toSseChunk(event));
+            if (!send(toSseChunk(event))) {
+              return;
+            }
           }
 
           if (replayBatch.length < limit) {
@@ -137,22 +174,23 @@ export async function GET(request: Request) {
         }
 
         for (const event of queuedLiveEvents) {
+          if (closed || request.signal.aborted) {
+            close();
+            return;
+          }
+
           const rowid = getEventRowidById(event.id);
           if (rowid !== null && rowid <= replayHighWaterRowid) {
             continue;
           }
-          send(toSseChunk(event));
+          if (!send(toSseChunk(event))) {
+            return;
+          }
         }
 
         keepAlive = setInterval(() => {
-          try {
-            send(': keepalive\n\n');
-          } catch {
-            close();
-          }
+          send(': keepalive\n\n');
         }, 15_000);
-
-        request.signal.addEventListener('abort', close);
       },
     });
 

@@ -238,3 +238,7 @@ export function resetEventSubscribersForTests() {
   subscribers.clear();
   nextSubscriberId = 1;
 }
+
+export function getEventSubscriberCountForTests() {
+  return subscribers.size;
+}
