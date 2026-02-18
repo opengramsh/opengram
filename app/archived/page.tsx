@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Facehash } from 'facehash';
+import { Plus } from 'lucide-react';
 
 import { buildChatsQuery, sortInboxChats } from '@/src/lib/inbox';
+import {
+  normalizeFirstMessageForNewChat,
+  selectNewChatAgentId,
+  selectNewChatModelId,
+} from '@/src/lib/new-chat';
 import { ChatList } from '@/src/components/chats/chat-list';
-import type { Agent, Chat, ChatsResponse, ConfigResponse } from '@/src/components/chats/types';
+import type { Agent, Chat, ChatsResponse, ConfigResponse, Model } from '@/src/components/chats/types';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 
 function chipClass(active: boolean) {
@@ -20,12 +27,20 @@ export default function ArchivedPage() {
   const router = useRouter();
   const [appName, setAppName] = useState('OpenGram');
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
+  const [defaultModelIdForNewChats, setDefaultModelIdForNewChats] = useState('');
   const [customStates, setCustomStates] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [selectedState, setSelectedState] = useState('');
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false);
+  const [newChatAgentId, setNewChatAgentId] = useState('');
+  const [newChatModelId, setNewChatModelId] = useState('');
+  const [newChatFirstMessage, setNewChatFirstMessage] = useState('');
+  const [newChatError, setNewChatError] = useState<string | null>(null);
+  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchIdRef = useRef(0);
@@ -37,6 +52,13 @@ export default function ArchivedPage() {
     }
     return map;
   }, [agents]);
+
+  const normalizedNewChatFirstMessage = useMemo(
+    () => normalizeFirstMessageForNewChat(newChatFirstMessage),
+    [newChatFirstMessage],
+  );
+
+  const canSendNewChat = Boolean(newChatAgentId && newChatModelId && normalizedNewChatFirstMessage);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -57,7 +79,14 @@ export default function ArchivedPage() {
     const config = (await response.json()) as ConfigResponse;
     setAppName(config.appName || 'OpenGram');
     setAgents(config.agents ?? []);
+    setModels(config.models ?? []);
     setCustomStates(config.customStates ?? []);
+    const resolvedDefaultModelId = config.defaultModelIdForNewChats || config.models[0]?.id || '';
+    setDefaultModelIdForNewChats(resolvedDefaultModelId);
+    setNewChatAgentId((current) => selectNewChatAgentId(config.agents ?? [], current));
+    setNewChatModelId((current) =>
+      selectNewChatModelId(config.models ?? [], resolvedDefaultModelId, current),
+    );
   }, []);
 
   const loadChats = useCallback(async () => {
@@ -202,8 +231,59 @@ export default function ArchivedPage() {
     [mutateChat],
   );
 
+  const openNewChatSheet = useCallback(() => {
+    setNewChatAgentId(selectNewChatAgentId(agents));
+    setNewChatModelId(selectNewChatModelId(models, defaultModelIdForNewChats));
+    setNewChatFirstMessage('');
+    setNewChatError(null);
+    setIsNewChatOpen(true);
+  }, [agents, defaultModelIdForNewChats, models]);
+
+  const createNewChat = useCallback(async () => {
+    if (!newChatAgentId || !newChatModelId || isCreatingNewChat) {
+      return;
+    }
+
+    if (!normalizedNewChatFirstMessage) {
+      setNewChatError('Enter a first message to create chat.');
+      return;
+    }
+
+    setIsCreatingNewChat(true);
+    setNewChatError(null);
+    try {
+      const response = await fetch('/api/v1/chats', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentIds: [newChatAgentId],
+          modelId: newChatModelId,
+          firstMessage: normalizedNewChatFirstMessage,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create chat');
+      }
+
+      setIsNewChatOpen(false);
+      setNewChatFirstMessage('');
+      await refreshChats();
+    } catch {
+      setNewChatError('Failed to create chat.');
+    } finally {
+      setIsCreatingNewChat(false);
+    }
+  }, [
+    isCreatingNewChat,
+    newChatAgentId,
+    newChatModelId,
+    normalizedNewChatFirstMessage,
+    refreshChats,
+  ]);
+
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col bg-background pb-20">
+    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col bg-background pb-36">
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-md">
         <div className="grid grid-cols-[36px_1fr_36px] items-center">
           <HamburgerMenu />
@@ -287,7 +367,113 @@ export default function ArchivedPage() {
           placeholder="Search archived chats"
           className="h-11 flex-1 rounded-2xl border border-border/70 bg-background/70 px-4 text-sm outline-none placeholder:text-muted-foreground focus:border-primary/70"
         />
+        <button
+          type="button"
+          aria-label="New chat"
+          className="grid h-11 w-11 place-items-center rounded-2xl bg-[hsl(151,100%,43%)] text-black shadow-lg shadow-[hsl(151,100%,43%)]/30"
+          onClick={openNewChatSheet}
+        >
+          <Plus size={19} strokeWidth={2.5} />
+        </button>
       </div>
+
+      {isNewChatOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setIsNewChatOpen(false)}>
+          <div
+            className="liquid-glass absolute inset-x-0 bottom-0 rounded-t-3xl border-x border-t border-border p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-sm font-semibold text-foreground">New Chat</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Choose an agent and model, then send your first message.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Agent</p>
+                <div className="space-y-2">
+                  {agents.map((agent) => {
+                    const selected = newChatAgentId === agent.id;
+                    return (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                          selected
+                            ? 'border-primary/70 bg-primary/10'
+                            : 'border-border bg-card hover:border-primary/40'
+                        }`}
+                        onClick={() => {
+                          setNewChatAgentId(agent.id);
+                          setNewChatError(null);
+                        }}
+                      >
+                        <Facehash
+                          name={agent.id}
+                          size={34}
+                          interactive={false}
+                          className="shrink-0 rounded-lg text-black"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-foreground">{agent.name}</span>
+                          <span className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Model</span>
+                <select
+                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70"
+                  value={newChatModelId}
+                  onChange={(event) => setNewChatModelId(event.target.value)}
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">First message</span>
+                <textarea
+                  rows={3}
+                  value={newChatFirstMessage}
+                  onChange={(event) => {
+                    setNewChatFirstMessage(event.target.value);
+                    if (newChatError) {
+                      setNewChatError(null);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/70"
+                  placeholder="Start with a message..."
+                />
+              </label>
+              {newChatError && <p className="text-xs text-red-300">{newChatError}</p>}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="h-10 flex-1 rounded-xl border border-border bg-card text-sm font-medium text-foreground"
+                  onClick={() => setIsNewChatOpen(false)}
+                  disabled={isCreatingNewChat}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                  onClick={() => void createNewChat()}
+                  disabled={isCreatingNewChat || !canSendNewChat}
+                >
+                  {isCreatingNewChat ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

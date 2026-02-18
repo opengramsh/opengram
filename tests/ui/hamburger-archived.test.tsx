@@ -97,6 +97,10 @@ describe('hamburger + archived chats UI', () => {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
+      if (url === '/api/v1/chats' && method === 'POST') {
+        return new Response(JSON.stringify({ id: 'chat-new' }), { status: 200 });
+      }
+
       return new Response('not found', { status: 404 });
     });
 
@@ -162,5 +166,17 @@ describe('hamburger + archived chats UI', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/v1/chats/chat-archived/unarchive', { method: 'POST' });
     });
+  });
+
+  it('shows the global + action on archived and opens new chat sheet', async () => {
+    navigationState.pathname = '/archived';
+    render(<ArchivedPage />);
+    const user = userEvent.setup();
+
+    await screen.findByText('Archived chat');
+    const newChatButton = screen.getByRole('button', { name: 'New chat' });
+    await user.click(newChatButton);
+
+    expect(screen.getByText('New Chat')).toBeTruthy();
   });
 });
