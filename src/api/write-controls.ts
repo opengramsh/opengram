@@ -35,11 +35,20 @@ function requireWriteAuth(request: Request) {
 }
 
 function enforceWriteRateLimit(request: Request) {
+  const configuredMax = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX ?? RATE_LIMIT_MAX_REQUESTS);
+  const configuredWindowMs = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS ?? RATE_LIMIT_WINDOW_MS);
+  const maxRequests = Number.isFinite(configuredMax) && configuredMax > 0
+    ? Math.floor(configuredMax)
+    : RATE_LIMIT_MAX_REQUESTS;
+  const windowMs = Number.isFinite(configuredWindowMs) && configuredWindowMs > 0
+    ? Math.floor(configuredWindowMs)
+    : RATE_LIMIT_WINDOW_MS;
+
   const now = Date.now();
   const ip = getClientIp(request);
   const existing = writeRateBuckets.get(ip);
 
-  if (!existing || now - existing.windowStartedAt >= RATE_LIMIT_WINDOW_MS) {
+  if (!existing || now - existing.windowStartedAt >= windowMs) {
     writeRateBuckets.set(ip, {
       windowStartedAt: now,
       count: 1,
@@ -47,10 +56,10 @@ function enforceWriteRateLimit(request: Request) {
     return;
   }
 
-  if (existing.count >= RATE_LIMIT_MAX_REQUESTS) {
+  if (existing.count >= maxRequests) {
     const retryAfterSeconds = Math.max(
       1,
-      Math.ceil((RATE_LIMIT_WINDOW_MS - (now - existing.windowStartedAt)) / 1_000),
+      Math.ceil((windowMs - (now - existing.windowStartedAt)) / 1_000),
     );
     throw rateLimitedError('Write rate limit exceeded.', retryAfterSeconds);
   }

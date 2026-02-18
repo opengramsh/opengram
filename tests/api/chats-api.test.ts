@@ -98,6 +98,8 @@ beforeEach(() => {
 afterEach(() => {
   db.close();
   delete process.env.DATABASE_URL;
+  delete process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX;
+  delete process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS;
   if (previousConfigPath === undefined) {
     delete process.env.OPENGRAM_CONFIG_PATH;
   } else {
@@ -279,6 +281,55 @@ describe('chats API', () => {
     expect(patched.title).toBe('after');
     expect(patched.tags).toEqual(['beta']);
     expect(patched.pinned).toBe(true);
+  });
+
+  it('emits chat lifecycle events for create, update, archive, read, and unread actions', async () => {
+    const created = await createChat({
+      title: 'lifecycle',
+      firstMessage: 'hello lifecycle',
+    });
+    const chatId = created.json.id as string;
+
+    await chatPatch(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'PATCH', {
+        title: 'lifecycle-updated',
+      }),
+      routeContext(chatId),
+    );
+    await archivePost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/archive`, 'POST'),
+      routeContext(chatId),
+    );
+    await unarchivePost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/unarchive`, 'POST'),
+      routeContext(chatId),
+    );
+    await markUnreadPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/mark-unread`, 'POST'),
+      routeContext(chatId),
+    );
+    await markReadPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/mark-read`, 'POST'),
+      routeContext(chatId),
+    );
+
+    const rows = db
+      .prepare('SELECT type, payload FROM events ORDER BY rowid ASC')
+      .all() as Array<{ type: string; payload: string }>;
+    const chatTypes = rows
+      .filter((row) => {
+        const payload = JSON.parse(row.payload) as { chatId?: string };
+        return payload.chatId === chatId;
+      })
+      .map((row) => row.type);
+
+    expect(chatTypes).toContain('chat.created');
+    expect(chatTypes).toContain('chat.updated');
+    expect(chatTypes).toContain('chat.archived');
+    expect(chatTypes).toContain('chat.unarchived');
+    expect(chatTypes).toContain('chat.unread');
+    expect(chatTypes).toContain('chat.read');
+    expect(chatTypes).toContain('message.created');
   });
 
   it('supports archive, unarchive, mark-read and mark-unread actions', async () => {
@@ -538,11 +589,13 @@ describe('chats API', () => {
   });
 
   it('rate limits write endpoints and returns retry-after header', async () => {
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '5';
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
     const created = await createChat({ title: 'rate-limit-target' });
     const chatId = created.json.id as string;
 
     let rateLimitedResponse: Response | null = null;
-    for (let i = 0; i < 150; i += 1) {
+    for (let i = 0; i < 20; i += 1) {
       const response = await archivePost(
         createJsonRequest(`http://localhost/api/v1/chats/${chatId}/archive`, 'POST'),
         routeContext(chatId),

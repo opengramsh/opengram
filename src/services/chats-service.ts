@@ -6,6 +6,7 @@ import { createSqliteConnection } from '@/src/db/client';
 
 import { encodeCursor, parsePagination } from '@/src/api/pagination';
 import { notFoundError, validationError } from '@/src/api/http';
+import { emitEvent } from '@/src/services/events-service';
 
 const TITLE_FALLBACK = 'New Chat';
 const PREVIEW_MAX_CHARS = 180;
@@ -347,7 +348,9 @@ export function createChat(input: CreateChatInput) {
   const tags = normalizeTags(input.tags ?? []);
   const customState = input.customState ?? config.defaultCustomState;
 
-  return withDb((db) => {
+  const result = withDb((db) => {
+    let firstMessageId: string | null = null;
+
     db.prepare(
       [
         'INSERT INTO chats (',
@@ -372,6 +375,7 @@ export function createChat(input: CreateChatInput) {
     );
 
     if (firstMessageContent !== null) {
+      firstMessageId = nanoid();
       db.prepare(
         [
           'INSERT INTO messages (',
@@ -380,7 +384,7 @@ export function createChat(input: CreateChatInput) {
           ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         ].join(' '),
       ).run(
-        nanoid(),
+        firstMessageId,
         chatId,
         'user',
         USER_SENDER_ID,
@@ -396,8 +400,27 @@ export function createChat(input: CreateChatInput) {
 
     syncTagsCatalogUsage(db, [], tags);
     updateDenormalizedFields(db, chatId);
-    return serializeChat(getChatRecord(db, chatId));
+    return {
+      chat: serializeChat(getChatRecord(db, chatId)),
+      firstMessageId,
+    };
   });
+
+  emitEvent('chat.created', {
+    chatId: result.chat.id,
+  });
+
+  if (result.firstMessageId) {
+    emitEvent('message.created', {
+      chatId: result.chat.id,
+      messageId: result.firstMessageId,
+      role: 'user',
+      senderId: USER_SENDER_ID,
+      streamState: 'complete',
+    });
+  }
+
+  return result.chat;
 }
 
 export function listChats(url: URL): ListChatsResult {
@@ -586,26 +609,36 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
   updates.push('updated_at = ?');
   values.push(now);
 
-  return withDb((db) => {
+  const updated = withDb((db) => {
     const current = getChatRecord(db, chatId);
     const previousTags = parseJsonArray(current.tags, 'tags');
     db.prepare(`UPDATE chats SET ${updates.join(', ')} WHERE id = ?`).run(...values, chatId);
-    const updated = getChatRecord(db, chatId);
-    const nextTags = parseJsonArray(updated.tags, 'tags');
+    const updatedRecord = getChatRecord(db, chatId);
+    const nextTags = parseJsonArray(updatedRecord.tags, 'tags');
     syncTagsCatalogUsage(db, previousTags, nextTags);
     updateDenormalizedFields(db, chatId);
     return serializeChat(getChatRecord(db, chatId));
   });
+
+  emitEvent('chat.updated', {
+    chatId: updated.id,
+  });
+
+  return updated;
 }
 
 function setArchiveState(chatId: string, archived: boolean) {
-  return withDb((db) => {
+  withDb((db) => {
     getChatRecord(db, chatId);
     db.prepare('UPDATE chats SET is_archived = ?, updated_at = ? WHERE id = ?').run(
       archived ? 1 : 0,
       Date.now(),
       chatId,
     );
+  });
+
+  emitEvent(archived ? 'chat.archived' : 'chat.unarchived', {
+    chatId,
   });
 }
 
@@ -618,7 +651,7 @@ export function unarchiveChat(chatId: string) {
 }
 
 export function markChatRead(chatId: string) {
-  return withDb((db) => {
+  withDb((db) => {
     getChatRecord(db, chatId);
     db.prepare('UPDATE chats SET last_read_at = ?, updated_at = ? WHERE id = ?').run(
       Date.now(),
@@ -627,16 +660,24 @@ export function markChatRead(chatId: string) {
     );
     updateDenormalizedFields(db, chatId);
   });
+
+  emitEvent('chat.read', {
+    chatId,
+  });
 }
 
 export function markChatUnread(chatId: string) {
-  return withDb((db) => {
+  withDb((db) => {
     getChatRecord(db, chatId);
     db.prepare('UPDATE chats SET last_read_at = NULL, updated_at = ? WHERE id = ?').run(
       Date.now(),
       chatId,
     );
     updateDenormalizedFields(db, chatId);
+  });
+
+  emitEvent('chat.unread', {
+    chatId,
   });
 }
 

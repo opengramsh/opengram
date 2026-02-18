@@ -19,6 +19,20 @@ export type EventEnvelope = {
   payload: Record<string, unknown>;
 };
 
+type EventSubscriber = {
+  includeEphemeral: boolean;
+  onEvent: (event: EventEnvelope) => void;
+};
+
+type EmitEventOptions = {
+  ephemeral?: boolean;
+  id?: string;
+  timestampMs?: number;
+};
+
+let nextSubscriberId = 1;
+const subscribers = new Map<number, EventSubscriber>();
+
 function withDb<T>(callback: (db: Database.Database) => T): T {
   const db = createSqliteConnection();
   try {
@@ -48,17 +62,57 @@ function serializeEvent(record: EventRecord): EventEnvelope {
   };
 }
 
-export function emitEvent(type: string, payload: Record<string, unknown>) {
-  const now = Date.now();
+function fanOutEvent(event: EventEnvelope, ephemeral: boolean) {
+  for (const subscriber of subscribers.values()) {
+    if (ephemeral && !subscriber.includeEphemeral) {
+      continue;
+    }
+    subscriber.onEvent(event);
+  }
+}
 
-  withDb((db) => {
-    db.prepare(
-      [
-        'INSERT INTO events (id, type, payload, created_at)',
-        'VALUES (?, ?, ?, ?)',
-      ].join(' '),
-    ).run(nanoid(), type, JSON.stringify(payload), now);
+export function emitEvent(type: string, payload: Record<string, unknown>, options: EmitEventOptions = {}) {
+  const now = options.timestampMs ?? Date.now();
+  const id = options.id ?? nanoid();
+  const ephemeral = options.ephemeral ?? false;
+
+  if (!ephemeral) {
+    withDb((db) => {
+      db.prepare(
+        [
+          'INSERT INTO events (id, type, payload, created_at)',
+          'VALUES (?, ?, ?, ?)',
+        ].join(' '),
+      ).run(id, type, JSON.stringify(payload), now);
+    });
+  }
+
+  const envelope: EventEnvelope = {
+    id,
+    type,
+    timestamp: new Date(now).toISOString(),
+    payload,
+  };
+
+  fanOutEvent(envelope, ephemeral);
+  return envelope;
+}
+
+export function subscribeToEvents(
+  includeEphemeral: boolean,
+  onEvent: (event: EventEnvelope) => void,
+) {
+  const subscriberId = nextSubscriberId;
+  nextSubscriberId += 1;
+
+  subscribers.set(subscriberId, {
+    includeEphemeral,
+    onEvent,
   });
+
+  return () => {
+    subscribers.delete(subscriberId);
+  };
 }
 
 export function listEventsAfterCursor(cursor: string | null, limit: number) {
@@ -104,4 +158,9 @@ export function getLatestEventCursor() {
       .get() as { id: string } | undefined;
     return row?.id ?? null;
   });
+}
+
+export function resetEventSubscribersForTests() {
+  subscribers.clear();
+  nextSubscriberId = 1;
 }
