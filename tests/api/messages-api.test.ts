@@ -99,6 +99,17 @@ describe('messages API', () => {
       .get(body.id) as { content_final: string } | undefined;
 
     expect(fts?.content_final).toBe('hello from the model snapshot path');
+
+    const event = db
+      .prepare('SELECT type, payload FROM events ORDER BY created_at DESC LIMIT 1')
+      .get() as { type: string; payload: string };
+    expect(event.type).toBe('message.created');
+    expect(JSON.parse(event.payload)).toMatchObject({
+      chatId,
+      messageId: body.id,
+      role: 'agent',
+      senderId: 'agent-default',
+    });
   });
 
   it('creates a streaming-start message', async () => {

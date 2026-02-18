@@ -5,6 +5,7 @@ import { notFoundError, validationError } from '@/src/api/http';
 import { encodeMessageCursor, parseMessagePagination } from '@/src/api/pagination';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { createSqliteConnection } from '@/src/db/client';
+import { emitEvent } from '@/src/services/events-service';
 
 const USER_SENDER_ID = 'user:primary';
 const SYSTEM_SENDER_ID = 'system';
@@ -265,7 +266,15 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
     tx();
 
     const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as MessageRecord;
-    return serializeMessage(message);
+    const serialized = serializeMessage(message);
+    emitEvent('message.created', {
+      chatId,
+      messageId: serialized.id,
+      role: serialized.role,
+      senderId: serialized.sender_id,
+      streamState: serialized.stream_state,
+    });
+    return serialized;
   });
 }
 

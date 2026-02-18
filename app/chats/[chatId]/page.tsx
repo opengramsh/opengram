@@ -3,9 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Facehash } from 'facehash';
-import { ArrowLeft, Camera, ChevronDown, FileText, GalleryVerticalEnd, Images, Mic, Plus, Send, Settings2 } from 'lucide-react';
+import { ArrowLeft, Camera, ChevronDown, FileText, GalleryVerticalEnd, Images, Mic, Plus, Send, Settings2, Square } from 'lucide-react';
 
-import { resolveEdgeSwipeBack, shouldStartEdgeSwipeBack, sortMessagesForFeed } from '@/src/lib/chat';
+import {
+  applyStreamingChunk,
+  applyStreamingComplete,
+  resolveEdgeSwipeBack,
+  shouldStartEdgeSwipeBack,
+  sortMessagesForFeed,
+  upsertFeedMessage,
+} from '@/src/lib/chat';
 
 type Agent = {
   id: string;
@@ -33,11 +40,42 @@ type Message = {
   content_final: string | null;
   content_partial: string | null;
   stream_state: 'none' | 'streaming' | 'complete' | 'cancelled';
+  trace?: Record<string, unknown> | null;
 };
 
 type MessagesResponse = {
   data: Message[];
 };
+
+type RequestType = 'choice' | 'text_input' | 'form';
+
+type RequestItem = {
+  id: string;
+  chat_id: string;
+  type: RequestType;
+  status: 'pending' | 'resolved' | 'cancelled';
+  title: string;
+  body: string | null;
+  config: Record<string, unknown>;
+  created_at: string;
+};
+
+type RequestsResponse = {
+  data: RequestItem[];
+};
+
+type MediaItem = {
+  id: string;
+  message_id: string | null;
+  content_type: string;
+  kind: 'image' | 'audio' | 'file';
+};
+
+type MediaResponse = {
+  data: MediaItem[];
+};
+
+type RequestDraftMap = Record<string, Record<string, unknown>>;
 
 function messageText(message: Message) {
   if (message.content_final?.trim()) {
@@ -71,6 +109,69 @@ function messageBubbleClass(role: Message['role']) {
   return 'mx-auto max-w-[92%] rounded-xl border border-border/70 bg-muted px-3 py-2 text-xs text-muted-foreground';
 }
 
+function mediaIdFromTrace(message: Message) {
+  const mediaId = message.trace && typeof message.trace.mediaId === 'string' ? message.trace.mediaId : null;
+  return mediaId;
+}
+
+function optionsFromRequestConfig(config: Record<string, unknown>) {
+  if (!Array.isArray(config.options)) {
+    return [];
+  }
+
+  return config.options
+    .map((option) => {
+      if (!option || typeof option !== 'object') {
+        return null;
+      }
+
+      const id = typeof (option as { id?: unknown }).id === 'string' ? (option as { id: string }).id : null;
+      const label = typeof (option as { label?: unknown }).label === 'string' ? (option as { label: string }).label : null;
+      if (!id || !label) {
+        return null;
+      }
+
+      return { id, label };
+    })
+    .filter((option): option is { id: string; label: string } => option !== null);
+}
+
+function fieldsFromRequestConfig(config: Record<string, unknown>) {
+  if (!Array.isArray(config.fields)) {
+    return [];
+  }
+
+  return config.fields
+    .map((field) => {
+      if (!field || typeof field !== 'object') {
+        return null;
+      }
+
+      const id = typeof (field as { id?: unknown }).id === 'string' ? (field as { id: string }).id : null;
+      if (!id) {
+        return null;
+      }
+
+      const label = typeof (field as { label?: unknown }).label === 'string' ? (field as { label: string }).label : id;
+      const inputType = (field as { inputType?: unknown }).inputType;
+      const type = inputType === 'number' || inputType === 'email' ? inputType : 'text';
+
+      return { id, label, type };
+    })
+    .filter((field): field is { id: string; label: string; type: string } => field !== null);
+}
+
+function arrayBufferToBase64(value: ArrayBuffer) {
+  const bytes = new Uint8Array(value);
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return window.btoa(binary);
+}
+
 export default function ChatPage() {
   const params = useParams<{ chatId: string }>();
   const chatId = params?.chatId;
@@ -79,6 +180,8 @@ export default function ChatPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -88,10 +191,18 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
   const [isRequestWidgetOpen, setIsRequestWidgetOpen] = useState(true);
+  const [requestDrafts, setRequestDrafts] = useState<RequestDraftMap>({});
+  const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<BlobPart[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
   const swipeRef = useRef<{
     active: boolean;
     startX: number;
@@ -118,6 +229,29 @@ export default function ChatPage() {
 
   const primaryAgent = chat?.agent_ids[0] ? agentsById.get(chat.agent_ids[0]) : undefined;
 
+  const mediaByMessageId = useMemo(() => {
+    const map = new Map<string, MediaItem[]>();
+    for (const item of media) {
+      if (!item.message_id) {
+        continue;
+      }
+
+      const current = map.get(item.message_id) ?? [];
+      current.push(item);
+      map.set(item.message_id, current);
+    }
+
+    return map;
+  }, [media]);
+
+  const mediaById = useMemo(() => {
+    const map = new Map<string, MediaItem>();
+    for (const item of media) {
+      map.set(item.id, item);
+    }
+    return map;
+  }, [media]);
+
   const scrollToBottom = useCallback((smooth = false) => {
     const feed = feedRef.current;
     if (!feed) {
@@ -126,6 +260,49 @@ export default function ChatPage() {
 
     feed.scrollTo({ top: feed.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
   }, []);
+
+  const refreshMessages = useCallback(async () => {
+    if (!chatId) {
+      return;
+    }
+
+    const response = await fetch(`/api/v1/chats/${chatId}/messages?limit=200`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error('Failed to refresh messages');
+    }
+
+    const payload = (await response.json()) as MessagesResponse;
+    setMessages(sortMessagesForFeed(payload.data ?? []));
+  }, [chatId]);
+
+  const refreshPendingRequests = useCallback(async () => {
+    if (!chatId) {
+      return;
+    }
+
+    const response = await fetch(`/api/v1/chats/${chatId}/requests?status=pending`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error('Failed to load requests');
+    }
+
+    const payload = (await response.json()) as RequestsResponse;
+    setPendingRequests(payload.data ?? []);
+    setChat((current) => (current ? { ...current, pending_requests_count: payload.data?.length ?? 0 } : current));
+  }, [chatId]);
+
+  const refreshMedia = useCallback(async () => {
+    if (!chatId) {
+      return;
+    }
+
+    const response = await fetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error('Failed to load media');
+    }
+
+    const payload = (await response.json()) as MediaResponse;
+    setMedia(payload.data ?? []);
+  }, [chatId]);
 
   const loadData = useCallback(async () => {
     if (!chatId) {
@@ -136,24 +313,30 @@ export default function ChatPage() {
     setError(null);
 
     try {
-      const [configResponse, chatResponse, messagesResponse] = await Promise.all([
+      const [configResponse, chatResponse, messagesResponse, requestsResponse, mediaResponse] = await Promise.all([
         fetch('/api/v1/config', { cache: 'no-store' }),
         fetch(`/api/v1/chats/${chatId}`, { cache: 'no-store' }),
         fetch(`/api/v1/chats/${chatId}/messages?limit=200`, { cache: 'no-store' }),
+        fetch(`/api/v1/chats/${chatId}/requests?status=pending`, { cache: 'no-store' }),
+        fetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' }),
       ]);
 
-      if (!configResponse.ok || !chatResponse.ok || !messagesResponse.ok) {
+      if (!configResponse.ok || !chatResponse.ok || !messagesResponse.ok || !requestsResponse.ok || !mediaResponse.ok) {
         throw new Error('Failed to load chat data');
       }
 
       const config = (await configResponse.json()) as ConfigResponse;
       const chatPayload = (await chatResponse.json()) as Chat;
       const messagesPayload = (await messagesResponse.json()) as MessagesResponse;
+      const requestsPayload = (await requestsResponse.json()) as RequestsResponse;
+      const mediaPayload = (await mediaResponse.json()) as MediaResponse;
 
       setAgents(config.agents ?? []);
       setChat(chatPayload);
       setTitleInput(chatPayload.title);
       setMessages(sortMessagesForFeed(messagesPayload.data ?? []));
+      setPendingRequests(requestsPayload.data ?? []);
+      setMedia(mediaPayload.data ?? []);
     } catch {
       setError('Failed to load chat.');
     } finally {
@@ -237,7 +420,7 @@ export default function ChatPage() {
 
       const message = (await response.json()) as Message;
       setComposerText('');
-      setMessages((current) => sortMessagesForFeed([...current, message]));
+      setMessages((current) => upsertFeedMessage(current, message));
     } catch {
       setError('Failed to send message.');
     } finally {
@@ -245,9 +428,242 @@ export default function ChatPage() {
     }
   }, [chat, composerText, isSending]);
 
+  const resolvePendingRequest = useCallback(
+    async (request: RequestItem) => {
+      if (resolvingRequestId) {
+        return;
+      }
+
+      const draft = requestDrafts[request.id] ?? {};
+      let payload: Record<string, unknown>;
+
+      if (request.type === 'choice') {
+        const selected = Array.isArray(draft.selectedOptionIds) ? (draft.selectedOptionIds as string[]) : [];
+        payload = { selectedOptionIds: selected };
+      } else if (request.type === 'text_input') {
+        payload = { text: typeof draft.text === 'string' ? draft.text : '' };
+      } else {
+        payload = { values: typeof draft.values === 'object' && draft.values ? draft.values : {} };
+      }
+
+      setResolvingRequestId(request.id);
+      try {
+        const response = await fetch(`/api/v1/requests/${request.id}/resolve`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to resolve request');
+        }
+
+        setPendingRequests((current) => current.filter((item) => item.id !== request.id));
+        setChat((current) =>
+          current
+            ? {
+                ...current,
+                pending_requests_count: Math.max(0, current.pending_requests_count - 1),
+              }
+            : current,
+        );
+      } catch {
+        setError('Failed to resolve request.');
+      } finally {
+        setResolvingRequestId(null);
+      }
+    },
+    [requestDrafts, resolvingRequestId],
+  );
+
+  const uploadVoiceNote = useCallback(
+    async (blob: Blob) => {
+      if (!chat) {
+        return;
+      }
+
+      const messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          role: 'user',
+          senderId: 'user:primary',
+          content: 'Voice note',
+        }),
+      });
+
+      if (!messageResponse.ok) {
+        throw new Error('Failed to create voice message');
+      }
+
+      const createdMessage = (await messageResponse.json()) as Message;
+
+      const uploadResponse = await fetch(`/api/v1/chats/${chat.id}/media`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          fileName: `voice-${Date.now()}.webm`,
+          contentType: blob.type || 'audio/webm',
+          base64Data: arrayBufferToBase64(await blob.arrayBuffer()),
+          kind: 'audio',
+          messageId: createdMessage.id,
+        }),
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload voice note');
+      }
+
+      const uploadedMedia = (await uploadResponse.json()) as MediaItem;
+      setMessages((current) =>
+        upsertFeedMessage(current, {
+          ...createdMessage,
+          trace: { ...(createdMessage.trace ?? {}), mediaId: uploadedMedia.id, kind: 'audio' },
+        }),
+      );
+      setMedia((current) => [...current, uploadedMedia]);
+    },
+    [chat],
+  );
+
+  const stopRecording = useCallback(() => {
+    mediaRecorderRef.current?.stop();
+  }, []);
+
+  const handleMicAction = useCallback(async () => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+
+    if (!('mediaDevices' in navigator) || !navigator.mediaDevices.getUserMedia || !('MediaRecorder' in window)) {
+      setError('Voice recording is not supported in this browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recordingChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const chunks = recordingChunksRef.current;
+        recordingChunksRef.current = [];
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+
+        if (recordingTimerRef.current) {
+          window.clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+
+        setIsRecording(false);
+        setRecordingSeconds(0);
+
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
+
+        void uploadVoiceNote(blob).catch(() => {
+          setError('Failed to upload voice note.');
+        });
+      };
+
+      recorder.start(250);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds((current) => current + 1);
+      }, 1000);
+    } catch {
+      setError('Microphone permission is required to record voice notes.');
+    }
+  }, [isRecording, stopRecording, uploadVoiceNote]);
+
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!chatId) {
+      return;
+    }
+
+    const stream = new EventSource('/api/v1/events/stream?ephemeral=true');
+    const eventTypes = ['message.created', 'message.streaming.chunk', 'message.streaming.complete', 'request.created', 'request.resolved', 'request.cancelled', 'media.attached'];
+
+    const handleEvent = (event: Event) => {
+      const custom = event as MessageEvent<string>;
+      let payload: { type?: string; payload?: Record<string, unknown> } | null = null;
+
+      try {
+        payload = JSON.parse(custom.data) as { type?: string; payload?: Record<string, unknown> };
+      } catch {
+        payload = null;
+      }
+
+      const chatFromPayload = payload?.payload?.chatId;
+      if (chatFromPayload !== chatId) {
+        return;
+      }
+
+      if (payload?.type === 'message.created') {
+        void refreshMessages();
+        return;
+      }
+
+      if (payload?.type === 'message.streaming.chunk') {
+        const messageId = typeof payload.payload?.messageId === 'string' ? payload.payload.messageId : null;
+        const deltaText = typeof payload.payload?.deltaText === 'string' ? payload.payload.deltaText : null;
+
+        if (messageId && deltaText !== null) {
+          setMessages((current) => applyStreamingChunk(current, messageId, deltaText));
+        } else {
+          void refreshMessages();
+        }
+        return;
+      }
+
+      if (payload?.type === 'message.streaming.complete') {
+        const messageId = typeof payload.payload?.messageId === 'string' ? payload.payload.messageId : null;
+        const finalText = typeof payload.payload?.finalText === 'string' ? payload.payload.finalText : undefined;
+
+        if (messageId) {
+          setMessages((current) => applyStreamingComplete(current, messageId, finalText));
+        } else {
+          void refreshMessages();
+        }
+        return;
+      }
+
+      if (payload?.type === 'request.created' || payload?.type === 'request.resolved' || payload?.type === 'request.cancelled') {
+        void refreshPendingRequests();
+        return;
+      }
+
+      if (payload?.type === 'media.attached') {
+        void refreshMedia();
+      }
+    };
+
+    for (const type of eventTypes) {
+      stream.addEventListener(type, handleEvent);
+    }
+
+    return () => {
+      for (const type of eventTypes) {
+        stream.removeEventListener(type, handleEvent);
+      }
+      stream.close();
+    };
+  }, [chatId, refreshMedia, refreshMessages, refreshPendingRequests]);
 
   useEffect(() => {
     if (!isEditingTitle) {
@@ -357,6 +773,18 @@ export default function ChatPage() {
     };
   }, [goBack]);
 
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
+
+      for (const track of recordingStreamRef.current?.getTracks() ?? []) {
+        track.stop();
+      }
+    };
+  }, []);
+
   return (
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col bg-background">
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/95 px-3 py-2 backdrop-blur-md">
@@ -433,14 +861,31 @@ export default function ChatPage() {
 
         {!loading &&
           !error &&
-          messages.map((message) => (
-            <div key={message.id} className="mb-2 flex w-full">
-              <div className={messageBubbleClass(message.role)}>{messageText(message)}</div>
-            </div>
-          ))}
+          messages.map((message) => {
+            const inlineMedia = mediaByMessageId.get(message.id) ?? [];
+            const traceMedia = mediaIdFromTrace(message);
+            const tracedMediaItem = traceMedia ? mediaById.get(traceMedia) : undefined;
+            const audioItems = [
+              ...inlineMedia.filter((item) => item.kind === 'audio'),
+              ...(tracedMediaItem && tracedMediaItem.kind === 'audio' ? [tracedMediaItem] : []),
+            ];
+
+            return (
+              <div key={message.id} className="mb-2 flex w-full">
+                <div className={messageBubbleClass(message.role)}>
+                  {messageText(message)}
+                  {audioItems.length > 0 && (
+                    <div className="pt-2">
+                      <audio controls className="h-8 w-full max-w-xs" src={`/api/v1/files/${audioItems[0]?.id}`} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
       </main>
 
-      {chat && chat.pending_requests_count > 0 && (
+      {chat && pendingRequests.length > 0 && (
         <section
           className="fixed inset-x-0 z-30 mx-auto w-full max-w-3xl px-3"
           style={{ bottom: `calc(76px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)` }}
@@ -451,11 +896,124 @@ export default function ChatPage() {
               className="flex w-full items-center justify-between text-left"
               onClick={() => setIsRequestWidgetOpen((current) => !current)}
             >
-              <p className="text-xs font-semibold text-amber-100">Pending requests ({chat.pending_requests_count})</p>
+              <p className="text-xs font-semibold text-amber-100">Pending requests ({pendingRequests.length})</p>
               <ChevronDown size={14} className={isRequestWidgetOpen ? 'text-amber-100' : 'rotate-180 text-amber-100'} />
             </button>
             {isRequestWidgetOpen && (
-              <p className="pt-1 text-xs text-amber-100/90">Open request details are available in a follow-up endpoint.</p>
+              <div className="space-y-2 pt-2">
+                {pendingRequests.map((request) => {
+                  const draft = requestDrafts[request.id] ?? {};
+                  const options = optionsFromRequestConfig(request.config);
+                  const fields = fieldsFromRequestConfig(request.config);
+
+                  return (
+                    <div key={request.id} className="rounded-xl border border-amber-200/30 bg-amber-950/30 p-2">
+                      <p className="text-xs font-semibold text-amber-50">{request.title}</p>
+                      {request.body && <p className="pt-1 text-xs text-amber-100/90">{request.body}</p>}
+
+                      {request.type === 'choice' && (
+                        <div className="pt-2">
+                          <div className="flex flex-wrap gap-1">
+                            {options.map((option) => {
+                              const selected = Array.isArray(draft.selectedOptionIds)
+                                ? (draft.selectedOptionIds as string[]).includes(option.id)
+                                : false;
+
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`rounded-lg border px-2 py-1 text-[11px] ${selected ? 'border-amber-100 bg-amber-100/20 text-amber-50' : 'border-amber-200/40 text-amber-100'}`}
+                                  onClick={() => {
+                                    setRequestDrafts((current) => {
+                                      const prev = current[request.id] ?? {};
+                                      const prevIds = Array.isArray(prev.selectedOptionIds)
+                                        ? (prev.selectedOptionIds as string[])
+                                        : [];
+                                      const nextIds = prevIds.includes(option.id)
+                                        ? prevIds.filter((id) => id !== option.id)
+                                        : [...prevIds, option.id];
+
+                                      return {
+                                        ...current,
+                                        [request.id]: { ...prev, selectedOptionIds: nextIds },
+                                      };
+                                    });
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {request.type === 'text_input' && (
+                        <div className="pt-2">
+                          <input
+                            value={typeof draft.text === 'string' ? draft.text : ''}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setRequestDrafts((current) => ({
+                                ...current,
+                                [request.id]: { ...(current[request.id] ?? {}), text: value },
+                              }));
+                            }}
+                            placeholder="Type your response"
+                            className="h-8 w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 text-xs text-amber-50 outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {request.type === 'form' && (
+                        <div className="space-y-1 pt-2">
+                          {fields.map((field) => (
+                            <input
+                              key={field.id}
+                              value={
+                                typeof (draft.values as Record<string, unknown> | undefined)?.[field.id] === 'string'
+                                  ? ((draft.values as Record<string, unknown>)[field.id] as string)
+                                  : ''
+                              }
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setRequestDrafts((current) => {
+                                  const prev = current[request.id] ?? {};
+                                  const prevValues = typeof prev.values === 'object' && prev.values
+                                    ? (prev.values as Record<string, unknown>)
+                                    : {};
+                                  return {
+                                    ...current,
+                                    [request.id]: {
+                                      ...prev,
+                                      values: { ...prevValues, [field.id]: value },
+                                    },
+                                  };
+                                });
+                              }}
+                              placeholder={field.label}
+                              type={field.type}
+                              className="h-8 w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 text-xs text-amber-50 outline-none"
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-amber-200/50 px-2 py-1 text-[11px] text-amber-50 disabled:opacity-60"
+                          onClick={() => void resolvePendingRequest(request)}
+                          disabled={resolvingRequestId === request.id}
+                        >
+                          {resolvingRequestId === request.id ? 'Submitting...' : 'Submit'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </section>
@@ -502,12 +1060,13 @@ export default function ChatPage() {
           <button
             type="button"
             aria-label="Record voice note"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-border bg-card text-foreground"
-            onClick={() => setError('Voice note capture is not implemented yet.')}
+            className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${isRecording ? 'border-red-300 bg-red-500/20 text-red-50' : 'border-border bg-card text-foreground'}`}
+            onClick={() => void handleMicAction()}
           >
-            <Mic size={16} />
+            {isRecording ? <Square size={16} /> : <Mic size={16} />}
           </button>
         </div>
+        {isRecording && <p className="px-1 pt-1 text-[11px] text-red-200">Recording {recordingSeconds}s</p>}
       </footer>
 
       {isComposerMenuOpen && (

@@ -3,6 +3,15 @@ export type ChatFeedMessage = {
   created_at: string | null;
 };
 
+export type RealtimeMessage = ChatFeedMessage & {
+  role: 'user' | 'agent' | 'system' | 'tool';
+  sender_id: string;
+  content_final: string | null;
+  content_partial: string | null;
+  stream_state: 'none' | 'streaming' | 'complete' | 'cancelled';
+  trace?: Record<string, unknown> | null;
+};
+
 export type EdgeSwipeResolution = {
   shouldNavigateBack: boolean;
   velocity: number;
@@ -52,4 +61,49 @@ export function resolveEdgeSwipeBack(
     shouldNavigateBack: horizontalDominant && deltaX >= thresholdPx && velocity > minVelocityPxPerMs,
     velocity,
   };
+}
+
+export function upsertFeedMessage<T extends ChatFeedMessage>(messages: T[], incoming: T): T[] {
+  const next = messages.filter((message) => message.id !== incoming.id);
+  next.push(incoming);
+  return sortMessagesForFeed(next);
+}
+
+export function applyStreamingChunk<T extends RealtimeMessage>(
+  messages: T[],
+  messageId: string,
+  deltaText: string,
+): T[] {
+  return messages.map((message) => {
+    if (message.id !== messageId) {
+      return message;
+    }
+
+    const partial = `${message.content_partial ?? ''}${deltaText}`;
+    return {
+      ...message,
+      content_partial: partial,
+      stream_state: 'streaming',
+    };
+  });
+}
+
+export function applyStreamingComplete<T extends RealtimeMessage>(
+  messages: T[],
+  messageId: string,
+  finalText?: string,
+): T[] {
+  return messages.map((message) => {
+    if (message.id !== messageId) {
+      return message;
+    }
+
+    const contentFinal = finalText ?? message.content_partial ?? message.content_final;
+    return {
+      ...message,
+      content_final: contentFinal,
+      content_partial: null,
+      stream_state: 'complete',
+    };
+  });
 }
