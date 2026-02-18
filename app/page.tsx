@@ -79,6 +79,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchIdRef = useRef(0);
+  const inboxFiltersRef = useRef({
+    searchQuery: '',
+    selectedAgentId: '',
+    selectedState: '',
+  });
 
   const agentsById = useMemo(() => {
     const map = new Map<string, Agent>();
@@ -104,6 +109,14 @@ export default function Home() {
       clearTimeout(timer);
     };
   }, [searchInput]);
+
+  useEffect(() => {
+    inboxFiltersRef.current = {
+      searchQuery,
+      selectedAgentId,
+      selectedState,
+    };
+  }, [searchQuery, selectedAgentId, selectedState]);
 
   const loadConfig = useCallback(async () => {
     const response = await fetch('/api/v1/config', { cache: 'no-store' });
@@ -345,7 +358,13 @@ export default function Home() {
 
       const updated = (await response.json()) as Chat;
       setChats((current) => {
-        const matches = chatMatchesInboxFilters(updated, searchQuery, selectedAgentId, selectedState);
+        const filters = inboxFiltersRef.current;
+        const matches = chatMatchesInboxFilters(
+          updated,
+          filters.searchQuery,
+          filters.selectedAgentId,
+          filters.selectedState,
+        );
         const withoutChat = current.filter((chat) => chat.id !== updated.id);
 
         if (!matches) {
@@ -355,7 +374,7 @@ export default function Home() {
         return sortInboxChats([...withoutChat, updated]);
       });
     },
-    [searchQuery, selectedAgentId, selectedState],
+    [],
   );
 
   useEffect(() => {
