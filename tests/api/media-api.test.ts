@@ -140,6 +140,8 @@ describe('media API', () => {
 
     expect(thumbnailResponse.status).toBe(200);
     expect(thumbnailResponse.headers.get('content-type')).toBe('image/webp');
+    expect(thumbnailResponse.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(Number(thumbnailResponse.headers.get('content-length'))).toBeGreaterThan(0);
     expect((await thumbnailResponse.arrayBuffer()).byteLength).toBeGreaterThan(0);
   });
 
@@ -193,6 +195,8 @@ describe('media API', () => {
     expect(fullResponse.status).toBe(200);
     expect(fullResponse.headers.get('content-type')).toBe('audio/webm');
     expect(fullResponse.headers.get('accept-ranges')).toBe('bytes');
+    expect(fullResponse.headers.get('content-disposition')).toBe('inline; filename="voice.webm"');
+    expect(fullResponse.headers.get('x-content-type-options')).toBe('nosniff');
     await expect(fullResponse.text()).resolves.toBe('fake-audio');
 
     const partialResponse = await fileGet(
@@ -227,6 +231,24 @@ describe('media API', () => {
       mediaId: uploaded.id,
       kind: 'audio',
     });
+  });
+
+  it('serves non-inline MIME types as attachment with nosniff', async () => {
+    const chat = await createChat();
+
+    const uploadResponse = await uploadBase64Media(chat.id, 'note.txt', 'text/plain', Buffer.from('note-text'));
+    const uploaded = await uploadResponse.json();
+    expect(uploadResponse.status).toBe(201);
+
+    const response = await fileGet(
+      createJsonRequest(`http://localhost/api/v1/files/${uploaded.id}`, 'GET'),
+      mediaContext(uploaded.id),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-disposition')).toBe('attachment; filename="note.txt"');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    await expect(response.text()).resolves.toBe('note-text');
   });
 
   it('returns 404 for thumbnail endpoint on non-image media', async () => {

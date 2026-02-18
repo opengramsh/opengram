@@ -70,6 +70,20 @@ function quotedFileName(name: string) {
   return name.replace(/["\\]/g, '_');
 }
 
+function isSafeInlineType(contentType: string) {
+  return (
+    contentType.startsWith('image/')
+    || contentType.startsWith('audio/')
+    || contentType.startsWith('video/')
+    || contentType === 'application/pdf'
+  );
+}
+
+function contentDisposition(contentType: string, filename: string) {
+  const mode = isSafeInlineType(contentType) ? 'inline' : 'attachment';
+  return `${mode}; filename="${quotedFileName(filename)}"`;
+}
+
 function toWebReadableStream(stream: NodeJS.ReadableStream) {
   return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
 }
@@ -84,8 +98,9 @@ export async function GET(request: Request, context: RouteContext) {
     const headers = new Headers({
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=86400',
-      'Content-Disposition': `inline; filename="${quotedFileName(media.filename)}"`,
+      'Content-Disposition': contentDisposition(media.contentType, media.filename),
       'Content-Type': media.contentType,
+      'X-Content-Type-Options': 'nosniff',
     });
 
     const rangeHeader = request.headers.get('range');
