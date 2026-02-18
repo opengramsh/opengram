@@ -57,10 +57,32 @@ type PendingSummaryResult = {
   pendingRequestsTotal: number;
 };
 
+type TagSuggestion = {
+  name: string;
+  usage_count: number;
+};
+
 function assertStringArray(value: unknown, fieldName: string) {
   if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
     throw validationError(`${fieldName} must be an array of strings.`, { field: fieldName });
   }
+}
+
+function normalizeTags(tags: string[]) {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const rawTag of tags) {
+    const tag = rawTag.trim();
+    if (!tag || seen.has(tag)) {
+      continue;
+    }
+
+    seen.add(tag);
+    normalized.push(tag);
+  }
+
+  return normalized;
 }
 
 function toTimestamp(value: number | null) {
@@ -106,7 +128,7 @@ function parseJsonArray(value: string, fieldName: string): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
     assertStringArray(parsed, fieldName);
-    return parsed;
+    return parsed as string[];
   } catch {
     throw validationError(`stored ${fieldName} is invalid JSON.`, { field: fieldName });
   }
@@ -160,6 +182,38 @@ function ensureCustomState(customState: string | undefined, allowedStates: Set<s
     throw validationError('customState must match configured customStates.', {
       field: 'customState',
     });
+  }
+}
+
+function escapeLikePattern(value: string) {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function syncTagsCatalogUsage(db: Database.Database, previousTags: string[], nextTags: string[]) {
+  const previous = new Set(previousTags);
+  const next = new Set(nextTags);
+
+  const added = nextTags.filter((tag) => !previous.has(tag));
+  const removed = previousTags.filter((tag) => !next.has(tag));
+
+  for (const tag of added) {
+    db.prepare(
+      [
+        'INSERT INTO tags_catalog (id, name, usage_count, created_at)',
+        'VALUES (?, ?, 1, ?)',
+        'ON CONFLICT(name) DO UPDATE SET usage_count = usage_count + 1',
+      ].join(' '),
+    ).run(nanoid(), tag, Date.now());
+  }
+
+  for (const tag of removed) {
+    db.prepare(
+      [
+        'UPDATE tags_catalog',
+        'SET usage_count = CASE WHEN usage_count > 0 THEN usage_count - 1 ELSE 0 END',
+        'WHERE name = ?',
+      ].join(' '),
+    ).run(tag);
   }
 }
 
@@ -290,7 +344,7 @@ export function createChat(input: CreateChatInput) {
   const chatId = nanoid();
   const title = normalizeTitle(input.title, input.firstMessage, config.titleMaxChars);
   const firstMessageContent = normalizeFirstMessageContent(input.firstMessage);
-  const tags = input.tags ?? [];
+  const tags = normalizeTags(input.tags ?? []);
   const customState = input.customState ?? config.defaultCustomState;
 
   return withDb((db) => {
@@ -340,6 +394,7 @@ export function createChat(input: CreateChatInput) {
       );
     }
 
+    syncTagsCatalogUsage(db, [], tags);
     updateDenormalizedFields(db, chatId);
     return serializeChat(getChatRecord(db, chatId));
   });
@@ -489,8 +544,9 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
 
   if (input.tags !== undefined) {
     assertStringArray(input.tags, 'tags');
+    const normalizedTags = normalizeTags(input.tags);
     updates.push('tags = ?');
-    values.push(JSON.stringify(input.tags));
+    values.push(JSON.stringify(normalizedTags));
   }
 
   if (input.customState !== undefined) {
@@ -531,8 +587,12 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
   values.push(now);
 
   return withDb((db) => {
-    getChatRecord(db, chatId);
+    const current = getChatRecord(db, chatId);
+    const previousTags = parseJsonArray(current.tags, 'tags');
     db.prepare(`UPDATE chats SET ${updates.join(', ')} WHERE id = ?`).run(...values, chatId);
+    const updated = getChatRecord(db, chatId);
+    const nextTags = parseJsonArray(updated.tags, 'tags');
+    syncTagsCatalogUsage(db, previousTags, nextTags);
     updateDenormalizedFields(db, chatId);
     return serializeChat(getChatRecord(db, chatId));
   });
@@ -585,5 +645,31 @@ export function recalculateChatDenormalized(chatId: string) {
     getChatRecord(db, chatId);
     updateDenormalizedFields(db, chatId);
     return serializeChat(getChatRecord(db, chatId));
+  });
+}
+
+export function listTagSuggestions(query: string, limit = 10) {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const cappedLimit = Math.max(1, Math.min(50, Math.trunc(limit)));
+  const pattern = `${escapeLikePattern(normalizedQuery)}%`;
+
+  return withDb((db) => {
+    const rows = db
+      .prepare(
+        [
+          'SELECT name, usage_count',
+          'FROM tags_catalog',
+          "WHERE name LIKE ? ESCAPE '\\'",
+          'ORDER BY usage_count DESC, name ASC',
+          'LIMIT ?',
+        ].join(' '),
+      )
+      .all(pattern, cappedLimit) as TagSuggestion[];
+
+    return rows;
   });
 }

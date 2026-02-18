@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Facehash } from 'facehash';
 import { ArrowLeft, Camera, ChevronDown, FileText, GalleryVerticalEnd, Images, Mic, Plus, Send, Settings2, Square } from 'lucide-react';
 
@@ -21,13 +22,26 @@ type Agent = {
   avatarUrl?: string;
 };
 
+type Model = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 type ConfigResponse = {
   agents: Agent[];
+  models: Model[];
+  customStates: string[];
 };
 
 type Chat = {
   id: string;
   title: string;
+  tags: string[];
+  custom_state: string | null;
+  model_id: string;
+  pinned: boolean;
+  is_archived: boolean;
   agent_ids: string[];
   pending_requests_count: number;
 };
@@ -67,12 +81,20 @@ type RequestsResponse = {
 type MediaItem = {
   id: string;
   message_id: string | null;
+  filename: string;
+  created_at: string;
+  byte_size: number;
   content_type: string;
   kind: 'image' | 'audio' | 'file';
 };
 
 type MediaResponse = {
   data: MediaItem[];
+};
+
+type TagSuggestion = {
+  name: string;
+  usage_count: number;
 };
 
 type RequestDraftMap = Record<string, Record<string, unknown>>;
@@ -161,12 +183,30 @@ function fieldsFromRequestConfig(config: Record<string, unknown>) {
     .filter((field): field is { id: string; label: string; type: string } => field !== null);
 }
 
+function normalizeTagInput(value: string) {
+  return value.trim();
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.round((bytes / 1024) * 10) / 10} KB`;
+  }
+
+  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
+}
+
 export default function ChatPage() {
   const params = useParams<{ chatId: string }>();
   const chatId = params?.chatId;
   const router = useRouter();
 
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
+  const [customStates, setCustomStates] = useState<string[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -179,6 +219,14 @@ export default function ChatPage() {
   const [composerText, setComposerText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
+  const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'audio' | 'file'>('all');
+  const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [isUpdatingChatSettings, setIsUpdatingChatSettings] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
+  const [isLoadingTagSuggestions, setIsLoadingTagSuggestions] = useState(false);
   const [isRequestWidgetOpen, setIsRequestWidgetOpen] = useState(true);
   const [requestDrafts, setRequestDrafts] = useState<RequestDraftMap>({});
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
@@ -187,6 +235,10 @@ export default function ChatPage() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const photosInputRef = useRef<HTMLInputElement | null>(null);
+  const filesInputRef = useRef<HTMLInputElement | null>(null);
+  const tagSuggestionsTimerRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -240,6 +292,14 @@ export default function ChatPage() {
     }
     return map;
   }, [media]);
+
+  const filteredGalleryMedia = useMemo(() => {
+    if (mediaFilter === 'all') {
+      return media;
+    }
+
+    return media.filter((item) => item.kind === mediaFilter);
+  }, [media, mediaFilter]);
 
   const scrollToBottom = useCallback((smooth = false) => {
     const feed = feedRef.current;
@@ -321,6 +381,8 @@ export default function ChatPage() {
       const mediaPayload = (await mediaResponse.json()) as MediaResponse;
 
       setAgents(config.agents ?? []);
+      setModels(config.models ?? []);
+      setCustomStates(config.customStates ?? []);
       setChat(chatPayload);
       setTitleInput(chatPayload.title);
       setMessages(sortMessagesForFeed(messagesPayload.data ?? []));
@@ -416,6 +478,154 @@ export default function ChatPage() {
       setIsSending(false);
     }
   }, [chat, composerText, isSending]);
+
+  const patchChatSettings = useCallback(
+    async (payload: { modelId?: string; tags?: string[]; customState?: string; pinned?: boolean }) => {
+      if (!chat || isUpdatingChatSettings) {
+        return;
+      }
+
+      const previous = chat;
+      const optimistic: Chat = {
+        ...chat,
+        ...(payload.modelId !== undefined ? { model_id: payload.modelId } : {}),
+        ...(payload.tags !== undefined ? { tags: payload.tags } : {}),
+        ...(payload.customState !== undefined ? { custom_state: payload.customState } : {}),
+        ...(payload.pinned !== undefined ? { pinned: payload.pinned } : {}),
+      };
+      setChat(optimistic);
+      setIsUpdatingChatSettings(true);
+
+      try {
+        const response = await fetch(`/api/v1/chats/${chat.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update chat settings');
+        }
+
+        const updated = (await response.json()) as Chat;
+        setChat(updated);
+      } catch {
+        setChat(previous);
+        setError('Failed to update chat settings.');
+      } finally {
+        setIsUpdatingChatSettings(false);
+      }
+    },
+    [chat, isUpdatingChatSettings],
+  );
+
+  const archiveCurrentChat = useCallback(async () => {
+    if (!chat || isUpdatingChatSettings) {
+      return;
+    }
+
+    setIsUpdatingChatSettings(true);
+    try {
+      const response = await fetch(`/api/v1/chats/${chat.id}/archive`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to archive chat');
+      }
+
+      setChat((current) => (current ? { ...current, is_archived: true } : current));
+      goBack();
+    } catch {
+      setError('Failed to archive chat.');
+    } finally {
+      setIsUpdatingChatSettings(false);
+    }
+  }, [chat, goBack, isUpdatingChatSettings]);
+
+  const unarchiveCurrentChat = useCallback(async () => {
+    if (!chat || isUpdatingChatSettings) {
+      return;
+    }
+
+    setIsUpdatingChatSettings(true);
+    try {
+      const response = await fetch(`/api/v1/chats/${chat.id}/unarchive`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to unarchive chat');
+      }
+
+      setChat((current) => (current ? { ...current, is_archived: false } : current));
+    } catch {
+      setError('Failed to unarchive chat.');
+    } finally {
+      setIsUpdatingChatSettings(false);
+    }
+  }, [chat, isUpdatingChatSettings]);
+
+  const uploadComposerFiles = useCallback(
+    async (fileList: FileList | null, forcedKind?: 'image' | 'file') => {
+      if (!chat || !fileList || fileList.length === 0 || isUploadingAttachment) {
+        return;
+      }
+
+      setIsUploadingAttachment(true);
+      try {
+        for (const file of Array.from(fileList)) {
+          const formData = new FormData();
+          formData.append('file', file, file.name);
+          if (forcedKind) {
+            formData.append('kind', forcedKind);
+          }
+
+          const response = await fetch(`/api/v1/chats/${chat.id}/media`, {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to upload media');
+          }
+        }
+
+        await refreshMedia();
+        setIsComposerMenuOpen(false);
+      } catch {
+        setError('Failed to upload attachment.');
+      } finally {
+        setIsUploadingAttachment(false);
+      }
+    },
+    [chat, isUploadingAttachment, refreshMedia],
+  );
+
+  const addTagToChat = useCallback(
+    async (rawTag: string) => {
+      const normalized = normalizeTagInput(rawTag);
+      if (!chat || !normalized || chat.tags.includes(normalized)) {
+        return;
+      }
+
+      setTagInput('');
+      setTagSuggestions([]);
+      await patchChatSettings({ tags: [...chat.tags, normalized] });
+    },
+    [chat, patchChatSettings],
+  );
+
+  const removeTagFromChat = useCallback(
+    async (tag: string) => {
+      if (!chat) {
+        return;
+      }
+
+      await patchChatSettings({ tags: chat.tags.filter((item) => item !== tag) });
+    },
+    [chat, patchChatSettings],
+  );
 
   const resolvePendingRequest = useCallback(
     async (request: RequestItem) => {
@@ -577,6 +787,52 @@ export default function ChatPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!isChatSettingsOpen || !chat) {
+      setTagSuggestions([]);
+      return;
+    }
+
+    const query = normalizeTagInput(tagInput);
+    if (!query) {
+      setTagSuggestions([]);
+      return;
+    }
+
+    if (tagSuggestionsTimerRef.current) {
+      window.clearTimeout(tagSuggestionsTimerRef.current);
+      tagSuggestionsTimerRef.current = null;
+    }
+
+    tagSuggestionsTimerRef.current = window.setTimeout(() => {
+      setIsLoadingTagSuggestions(true);
+      fetch(`/api/v1/tags/suggestions?q=${encodeURIComponent(query)}&limit=8`, { cache: 'no-store' })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error('Failed to load tag suggestions');
+          }
+
+          const payload = (await response.json()) as { data?: TagSuggestion[] };
+          const knownTags = new Set(chat.tags);
+          const nextSuggestions = (payload.data ?? []).filter((item) => !knownTags.has(item.name));
+          setTagSuggestions(nextSuggestions);
+        })
+        .catch(() => {
+          setTagSuggestions([]);
+        })
+        .finally(() => {
+          setIsLoadingTagSuggestions(false);
+        });
+    }, 180);
+
+    return () => {
+      if (tagSuggestionsTimerRef.current) {
+        window.clearTimeout(tagSuggestionsTimerRef.current);
+        tagSuggestionsTimerRef.current = null;
+      }
+    };
+  }, [chat, isChatSettingsOpen, tagInput]);
 
   useEffect(() => {
     if (!chatId) {
@@ -762,6 +1018,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     return () => {
+      if (tagSuggestionsTimerRef.current) {
+        window.clearTimeout(tagSuggestionsTimerRef.current);
+      }
+
       if (recordingTimerRef.current) {
         window.clearInterval(recordingTimerRef.current);
       }
@@ -1054,6 +1314,41 @@ export default function ChatPage() {
           </button>
         </div>
         {isRecording && <p className="px-1 pt-1 text-[11px] text-red-200">Recording {recordingSeconds}s</p>}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(event) => {
+            void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
+              event.currentTarget.value = '';
+            });
+          }}
+        />
+        <input
+          ref={photosInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
+              event.currentTarget.value = '';
+            });
+          }}
+        />
+        <input
+          ref={filesInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            void uploadComposerFiles(event.currentTarget.files).finally(() => {
+              event.currentTarget.value = '';
+            });
+          }}
+        />
       </footer>
 
       {isComposerMenuOpen && (
@@ -1064,21 +1359,263 @@ export default function ChatPage() {
           >
             <p className="pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Composer menu</p>
             <div className="grid grid-cols-1 gap-2">
-              <button type="button" className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground">
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground disabled:opacity-60"
+                disabled={isUploadingAttachment}
+                onClick={() => cameraInputRef.current?.click()}
+              >
                 <Camera size={15} /> Attach: Camera
               </button>
-              <button type="button" className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground">
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground disabled:opacity-60"
+                disabled={isUploadingAttachment}
+                onClick={() => photosInputRef.current?.click()}
+              >
                 <Images size={15} /> Attach: Photos
               </button>
-              <button type="button" className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground">
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground disabled:opacity-60"
+                disabled={isUploadingAttachment}
+                onClick={() => filesInputRef.current?.click()}
+              >
                 <FileText size={15} /> Attach: Files
               </button>
-              <button type="button" className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground">
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground"
+                onClick={() => {
+                  setIsComposerMenuOpen(false);
+                  setIsMediaGalleryOpen(true);
+                }}
+              >
                 <GalleryVerticalEnd size={15} /> Media gallery
               </button>
-              <button type="button" className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground">
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-foreground"
+                onClick={() => {
+                  setIsComposerMenuOpen(false);
+                  setTagInput('');
+                  setTagSuggestions([]);
+                  setIsChatSettingsOpen(true);
+                }}
+              >
                 <Settings2 size={15} /> Chat settings
               </button>
+            </div>
+            {isUploadingAttachment && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment...</p>}
+          </div>
+        </div>
+      )}
+
+      {isMediaGalleryOpen && (
+        <div className="fixed inset-0 z-50 bg-black/45" onClick={() => setIsMediaGalleryOpen(false)}>
+          <div
+            className="liquid-glass absolute inset-x-0 bottom-0 max-h-[78dvh] overflow-hidden rounded-t-3xl border-x border-t border-border px-4 pb-4 pt-3"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Media gallery</p>
+              <button type="button" className="text-xs text-muted-foreground" onClick={() => setIsMediaGalleryOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'image', label: 'Images' },
+                { id: 'audio', label: 'Audio' },
+                { id: 'file', label: 'Files' },
+              ].map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  className={`rounded-full border px-3 py-1 text-xs ${mediaFilter === filter.id ? 'border-primary/60 bg-primary/15 text-foreground' : 'border-border bg-card text-muted-foreground'}`}
+                  onClick={() => setMediaFilter(filter.id as 'all' | 'image' | 'audio' | 'file')}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+            <div className="max-h-[58dvh] overflow-y-auto">
+              {filteredGalleryMedia.length === 0 && (
+                <p className="py-4 text-sm text-muted-foreground">No media for this filter.</p>
+              )}
+
+              {filteredGalleryMedia.some((item) => item.kind === 'image') && (
+                <div className="mb-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    {filteredGalleryMedia
+                      .filter((item) => item.kind === 'image')
+                      .map((item) => (
+                        <a key={item.id} href={`/api/v1/files/${item.id}`} target="_blank" rel="noreferrer">
+                          <Image
+                            src={`/api/v1/files/${item.id}`}
+                            alt={item.filename || 'Image attachment'}
+                            width={240}
+                            height={240}
+                            unoptimized
+                            className="h-24 w-full rounded-lg border border-border/70 object-cover"
+                          />
+                        </a>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {filteredGalleryMedia
+                  .filter((item) => item.kind === 'audio' || item.kind === 'file')
+                  .map((item) => (
+                    <div key={item.id} className="rounded-xl border border-border bg-card p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-foreground">{item.filename || 'Attachment'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.kind === 'audio' ? 'Audio' : 'File'} • {formatBytes(item.byte_size || 0)}
+                          </p>
+                        </div>
+                        <a href={`/api/v1/files/${item.id}`} download className="text-xs text-primary">
+                          Download
+                        </a>
+                      </div>
+                      {item.kind === 'audio' && (
+                        <audio controls className="mt-2 h-8 w-full" src={`/api/v1/files/${item.id}`} />
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isChatSettingsOpen && chat && (
+        <div className="fixed inset-0 z-50 bg-black/45" onClick={() => setIsChatSettingsOpen(false)}>
+          <div
+            className="liquid-glass absolute inset-x-0 bottom-0 max-h-[82dvh] overflow-y-auto rounded-t-3xl border-x border-t border-border px-4 pb-4 pt-3"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chat settings</p>
+              <button type="button" className="text-xs text-muted-foreground" onClick={() => setIsChatSettingsOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Model</span>
+                <select
+                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70 disabled:opacity-60"
+                  value={chat.model_id}
+                  disabled={isUpdatingChatSettings}
+                  onChange={(event) => {
+                    void patchChatSettings({ modelId: event.target.value });
+                  }}
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Tags</p>
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {chat.tags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className="rounded-full border border-border bg-card px-2 py-1 text-xs text-foreground disabled:opacity-60"
+                      disabled={isUpdatingChatSettings}
+                      onClick={() => void removeTagFromChat(tag)}
+                    >
+                      {tag} ×
+                    </button>
+                  ))}
+                  {chat.tags.length === 0 && <p className="text-xs text-muted-foreground">No tags yet.</p>}
+                </div>
+                <input
+                  value={tagInput}
+                  onChange={(event) => setTagInput(event.target.value)}
+                  placeholder="Add tag and press Enter"
+                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ',') {
+                      event.preventDefault();
+                      void addTagToChat(tagInput);
+                    }
+                  }}
+                />
+                {isLoadingTagSuggestions && <p className="pt-1 text-xs text-muted-foreground">Loading suggestions...</p>}
+                {tagSuggestions.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {tagSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.name}
+                        type="button"
+                        className="rounded-full border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => void addTagToChat(suggestion.name)}
+                      >
+                        {suggestion.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {customStates.length > 0 && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">State</span>
+                  <select
+                    className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70 disabled:opacity-60"
+                    value={chat.custom_state ?? customStates[0] ?? ''}
+                    disabled={isUpdatingChatSettings}
+                    onChange={(event) => {
+                      void patchChatSettings({ customState: event.target.value });
+                    }}
+                  >
+                    {customStates.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-60"
+                  disabled={isUpdatingChatSettings}
+                  onClick={() => {
+                    void patchChatSettings({ pinned: !chat.pinned });
+                  }}
+                >
+                  {chat.pinned ? 'Unpin' : 'Pin'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-60"
+                  disabled={isUpdatingChatSettings}
+                  onClick={() => {
+                    if (chat.is_archived) {
+                      void unarchiveCurrentChat();
+                    } else {
+                      void archiveCurrentChat();
+                    }
+                  }}
+                >
+                  {chat.is_archived ? 'Unarchive' : 'Archive'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
