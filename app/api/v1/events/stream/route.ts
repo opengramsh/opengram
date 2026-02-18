@@ -1,13 +1,15 @@
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { toErrorResponse, unauthorizedError, validationError } from '@/src/api/http';
 import {
-  getLatestEventCursor,
-  listEventsAfterCursor,
+  getEventRowidById,
+  getLatestEventRowid,
+  listEventsAfterRowid,
   subscribeToEvents,
   type EventEnvelope,
 } from '@/src/services/events-service';
 
 const encoder = new TextEncoder();
+const MAX_QUEUED_LIVE_EVENTS_DURING_REPLAY = 512;
 
 function toSseChunk(event: EventEnvelope) {
   const data = JSON.stringify(event);
@@ -58,17 +60,21 @@ export async function GET(request: Request) {
       throw validationError('limit must be an integer between 1 and 200.', { field: 'limit' });
     }
 
-    if (cursor !== null) {
-      listEventsAfterCursor(cursor, 1);
+    const cursorRowid = cursor === null ? null : getEventRowidById(cursor);
+    if (cursor !== null && cursorRowid === null) {
+      throw validationError('cursor event id was not found.', { field: 'cursor' });
     }
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         let closed = false;
-        let replayCursor = cursor;
+        let replayCursorRowid = cursorRowid;
         const queuedLiveEvents: EventEnvelope[] = [];
         let replaying = true;
-        const replayedPersistedIds = new Set<string>();
+        let replayQueueOverflowed = false;
+        const replayHighWaterRowid = getLatestEventRowid();
+        let keepAlive: ReturnType<typeof setInterval> | null = null;
+        let unsubscribe: (() => void) | null = null;
 
         const send = (value: string) => {
           if (closed) {
@@ -77,8 +83,25 @@ export async function GET(request: Request) {
           controller.enqueue(encoder.encode(value));
         };
 
-        const unsubscribe = subscribeToEvents(ephemeral, (event) => {
+        const close = () => {
+          if (keepAlive) {
+            clearInterval(keepAlive);
+          }
+          if (unsubscribe) {
+            unsubscribe();
+          }
+          if (!closed) {
+            controller.close();
+            closed = true;
+          }
+        };
+
+        unsubscribe = subscribeToEvents(ephemeral, (event) => {
           if (replaying) {
+            if (queuedLiveEvents.length >= MAX_QUEUED_LIVE_EVENTS_DURING_REPLAY) {
+              replayQueueOverflowed = true;
+              return;
+            }
             queuedLiveEvents.push(event);
             return;
           }
@@ -88,54 +111,46 @@ export async function GET(request: Request) {
 
         send(': stream opened\n\n');
 
-        if (replayCursor === null) {
-          replayCursor = getLatestEventCursor();
+        if (replayCursorRowid === null) {
+          replayCursorRowid = replayHighWaterRowid;
         }
 
-        let replayBatchCursor = replayCursor;
+        let replayBatchCursorRowid = replayCursorRowid;
         while (true) {
-          const replayBatch = listEventsAfterCursor(replayBatchCursor, limit);
+          const replayBatch = listEventsAfterRowid(replayBatchCursorRowid, limit, replayHighWaterRowid);
           for (const event of replayBatch) {
             send(toSseChunk(event));
-            replayedPersistedIds.add(event.id);
           }
 
           if (replayBatch.length < limit) {
             break;
           }
 
-          replayBatchCursor = replayBatch.at(-1)?.id ?? replayBatchCursor;
+          replayBatchCursorRowid = replayBatch.at(-1)?.rowid ?? replayBatchCursorRowid;
         }
 
         replaying = false;
+        if (replayQueueOverflowed) {
+          send(': replay queue overflowed; reconnect required\n\n');
+          close();
+          return;
+        }
+
         for (const event of queuedLiveEvents) {
-          if (replayedPersistedIds.has(event.id)) {
+          const rowid = getEventRowidById(event.id);
+          if (rowid !== null && rowid <= replayHighWaterRowid) {
             continue;
           }
           send(toSseChunk(event));
         }
 
-        const keepAlive = setInterval(() => {
+        keepAlive = setInterval(() => {
           try {
             send(': keepalive\n\n');
           } catch {
-            clearInterval(keepAlive);
-            unsubscribe();
-            if (!closed) {
-              controller.close();
-              closed = true;
-            }
+            close();
           }
         }, 15_000);
-
-        const close = () => {
-          clearInterval(keepAlive);
-          unsubscribe();
-          if (!closed) {
-            controller.close();
-            closed = true;
-          }
-        };
 
         request.signal.addEventListener('abort', close);
       },

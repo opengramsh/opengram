@@ -19,6 +19,10 @@ export type EventEnvelope = {
   payload: Record<string, unknown>;
 };
 
+export type PersistedEventEnvelope = EventEnvelope & {
+  rowid: number;
+};
+
 type EventSubscriber = {
   includeEphemeral: boolean;
   onEvent: (event: EventEnvelope) => void;
@@ -42,7 +46,7 @@ function withDb<T>(callback: (db: Database.Database) => T): T {
   }
 }
 
-function serializeEvent(record: EventRecord): EventEnvelope {
+function serializeEvent(record: EventRecord): PersistedEventEnvelope {
   let payload: Record<string, unknown> = {};
 
   try {
@@ -55,6 +59,7 @@ function serializeEvent(record: EventRecord): EventEnvelope {
   }
 
   return {
+    rowid: record.rowid,
     id: record.id,
     type: record.type,
     timestamp: new Date(record.created_at).toISOString(),
@@ -63,11 +68,22 @@ function serializeEvent(record: EventRecord): EventEnvelope {
 }
 
 function fanOutEvent(event: EventEnvelope, ephemeral: boolean) {
-  for (const subscriber of subscribers.values()) {
+  const failedSubscriberIds: number[] = [];
+
+  for (const [subscriberId, subscriber] of subscribers.entries()) {
     if (ephemeral && !subscriber.includeEphemeral) {
       continue;
     }
-    subscriber.onEvent(event);
+
+    try {
+      subscriber.onEvent(event);
+    } catch {
+      failedSubscriberIds.push(subscriberId);
+    }
+  }
+
+  for (const subscriberId of failedSubscriberIds) {
+    subscribers.delete(subscriberId);
   }
 }
 
@@ -125,7 +141,15 @@ export function listEventsAfterCursor(cursor: string | null, limit: number) {
       const rows = db
         .prepare('SELECT rowid, id, type, payload, created_at FROM events ORDER BY rowid ASC LIMIT ?')
         .all(limit) as EventRecord[];
-      return rows.map(serializeEvent);
+      return rows.map((row) => {
+        const event = serializeEvent(row);
+        return {
+          id: event.id,
+          type: event.type,
+          timestamp: event.timestamp,
+          payload: event.payload,
+        };
+      });
     }
 
     const cursorRow = db
@@ -147,7 +171,57 @@ export function listEventsAfterCursor(cursor: string | null, limit: number) {
       )
       .all(cursorRow.rowid, limit) as EventRecord[];
 
+    return rows.map((row) => {
+      const event = serializeEvent(row);
+      return {
+        id: event.id,
+        type: event.type,
+        timestamp: event.timestamp,
+        payload: event.payload,
+      };
+    });
+  });
+}
+
+export function getEventRowidById(eventId: string) {
+  return withDb((db) => {
+    const row = db
+      .prepare('SELECT rowid FROM events WHERE id = ?')
+      .get(eventId) as { rowid: number } | undefined;
+
+    return row?.rowid ?? null;
+  });
+}
+
+export function listEventsAfterRowid(cursorRowid: number, limit: number, maxRowid?: number) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    throw validationError('limit must be an integer between 1 and 200.', { field: 'limit' });
+  }
+
+  const upperBoundRowid = maxRowid ?? Number.MAX_SAFE_INTEGER;
+
+  return withDb((db) => {
+    const rows = db
+      .prepare(
+        [
+          'SELECT rowid, id, type, payload, created_at FROM events',
+          'WHERE rowid > ? AND rowid <= ?',
+          'ORDER BY rowid ASC',
+          'LIMIT ?',
+        ].join(' '),
+      )
+      .all(cursorRowid, upperBoundRowid, limit) as EventRecord[];
+
     return rows.map(serializeEvent);
+  });
+}
+
+export function getLatestEventRowid() {
+  return withDb((db) => {
+    const row = db
+      .prepare('SELECT rowid FROM events ORDER BY rowid DESC LIMIT 1')
+      .get() as { rowid: number } | undefined;
+    return row?.rowid ?? 0;
   });
 }
 
