@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -103,5 +103,35 @@ describe('media API', () => {
       mediaId: uploaded.id,
       kind: 'audio',
     });
+  });
+
+  it('does not leave orphaned upload files when messageId is invalid', async () => {
+    const chatResponse = await chatsPost(
+      createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+        title: 'media-chat',
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+      }),
+    );
+    const chat = await chatResponse.json();
+
+    const uploadResponse = await mediaPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/media`, 'POST', {
+        fileName: 'voice.webm',
+        contentType: 'audio/webm',
+        base64Data: Buffer.from('fake-audio').toString('base64'),
+        messageId: 'missing-message-id',
+      }),
+      chatContext(chat.id),
+    );
+
+    expect(uploadResponse.status).toBe(400);
+
+    const uploadsDir = join(tempDir, 'uploads', chat.id);
+    if (existsSync(uploadsDir)) {
+      expect(readdirSync(uploadsDir)).toHaveLength(0);
+    } else {
+      expect(existsSync(uploadsDir)).toBe(false);
+    }
   });
 });

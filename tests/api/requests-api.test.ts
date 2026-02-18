@@ -140,4 +140,22 @@ describe('requests API', () => {
       type: 'text_input',
     });
   });
+
+  it('returns not found when listing requests for an unknown chat', async () => {
+    const response = await chatRequestsGet(
+      createJsonRequest('http://localhost/api/v1/chats/missing-chat/requests?status=pending', 'GET'),
+      chatContext('missing-chat'),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Chat not found.',
+        details: {
+          chatId: 'missing-chat',
+        },
+      },
+    });
+  });
 });

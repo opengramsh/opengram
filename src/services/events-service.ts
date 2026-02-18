@@ -95,3 +95,12 @@ export function listEventsAfterCursor(cursor: string | null, limit: number) {
     return rows.map(serializeEvent);
   });
 }
+
+export function getLatestEventCursor() {
+  return withDb((db) => {
+    const row = db
+      .prepare('SELECT id FROM events ORDER BY created_at DESC, id DESC LIMIT 1')
+      .get() as { id: string } | undefined;
+    return row?.id ?? null;
+  });
+}

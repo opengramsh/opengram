@@ -86,6 +86,13 @@ function updateChatPendingCount(db: Database.Database, chatId: string) {
   );
 }
 
+function ensureChatExists(db: Database.Database, chatId: string) {
+  const chat = db.prepare('SELECT id FROM chats WHERE id = ?').get(chatId) as { id: string } | undefined;
+  if (!chat) {
+    throw notFoundError('Chat not found.', { chatId });
+  }
+}
+
 function normalizeResolutionPayload(type: RequestType, payload: unknown, config: Record<string, unknown>) {
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     throw validationError('resolution payload must be an object.');
@@ -134,6 +141,8 @@ function normalizeResolutionPayload(type: RequestType, payload: unknown, config:
 
 export function listChatRequests(chatId: string, status: RequestStatus | 'all' = 'pending') {
   return withDb((db) => {
+    ensureChatExists(db, chatId);
+
     const rows = (
       status === 'all'
         ? db

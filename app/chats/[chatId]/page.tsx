@@ -161,17 +161,6 @@ function fieldsFromRequestConfig(config: Record<string, unknown>) {
     .filter((field): field is { id: string; label: string; type: string } => field !== null);
 }
 
-function arrayBufferToBase64(value: ArrayBuffer) {
-  const bytes = new Uint8Array(value);
-  let binary = '';
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return window.btoa(binary);
-}
-
 export default function ChatPage() {
   const params = useParams<{ chatId: string }>();
   const chatId = params?.chatId;
@@ -498,16 +487,14 @@ export default function ChatPage() {
 
       const createdMessage = (await messageResponse.json()) as Message;
 
+      const formData = new FormData();
+      formData.append('file', blob, `voice-${Date.now()}.webm`);
+      formData.append('kind', 'audio');
+      formData.append('messageId', createdMessage.id);
+
       const uploadResponse = await fetch(`/api/v1/chats/${chat.id}/media`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          fileName: `voice-${Date.now()}.webm`,
-          contentType: blob.type || 'audio/webm',
-          base64Data: arrayBufferToBase64(await blob.arrayBuffer()),
-          kind: 'audio',
-          messageId: createdMessage.id,
-        }),
+        body: formData,
       });
 
       if (!uploadResponse.ok) {

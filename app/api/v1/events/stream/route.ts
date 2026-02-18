@@ -1,5 +1,5 @@
 import { toErrorResponse, validationError } from '@/src/api/http';
-import { listEventsAfterCursor } from '@/src/services/events-service';
+import { getLatestEventCursor, listEventsAfterCursor } from '@/src/services/events-service';
 
 const encoder = new TextEncoder();
 
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         let closed = false;
-        let currentCursor = cursor;
+        let currentCursor = cursor ?? getLatestEventCursor();
 
         const send = (value: string) => {
           if (closed) {

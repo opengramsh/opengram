@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
@@ -152,32 +152,49 @@ export function createMedia(input: CreateMediaInput) {
   const extension = extname(safeName) || '.bin';
   const relativePath = join('uploads', input.chatId, `${mediaId}${extension}`);
   const absolutePath = join(resolveDataRoot(), relativePath);
-  mkdirSync(dirname(absolutePath), { recursive: true });
-  writeFileSync(absolutePath, input.fileBytes);
-
   const now = Date.now();
 
   return withDb((db) => {
     ensureChatAndMessage(db, input.chatId, input.messageId);
+    mkdirSync(dirname(absolutePath), { recursive: true });
 
-    db.prepare(
-      [
-        'INSERT INTO media (',
-        'id, chat_id, message_id, storage_path, thumbnail_path, filename, content_type, byte_size, kind, created_at',
-        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ].join(' '),
-    ).run(
-      mediaId,
-      input.chatId,
-      input.messageId ?? null,
-      relativePath,
-      null,
-      safeName,
-      input.contentType,
-      input.fileBytes.length,
-      kind,
-      now,
-    );
+    let fileWritten = false;
+    try {
+      writeFileSync(absolutePath, input.fileBytes);
+      fileWritten = true;
+    } catch (error) {
+      throw error;
+    }
+
+    try {
+      db.prepare(
+        [
+          'INSERT INTO media (',
+          'id, chat_id, message_id, storage_path, thumbnail_path, filename, content_type, byte_size, kind, created_at',
+          ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ].join(' '),
+      ).run(
+        mediaId,
+        input.chatId,
+        input.messageId ?? null,
+        relativePath,
+        null,
+        safeName,
+        input.contentType,
+        input.fileBytes.length,
+        kind,
+        now,
+      );
+    } catch (error) {
+      if (fileWritten) {
+        try {
+          unlinkSync(absolutePath);
+        } catch {
+          // Best-effort cleanup for failed DB writes after file creation.
+        }
+      }
+      throw error;
+    }
 
     const record = db.prepare('SELECT * FROM media WHERE id = ?').get(mediaId) as MediaRecord;
 
