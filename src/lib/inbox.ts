@@ -16,6 +16,11 @@ export type InboxSortableChat = {
   last_message_at: string | null;
 };
 
+export type InboxSwipeEndState = {
+  nextOffset: number;
+  shouldArchive: boolean;
+};
+
 function parseTimestamp(value: TimestampInput): Date | null {
   if (value === null || value === undefined) {
     return null;
@@ -98,4 +103,36 @@ export function sortInboxChats<T extends InboxSortableChat>(chats: T[]): T[] {
 
     return right.id.localeCompare(left.id);
   });
+}
+
+export function shouldStartInboxSwipeDrag(deltaX: number, deltaY: number, baseOffsetX: number): boolean {
+  const isHorizontal = Math.abs(deltaX) > Math.abs(deltaY) + 6;
+  if (!isHorizontal) {
+    return false;
+  }
+
+  if (deltaX > 0 && baseOffsetX >= 0) {
+    return false;
+  }
+
+  return true;
+}
+
+export function resolveInboxSwipeEnd(offsetX: number, isDragging: boolean): InboxSwipeEndState {
+  if (!isDragging) {
+    return {
+      nextOffset: offsetX < 0 ? 0 : offsetX,
+      shouldArchive: false,
+    };
+  }
+
+  if (offsetX <= -112) {
+    return { nextOffset: 0, shouldArchive: true };
+  }
+
+  if (offsetX <= -46) {
+    return { nextOffset: -86, shouldArchive: false };
+  }
+
+  return { nextOffset: 0, shouldArchive: false };
 }

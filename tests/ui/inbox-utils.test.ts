@@ -4,6 +4,8 @@ import {
   buildChatsQuery,
   formatInboxTimestamp,
   getPendingRequestsTotal,
+  resolveInboxSwipeEnd,
+  shouldStartInboxSwipeDrag,
   sortInboxChats,
 } from '@/src/lib/inbox';
 
@@ -70,5 +72,27 @@ describe('inbox utils', () => {
     ]);
 
     expect(sorted.map((chat) => chat.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('allows right-swipe drag when row is already revealed', () => {
+    expect(shouldStartInboxSwipeDrag(24, 1, -86)).toBe(true);
+  });
+
+  it('prevents right-swipe drag from closed row', () => {
+    expect(shouldStartInboxSwipeDrag(24, 1, 0)).toBe(false);
+  });
+
+  it('closes revealed row on pointer end without drag', () => {
+    expect(resolveInboxSwipeEnd(-86, false)).toEqual({
+      nextOffset: 0,
+      shouldArchive: false,
+    });
+  });
+
+  it('auto-archives on full swipe threshold', () => {
+    expect(resolveInboxSwipeEnd(-112, true)).toEqual({
+      nextOffset: 0,
+      shouldArchive: true,
+    });
   });
 });

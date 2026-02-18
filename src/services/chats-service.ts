@@ -99,7 +99,7 @@ function normalizeFirstMessageContent(firstMessage: string | undefined) {
   }
 
   const normalized = firstMessage.trim();
-  return normalized ? firstMessage : null;
+  return normalized || null;
 }
 
 function parseJsonArray(value: string, fieldName: string): string[] {

@@ -7,6 +7,8 @@ import { Menu, Pin, Plus } from 'lucide-react';
 import {
   buildChatsQuery,
   formatInboxTimestamp,
+  resolveInboxSwipeEnd,
+  shouldStartInboxSwipeDrag,
   sortInboxChats,
 } from '@/src/lib/inbox';
 
@@ -651,13 +653,8 @@ function ChatRow({ chat, agentName, onArchive, onLongPress }: ChatRowProps) {
 
       const deltaX = event.clientX - dragStartXRef.current;
       const deltaY = event.clientY - dragStartYRef.current;
-      const isHorizontal = Math.abs(deltaX) > Math.abs(deltaY) + 6;
       if (!isDragging) {
-        if (!isHorizontal) {
-          return;
-        }
-
-        if (deltaX > 0) {
+        if (!shouldStartInboxSwipeDrag(deltaX, deltaY, dragBaseOffsetRef.current)) {
           clearLongPressTimer();
           return;
         }
@@ -680,23 +677,14 @@ function ChatRow({ chat, agentName, onArchive, onLongPress }: ChatRowProps) {
 
       pointerIdRef.current = null;
       clearLongPressTimer();
-      if (!isDragging) {
-        return;
+      const swipeEnd = resolveInboxSwipeEnd(offsetX, isDragging);
+      setOffsetX(swipeEnd.nextOffset);
+      if (isDragging) {
+        setIsDragging(false);
       }
-
-      setIsDragging(false);
-      if (offsetX <= -112) {
-        setOffsetX(0);
+      if (swipeEnd.shouldArchive) {
         onArchive();
-        return;
       }
-
-      if (offsetX <= -46) {
-        setOffsetX(-86);
-        return;
-      }
-
-      setOffsetX(0);
     },
     [clearLongPressTimer, isDragging, offsetX, onArchive],
   );

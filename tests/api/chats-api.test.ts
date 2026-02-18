@@ -137,6 +137,21 @@ describe('chats API', () => {
     expect(messagesBody.data[0].content_final).toBe(firstMessage);
   });
 
+  it('trims first message content before persisting initial message', async () => {
+    const created = await createChat({ firstMessage: '   hello from api client   ' });
+    const chatId = created.json.id as string;
+
+    const messagesResponse = await messagesGet(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages?limit=10`, 'GET'),
+      routeContext(chatId),
+    );
+    const messagesBody = await messagesResponse.json();
+
+    expect(messagesResponse.status).toBe(200);
+    expect(messagesBody.data).toHaveLength(1);
+    expect(messagesBody.data[0].content_final).toBe('hello from api client');
+  });
+
   it('returns validation error envelope for invalid create payload', async () => {
     const response = await chatsPost(
       createJsonRequest('http://localhost/api/v1/chats', 'POST', {
