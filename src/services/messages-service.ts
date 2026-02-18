@@ -119,13 +119,19 @@ function getChatMessageMetadata(db: Database.Database, chatId: string): ChatMess
   return row;
 }
 
-function requireStreamingState(message: MessageRecord) {
-  if (message.stream_state !== 'streaming') {
-    throw conflictError('Message is not in streaming state.', {
-      messageId: message.id,
-      streamState: message.stream_state,
-    });
+function throwStreamingStateConflict(db: Database.Database, messageId: string): never {
+  const row = db
+    .prepare('SELECT id, stream_state FROM messages WHERE id = ?')
+    .get(messageId) as Pick<MessageRecord, 'id' | 'stream_state'> | undefined;
+
+  if (!row) {
+    throw notFoundError('Message not found.', { messageId });
   }
+
+  throw conflictError('Message is not in streaming state.', {
+    messageId: row.id,
+    streamState: row.stream_state,
+  });
 }
 
 function requireRole(value: unknown): MessageRole {
@@ -380,12 +386,17 @@ export function appendStreamingChunk(messageId: string, deltaText: unknown) {
     const now = Date.now();
     const tx = db.transaction(() => {
       const message = getMessageMetadata(db, messageId);
-      requireStreamingState(message);
+      const updatedChunk = db.prepare(
+        [
+          'UPDATE messages',
+          "SET content_partial = COALESCE(content_partial, '') || ?, updated_at = ?",
+          'WHERE id = ? AND stream_state = ?',
+        ].join(' '),
+      ).run(normalizedDeltaText, now, messageId, 'streaming');
 
-      const nextPartial = `${message.content_partial ?? ''}${normalizedDeltaText}`;
-      db.prepare(
-        'UPDATE messages SET content_partial = ?, updated_at = ? WHERE id = ?',
-      ).run(nextPartial, now, messageId);
+      if (updatedChunk.changes === 0) {
+        throwStreamingStateConflict(db, messageId);
+      }
 
       db.prepare(
         'UPDATE chats SET updated_at = ? WHERE id = ?',
@@ -419,24 +430,36 @@ function completeOrCancelStreamingMessage(
   targetState: Extract<StreamState, 'complete' | 'cancelled'>,
   input?: CompleteStreamingInput,
 ) {
+  const normalizedFinalText = requireOptionalFinalText(input?.finalText);
+
   return withDb((db) => {
     const now = Date.now();
     const tx = db.transaction(() => {
-      const message = getMessageMetadata(db, messageId);
-      requireStreamingState(message);
-      const normalizedFinalText = requireOptionalFinalText(input?.finalText);
-      const resolvedFinalText = normalizedFinalText ?? message.content_partial ?? '';
-
       if (targetState === 'complete') {
-        db.prepare(
-          [
-            'UPDATE messages',
-            'SET content_final = ?, content_partial = NULL, stream_state = ?, updated_at = ?',
-            'WHERE id = ?',
-          ].join(' '),
-        ).run(resolvedFinalText, 'complete', now, messageId);
+        const result = normalizedFinalText === undefined
+          ? db.prepare(
+            [
+              'UPDATE messages',
+              "SET content_final = COALESCE(content_partial, ''), content_partial = NULL,",
+              'stream_state = ?, updated_at = ?',
+              'WHERE id = ? AND stream_state = ?',
+            ].join(' '),
+          ).run('complete', now, messageId, 'streaming')
+          : db.prepare(
+            [
+              'UPDATE messages',
+              'SET content_final = ?, content_partial = NULL, stream_state = ?, updated_at = ?',
+              'WHERE id = ? AND stream_state = ?',
+            ].join(' '),
+          ).run(normalizedFinalText, 'complete', now, messageId, 'streaming');
 
-        const preview = resolvedFinalText.trim() ? resolvedFinalText.trim().slice(0, 180) : null;
+        if (result.changes === 0) {
+          throwStreamingStateConflict(db, messageId);
+        }
+
+        const message = getMessageMetadata(db, messageId);
+        const preview = message.content_final?.trim() ? message.content_final.trim().slice(0, 180) : null;
+
         db.prepare(
           [
             'UPDATE chats',
@@ -448,9 +471,20 @@ function completeOrCancelStreamingMessage(
           ].join(' '),
         ).run(preview, message.role, now, now, message.chat_id);
       } else {
-        db.prepare(
-          'UPDATE messages SET stream_state = ?, updated_at = ? WHERE id = ?',
-        ).run('cancelled', now, messageId);
+        const result = db.prepare(
+          [
+            'UPDATE messages',
+            'SET stream_state = ?, updated_at = ?',
+            'WHERE id = ? AND stream_state = ?',
+          ].join(' '),
+        ).run('cancelled', now, messageId, 'streaming');
+
+        if (result.changes === 0) {
+          throwStreamingStateConflict(db, messageId);
+        }
+
+        const message = getMessageMetadata(db, messageId);
+        db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(now, message.chat_id);
       }
 
       return getMessageMetadata(db, messageId);
@@ -493,7 +527,9 @@ function autoCancelStreamingMessageIfStale(
     return null;
   }
 
-  return getMessageMetadata(db, messageId);
+  const message = getMessageMetadata(db, messageId);
+  db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(now, message.chat_id);
+  return message;
 }
 
 export function sweepStaleStreamingMessages(nowMs = Date.now()): SweepResult {

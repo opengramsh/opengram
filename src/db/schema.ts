@@ -85,6 +85,7 @@ export const messages = sqliteTable(
       sql`${table.streamState} IN ('none', 'streaming', 'complete', 'cancelled')`,
     ),
     index('messages_chat_created_idx').on(table.chatId, table.createdAt),
+    index('messages_stream_updated_idx').on(table.streamState, table.updatedAt),
   ],
 );
 

@@ -11,6 +11,10 @@ const ftsTriggerUpgradeSql = readFileSync(
   join(repoRoot, "drizzle", "0001_messages_fts_trigger_upgrade.sql"),
   "utf8",
 );
+const streamSweepIndexSql = readFileSync(
+  join(repoRoot, "drizzle", "0002_messages_stream_sweep_index.sql"),
+  "utf8",
+);
 
 function createDatabase() {
   const tempDir = mkdtempSync(join(tmpdir(), "opengram-db-"));
@@ -18,6 +22,7 @@ function createDatabase() {
   const db = new Database(dbPath);
   db.exec(initialMigrationSql);
   db.exec(ftsTriggerUpgradeSql);
+  db.exec(streamSweepIndexSql);
   return db;
 }
 
@@ -57,6 +62,7 @@ describe("migration", () => {
     const requiredIndexes = [
       "chats_inbox_idx",
       "messages_chat_created_idx",
+      "messages_stream_updated_idx",
       "media_chat_created_idx",
       "requests_chat_status_idx",
       "tags_catalog_name_idx",

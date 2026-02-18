@@ -432,6 +432,10 @@ describe('messages API', () => {
       messageRouteContext(messageId),
     );
 
+    const beforeChat = db
+      .prepare('SELECT updated_at, last_message_at FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number; last_message_at: number | null };
+
     const response = await messageCancelPost(
       createJsonRequest(`http://localhost/api/v1/messages/${messageId}/cancel`, 'POST'),
       messageRouteContext(messageId),
@@ -445,6 +449,12 @@ describe('messages API', () => {
       content_final: null,
     });
 
+    const afterChat = db
+      .prepare('SELECT updated_at, last_message_at FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number; last_message_at: number | null };
+    expect(afterChat.updated_at).toBeGreaterThanOrEqual(beforeChat.updated_at);
+    expect(afterChat.last_message_at).toBe(beforeChat.last_message_at);
+
     const event = db
       .prepare('SELECT type, payload FROM events WHERE type = ? ORDER BY rowid DESC LIMIT 1')
       .get('message.streaming.complete') as { type: string; payload: string };
@@ -454,6 +464,67 @@ describe('messages API', () => {
       messageId,
       streamState: 'cancelled',
       finalText: null,
+    });
+  });
+
+  it('rejects chunk and finalize writes after stream state has transitioned', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+    const started = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+        role: 'agent',
+        senderId: 'agent-default',
+        streaming: true,
+      }),
+      routeContext(chatId),
+    );
+    const startedMessage = await started.json();
+    const messageId = startedMessage.id as string;
+
+    await messageChunksPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+        deltaText: 'locked',
+      }),
+      messageRouteContext(messageId),
+    );
+
+    const completeResponse = await messageCompletePost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/complete`, 'POST'),
+      messageRouteContext(messageId),
+    );
+    expect(completeResponse.status).toBe(200);
+
+    const lateChunk = await messageChunksPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+        deltaText: ' should-not-append',
+      }),
+      messageRouteContext(messageId),
+    );
+    expect(lateChunk.status).toBe(409);
+    await expect(lateChunk.json()).resolves.toEqual({
+      error: {
+        code: 'CONFLICT',
+        message: 'Message is not in streaming state.',
+        details: {
+          messageId,
+          streamState: 'complete',
+        },
+      },
+    });
+
+    const lateCancel = await messageCancelPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/cancel`, 'POST'),
+      messageRouteContext(messageId),
+    );
+    expect(lateCancel.status).toBe(409);
+
+    const message = db
+      .prepare('SELECT content_final, content_partial, stream_state FROM messages WHERE id = ?')
+      .get(messageId) as { content_final: string | null; content_partial: string | null; stream_state: string };
+    expect(message).toEqual({
+      content_final: 'locked',
+      content_partial: null,
+      stream_state: 'complete',
     });
   });
 
@@ -507,6 +578,9 @@ describe('messages API', () => {
 
     const staleUpdatedAt = Date.now() - 65_000;
     db.prepare('UPDATE messages SET updated_at = ? WHERE id = ?').run(staleUpdatedAt, messageId);
+    const beforeChat = db
+      .prepare('SELECT updated_at FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number };
 
     const result = sweepStaleStreamingMessages(Date.now());
     expect(result.cancelledMessageIds).toContain(messageId);
@@ -515,6 +589,11 @@ describe('messages API', () => {
       .prepare('SELECT stream_state FROM messages WHERE id = ?')
       .get(messageId) as { stream_state: string };
     expect(message.stream_state).toBe('cancelled');
+
+    const afterChat = db
+      .prepare('SELECT updated_at FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number };
+    expect(afterChat.updated_at).toBeGreaterThanOrEqual(beforeChat.updated_at);
 
     const event = db
       .prepare('SELECT type, payload FROM events WHERE type = ? ORDER BY rowid DESC LIMIT 1')

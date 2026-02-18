@@ -122,6 +122,7 @@ CREATE TABLE `push_subscriptions` (
 
 CREATE INDEX `chats_inbox_idx` ON `chats` (`is_archived`, `pinned` DESC, `last_message_at` DESC);
 CREATE INDEX `messages_chat_created_idx` ON `messages` (`chat_id`, `created_at`);
+CREATE INDEX `messages_stream_updated_idx` ON `messages` (`stream_state`, `updated_at`);
 CREATE INDEX `media_chat_created_idx` ON `media` (`chat_id`, `created_at`);
 CREATE INDEX `requests_chat_status_idx` ON `requests` (`chat_id`, `status`);
 CREATE UNIQUE INDEX `tags_catalog_name_idx` ON `tags_catalog` (`name`);
