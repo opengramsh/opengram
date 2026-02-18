@@ -15,7 +15,7 @@ import {
   selectNewChatModelId,
 } from '@/src/lib/new-chat';
 import { ChatList } from '@/src/components/chats/chat-list';
-import type { Agent, Chat, ChatsResponse, ConfigResponse } from '@/src/components/chats/types';
+import type { Agent, Chat, ChatsResponse, ConfigResponse, Model } from '@/src/components/chats/types';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 
 function chipClass(active: boolean) {
