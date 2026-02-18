@@ -1,7 +1,8 @@
-import { statSync } from 'node:fs';
+import { createReadStream, statSync } from 'node:fs';
+import { Readable } from 'node:stream';
 
 import { toErrorResponse, validationError } from '@/src/api/http';
-import { getMediaFileDescriptor, readMediaSlice } from '@/src/services/media-service';
+import { getMediaFileDescriptor } from '@/src/services/media-service';
 
 type RouteContext = {
   params: Promise<{ mediaId: string }> | { mediaId: string };
@@ -69,6 +70,10 @@ function quotedFileName(name: string) {
   return name.replace(/["\\]/g, '_');
 }
 
+function toWebReadableStream(stream: NodeJS.ReadableStream) {
+  return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
+}
+
 export async function GET(request: Request, context: RouteContext) {
   try {
     const mediaId = await resolveMediaId(context);
@@ -86,7 +91,8 @@ export async function GET(request: Request, context: RouteContext) {
     const rangeHeader = request.headers.get('range');
     if (!rangeHeader) {
       headers.set('Content-Length', String(totalSize));
-      return new Response(readMediaSlice(media.absolutePath, 0, totalSize - 1), {
+      const stream = createReadStream(media.absolutePath);
+      return new Response(toWebReadableStream(stream), {
         status: 200,
         headers,
       });
@@ -98,11 +104,11 @@ export async function GET(request: Request, context: RouteContext) {
       return new Response(null, { status: 416, headers });
     }
 
-    const chunk = readMediaSlice(media.absolutePath, range.start, range.end);
     headers.set('Content-Length', String(range.end - range.start + 1));
     headers.set('Content-Range', `bytes ${range.start}-${range.end}/${totalSize}`);
+    const stream = createReadStream(media.absolutePath, { start: range.start, end: range.end });
 
-    return new Response(chunk, {
+    return new Response(toWebReadableStream(stream), {
       status: 206,
       headers,
     });

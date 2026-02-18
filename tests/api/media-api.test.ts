@@ -272,6 +272,52 @@ describe('media API', () => {
     expect(tooLargeResponse.status).toBe(413);
   });
 
+  it('rejects oversized multipart bodies before parsing form data', async () => {
+    const configPath = join(tempDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        maxUploadBytes: 4,
+        allowedMimeTypes: ['*/*'],
+      }),
+    );
+    process.env.OPENGRAM_CONFIG_PATH = configPath;
+
+    const chat = await createChat();
+    const body = '--x\r\nContent-Disposition: form-data; name="file"; filename="tiny.txt"\r\nContent-Type: text/plain\r\n\r\nok\r\n--x--\r\n';
+
+    const response = await mediaPost(
+      new Request(`http://localhost/api/v1/chats/${chat.id}/media`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=x',
+          'content-length': '999999',
+        },
+        body,
+      }),
+      chatContext(chat.id),
+    );
+
+    expect(response.status).toBe(413);
+  });
+
+  it('returns 415 when image payload bytes are not a decodable image', async () => {
+    const configPath = join(tempDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        maxUploadBytes: 1024,
+        allowedMimeTypes: ['image/*'],
+      }),
+    );
+    process.env.OPENGRAM_CONFIG_PATH = configPath;
+
+    const chat = await createChat();
+    const response = await uploadBase64Media(chat.id, 'broken.png', 'image/png', Buffer.from('not-an-image'));
+
+    expect(response.status).toBe(415);
+  });
+
   it('does not leave orphaned upload files when messageId is invalid', async () => {
     const chat = await createChat();
 

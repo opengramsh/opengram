@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { extname, join, posix, resolve, sep } from 'node:path';
 
 import type Database from 'better-sqlite3';
@@ -168,6 +168,20 @@ async function createThumbnail(fileBytes: Uint8Array) {
     .toBuffer();
 }
 
+function isInvalidImageContentError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('unsupported image format')
+    || message.includes('input buffer contains')
+    || message.includes('corrupt')
+    || message.includes('invalid')
+  );
+}
+
 export async function createMedia(input: CreateMediaInput) {
   const config = loadOpengramConfig();
   if (!input.contentType) {
@@ -201,7 +215,21 @@ export async function createMedia(input: CreateMediaInput) {
   const relativePath = posix.join('uploads', input.chatId, `${mediaId}${extension}`);
   const absolutePath = resolveStoragePath(relativePath);
 
-  const thumbnailBuffer = kind === 'image' ? await createThumbnail(input.fileBytes) : null;
+  let thumbnailBuffer: Buffer | null = null;
+  if (kind === 'image') {
+    try {
+      thumbnailBuffer = await createThumbnail(input.fileBytes);
+    } catch (error) {
+      if (isInvalidImageContentError(error)) {
+        throw unsupportedMediaTypeError('file content is not a valid image.', {
+          field: 'file',
+          contentType: input.contentType,
+        });
+      }
+
+      throw error;
+    }
+  }
   const relativeThumbnailPath = thumbnailBuffer
     ? posix.join('uploads', input.chatId, 'thumbnails', `${mediaId}.webp`)
     : null;
@@ -402,9 +430,4 @@ export function getThumbnailDescriptor(mediaId: string) {
       filename: `${media.id}-thumbnail${extname(media.thumbnail_path) || '.bin'}`,
     };
   });
-}
-
-export function readMediaSlice(absolutePath: string, start: number, endInclusive: number) {
-  const content = readFileSync(absolutePath);
-  return content.subarray(start, endInclusive + 1);
 }

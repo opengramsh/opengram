@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 
 import { parseMediaPagination } from '@/src/api/pagination';
-import { parseJsonBody, successCollection, toErrorResponse, validationError } from '@/src/api/http';
+import { loadOpengramConfig } from '@/src/config/opengram-config';
+import {
+  parseJsonBody,
+  payloadTooLargeError,
+  successCollection,
+  toErrorResponse,
+  validationError,
+} from '@/src/api/http';
 import { enforceWriteGuards } from '@/src/api/write-controls';
 import { createMedia, listChatMedia } from '@/src/services/media-service';
 
@@ -11,9 +18,78 @@ type RouteContext = {
   params: Promise<{ chatId: string }> | { chatId: string };
 };
 
+const MULTIPART_BODY_OVERHEAD_BYTES = 256 * 1024;
+
 async function resolveChatId(context: RouteContext) {
   const params = await context.params;
   return params.chatId;
+}
+
+function parseContentLength(contentLength: string | null) {
+  if (!contentLength) {
+    return null;
+  }
+
+  const parsed = Number(contentLength);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+}
+
+async function parseMultipartFormDataWithLimit(request: Request, maxBodyBytes: number) {
+  const contentType = request.headers.get('content-type') ?? '';
+  if (!contentType.includes('multipart/form-data')) {
+    throw validationError('Unsupported Content-Type for multipart parser.');
+  }
+
+  const contentLength = parseContentLength(request.headers.get('content-length'));
+  if (contentLength !== null && contentLength > maxBodyBytes) {
+    throw payloadTooLargeError('multipart body exceeds maxUploadBytes.', {
+      field: 'file',
+      maxBodyBytes,
+      contentLength,
+    });
+  }
+
+  const body = request.body;
+  if (!body) {
+    throw validationError('Multipart body is required.');
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    total += value.byteLength;
+    if (total > maxBodyBytes) {
+      throw payloadTooLargeError('multipart body exceeds maxUploadBytes.', {
+        field: 'file',
+        maxBodyBytes,
+      });
+    }
+
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const multipartResponse = new Response(bytes, {
+    headers: { 'Content-Type': contentType },
+  });
+  return multipartResponse.formData();
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -44,10 +120,14 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     enforceWriteGuards(request);
     const chatId = await resolveChatId(context);
+    const config = loadOpengramConfig();
 
     const contentType = request.headers.get('content-type') ?? '';
     if (contentType.includes('multipart/form-data')) {
-      const form = await request.formData();
+      const form = await parseMultipartFormDataWithLimit(
+        request,
+        config.maxUploadBytes + MULTIPART_BODY_OVERHEAD_BYTES,
+      );
       const file = form.get('file');
       const kind = form.get('kind');
       const messageId = form.get('messageId');
