@@ -17,6 +17,7 @@ import { ChatList } from '@/src/components/chats/chat-list';
 import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
 import type { Agent, Chat, ChatsResponse, ConfigResponse, Model } from '@/src/components/chats/types';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
+import { subscribeToEventsStream, type FrontendStreamEvent } from '@/src/lib/events-stream';
 
 function chipClass(active: boolean) {
   if (active) {
@@ -28,6 +29,32 @@ function chipClass(active: boolean) {
 
 function pendingLabel(total: number) {
   return total === 1 ? '1 pending request' : `${total} pending requests`;
+}
+
+function chatMatchesInboxFilters(
+  chat: Chat,
+  searchQuery: string,
+  selectedAgentId: string,
+  selectedState: string,
+) {
+  if (chat.is_archived) {
+    return false;
+  }
+
+  if (selectedAgentId && !chat.agent_ids.includes(selectedAgentId)) {
+    return false;
+  }
+
+  if (selectedState && chat.custom_state !== selectedState) {
+    return false;
+  }
+
+  if (searchQuery) {
+    const query = searchQuery.toLowerCase();
+    return chat.title.toLowerCase().includes(query);
+  }
+
+  return true;
 }
 
 export default function Home() {
@@ -308,6 +335,72 @@ export default function Home() {
     },
     [mutateChat],
   );
+
+  const refreshSingleInboxChat = useCallback(
+    async (incomingChatId: string) => {
+      const response = await fetch(`/api/v1/chats/${incomingChatId}`, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('Failed to load changed chat');
+      }
+
+      const updated = (await response.json()) as Chat;
+      setChats((current) => {
+        const matches = chatMatchesInboxFilters(updated, searchQuery, selectedAgentId, selectedState);
+        const withoutChat = current.filter((chat) => chat.id !== updated.id);
+
+        if (!matches) {
+          return withoutChat;
+        }
+
+        return sortInboxChats([...withoutChat, updated]);
+      });
+    },
+    [searchQuery, selectedAgentId, selectedState],
+  );
+
+  useEffect(() => {
+    const unsubscribe = subscribeToEventsStream((event: FrontendStreamEvent) => {
+      const chatIdFromEvent = typeof event.payload.chatId === 'string' ? event.payload.chatId : null;
+
+      if (
+        event.type === 'chat.created'
+        || event.type === 'chat.updated'
+        || event.type === 'chat.unarchived'
+        || event.type === 'chat.read'
+        || event.type === 'chat.unread'
+        || event.type === 'message.created'
+        || event.type === 'message.streaming.complete'
+        || event.type === 'request.created'
+        || event.type === 'request.resolved'
+        || event.type === 'request.cancelled'
+      ) {
+        if (!chatIdFromEvent) {
+          void refreshChats();
+          return;
+        }
+
+        void Promise.all([
+          refreshSingleInboxChat(chatIdFromEvent).catch(() => refreshChats()),
+          loadPendingSummary().catch(() => setPendingRequestsTotal(0)),
+        ]);
+        return;
+      }
+
+      if (event.type === 'chat.archived') {
+        if (!chatIdFromEvent) {
+          void refreshChats();
+          return;
+        }
+
+        setChats((current) => current.filter((chat) => chat.id !== chatIdFromEvent));
+        void loadPendingSummary().catch(() => setPendingRequestsTotal(0));
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [loadPendingSummary, refreshChats, refreshSingleInboxChat]);
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col bg-background pb-36">

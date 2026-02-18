@@ -72,11 +72,14 @@ export function applyStreamingChunk<T extends RealtimeMessage>(
   messageId: string,
   deltaText: string,
 ): T[] {
-  return messages.map((message) => {
+  let updated = false;
+
+  const next = messages.map((message) => {
     if (message.id !== messageId) {
       return message;
     }
 
+    updated = true;
     const partial = `${message.content_partial ?? ''}${deltaText}`;
     return {
       ...message,
@@ -84,6 +87,8 @@ export function applyStreamingChunk<T extends RealtimeMessage>(
       stream_state: 'streaming',
     };
   });
+
+  return updated ? next : messages;
 }
 
 export function applyStreamingComplete<T extends RealtimeMessage>(
@@ -92,11 +97,13 @@ export function applyStreamingComplete<T extends RealtimeMessage>(
   finalText?: string,
   streamState: 'complete' | 'cancelled' = 'complete',
 ): T[] {
-  return messages.map((message) => {
+  let updated = false;
+  const next = messages.map((message) => {
     if (message.id !== messageId) {
       return message;
     }
 
+    updated = true;
     if (streamState === 'cancelled') {
       return {
         ...message,
@@ -112,4 +119,6 @@ export function applyStreamingComplete<T extends RealtimeMessage>(
       stream_state: 'complete',
     };
   });
+
+  return updated ? next : messages;
 }

@@ -91,4 +91,38 @@ describe('chat utils', () => {
     expect(cancelled[0]?.content_partial).toBe('still here');
     expect(cancelled[0]?.stream_state).toBe('cancelled');
   });
+
+  it('returns same reference when chunk targets an unknown message', () => {
+    const initial = [
+      {
+        id: 'm1',
+        role: 'agent' as const,
+        sender_id: 'agent-default',
+        created_at: '2026-02-18T10:00:00.000Z',
+        content_final: null,
+        content_partial: 'known',
+        stream_state: 'streaming' as const,
+      },
+    ];
+
+    const unchanged = applyStreamingChunk(initial, 'missing', 'delta');
+    expect(unchanged).toBe(initial);
+  });
+
+  it('returns same reference when completion targets an unknown message', () => {
+    const initial = [
+      {
+        id: 'm1',
+        role: 'agent' as const,
+        sender_id: 'agent-default',
+        created_at: '2026-02-18T10:00:00.000Z',
+        content_final: null,
+        content_partial: 'known',
+        stream_state: 'streaming' as const,
+      },
+    ];
+
+    const unchanged = applyStreamingComplete(initial, 'missing', 'done');
+    expect(unchanged).toBe(initial);
+  });
 });

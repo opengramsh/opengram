@@ -14,6 +14,7 @@ import {
   sortMessagesForFeed,
   upsertFeedMessage,
 } from '@/src/lib/chat';
+import { subscribeToEventsStream, type FrontendStreamEvent } from '@/src/lib/events-stream';
 
 type Agent = {
   id: string;
@@ -839,73 +840,99 @@ export default function ChatPage() {
       return;
     }
 
-    const stream = new EventSource('/api/v1/events/stream?ephemeral=true');
-    const eventTypes = ['message.created', 'message.streaming.chunk', 'message.streaming.complete', 'request.created', 'request.resolved', 'request.cancelled', 'media.attached'];
-
-    const handleEvent = (event: Event) => {
-      const custom = event as MessageEvent<string>;
-      let payload: { type?: string; payload?: Record<string, unknown> } | null = null;
-
-      try {
-        payload = JSON.parse(custom.data) as { type?: string; payload?: Record<string, unknown> };
-      } catch {
-        payload = null;
-      }
-
-      const chatFromPayload = payload?.payload?.chatId;
+    const unsubscribe = subscribeToEventsStream((event: FrontendStreamEvent) => {
+      const chatFromPayload = event.payload.chatId;
       if (chatFromPayload !== chatId) {
         return;
       }
 
-      if (payload?.type === 'message.created') {
+      if (event.type === 'message.created') {
+        const messageId = typeof event.payload.messageId === 'string' ? event.payload.messageId : null;
+        const senderId = typeof event.payload.senderId === 'string' ? event.payload.senderId : 'agent:unknown';
+        const role = event.payload.role === 'agent'
+          || event.payload.role === 'system'
+          || event.payload.role === 'tool'
+          || event.payload.role === 'user'
+          ? event.payload.role
+          : 'agent';
+        const streamState = event.payload.streamState === 'streaming'
+          || event.payload.streamState === 'complete'
+          || event.payload.streamState === 'cancelled'
+          ? event.payload.streamState
+          : 'none';
+
+        if (messageId && streamState === 'streaming') {
+          setMessages((current) =>
+            upsertFeedMessage(current, {
+              id: messageId,
+              role,
+              sender_id: senderId,
+              created_at: event.timestamp,
+              content_final: null,
+              content_partial: '',
+              stream_state: 'streaming',
+            }),
+          );
+          return;
+        }
+
         void refreshMessages();
         return;
       }
 
-      if (payload?.type === 'message.streaming.chunk') {
-        const messageId = typeof payload.payload?.messageId === 'string' ? payload.payload.messageId : null;
-        const deltaText = typeof payload.payload?.deltaText === 'string' ? payload.payload.deltaText : null;
+      if (event.type === 'message.streaming.chunk') {
+        const messageId = typeof event.payload.messageId === 'string' ? event.payload.messageId : null;
+        const deltaText = typeof event.payload.deltaText === 'string' ? event.payload.deltaText : null;
 
         if (messageId && deltaText !== null) {
-          setMessages((current) => applyStreamingChunk(current, messageId, deltaText));
+          let applied = false;
+          setMessages((current) => {
+            const next = applyStreamingChunk(current, messageId, deltaText);
+            applied = next !== current;
+            return next;
+          });
+          if (!applied) {
+            void refreshMessages();
+          }
         } else {
           void refreshMessages();
         }
         return;
       }
 
-      if (payload?.type === 'message.streaming.complete') {
-        const messageId = typeof payload.payload?.messageId === 'string' ? payload.payload.messageId : null;
-        const finalText = typeof payload.payload?.finalText === 'string' ? payload.payload.finalText : undefined;
-        const streamState = payload.payload?.streamState === 'cancelled' ? 'cancelled' : 'complete';
+      if (event.type === 'message.streaming.complete') {
+        const messageId = typeof event.payload.messageId === 'string' ? event.payload.messageId : null;
+        const finalText = typeof event.payload.finalText === 'string' ? event.payload.finalText : undefined;
+        const streamState = event.payload.streamState === 'cancelled' ? 'cancelled' : 'complete';
 
         if (messageId) {
-          setMessages((current) => applyStreamingComplete(current, messageId, finalText, streamState));
+          let applied = false;
+          setMessages((current) => {
+            const next = applyStreamingComplete(current, messageId, finalText, streamState);
+            applied = next !== current;
+            return next;
+          });
+          if (!applied) {
+            void refreshMessages();
+          }
         } else {
           void refreshMessages();
         }
         return;
       }
 
-      if (payload?.type === 'request.created' || payload?.type === 'request.resolved' || payload?.type === 'request.cancelled') {
+      if (event.type === 'request.created' || event.type === 'request.resolved' || event.type === 'request.cancelled') {
         void refreshPendingRequests();
         return;
       }
 
-      if (payload?.type === 'media.attached') {
+      if (event.type === 'media.attached') {
         void refreshMedia();
       }
-    };
-
-    for (const type of eventTypes) {
-      stream.addEventListener(type, handleEvent);
-    }
+    });
 
     return () => {
-      for (const type of eventTypes) {
-        stream.removeEventListener(type, handleEvent);
-      }
-      stream.close();
+      unsubscribe();
     };
   }, [chatId, refreshMedia, refreshMessages, refreshPendingRequests]);
 
