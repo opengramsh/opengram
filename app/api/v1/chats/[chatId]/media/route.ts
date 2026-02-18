@@ -38,7 +38,39 @@ function parseContentLength(contentLength: string | null) {
   return Math.floor(parsed);
 }
 
-async function parseMultipartFormDataWithLimit(request: Request, maxBodyBytes: number) {
+async function readFileBytesWithLimit(file: File, maxUploadBytes: number) {
+  const reader = file.stream().getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    total += value.byteLength;
+    if (total > maxUploadBytes) {
+      throw payloadTooLargeError('file exceeds maxUploadBytes.', {
+        field: 'file',
+        maxUploadBytes,
+      });
+    }
+
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return bytes;
+}
+
+async function parseMultipartFormData(request: Request, maxBodyBytes: number) {
   const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.includes('multipart/form-data')) {
     throw validationError('Unsupported Content-Type for multipart parser.');
@@ -53,43 +85,7 @@ async function parseMultipartFormDataWithLimit(request: Request, maxBodyBytes: n
     });
   }
 
-  const body = request.body;
-  if (!body) {
-    throw validationError('Multipart body is required.');
-  }
-
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    total += value.byteLength;
-    if (total > maxBodyBytes) {
-      throw payloadTooLargeError('multipart body exceeds maxUploadBytes.', {
-        field: 'file',
-        maxBodyBytes,
-      });
-    }
-
-    chunks.push(value);
-  }
-
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  const multipartResponse = new Response(bytes, {
-    headers: { 'Content-Type': contentType },
-  });
-  return multipartResponse.formData();
+  return request.formData();
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -124,7 +120,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const contentType = request.headers.get('content-type') ?? '';
     if (contentType.includes('multipart/form-data')) {
-      const form = await parseMultipartFormDataWithLimit(
+      const form = await parseMultipartFormData(
         request,
         config.maxUploadBytes + MULTIPART_BODY_OVERHEAD_BYTES,
       );
@@ -144,7 +140,7 @@ export async function POST(request: Request, context: RouteContext) {
         throw validationError('messageId must be a string.', { field: 'messageId' });
       }
 
-      const buffer = new Uint8Array(await file.arrayBuffer());
+      const buffer = await readFileBytesWithLimit(file, config.maxUploadBytes);
       const resolvedKind = kind === null ? undefined : kind;
       if (resolvedKind !== undefined && resolvedKind !== 'image' && resolvedKind !== 'audio' && resolvedKind !== 'file') {
         throw validationError('kind must be image, audio, or file.', { field: 'kind' });

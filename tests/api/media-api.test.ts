@@ -301,6 +301,32 @@ describe('media API', () => {
     expect(response.status).toBe(413);
   });
 
+  it('rejects multipart files exceeding maxUploadBytes via streamed file read', async () => {
+    const configPath = join(tempDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        maxUploadBytes: 4,
+        allowedMimeTypes: ['*/*'],
+      }),
+    );
+    process.env.OPENGRAM_CONFIG_PATH = configPath;
+
+    const chat = await createChat();
+    const form = new FormData();
+    form.set('file', new File([Buffer.from('too-large')], 'big.txt', { type: 'text/plain' }));
+
+    const response = await mediaPost(
+      new Request(`http://localhost/api/v1/chats/${chat.id}/media`, {
+        method: 'POST',
+        body: form,
+      }),
+      chatContext(chat.id),
+    );
+
+    expect(response.status).toBe(413);
+  });
+
   it('returns 415 when image payload bytes are not a decodable image', async () => {
     const configPath = join(tempDir, 'config.json');
     writeFileSync(

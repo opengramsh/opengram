@@ -205,10 +205,6 @@ export async function createMedia(input: CreateMediaInput) {
     throw validationError('kind must be image, audio, or file.', { field: 'kind' });
   }
 
-  withDb((db) => {
-    ensureChatAndMessage(db, input.chatId, input.messageId);
-  });
-
   const mediaId = nanoid();
   const safeName = sanitizeFileName(input.fileName);
   const extension = extname(safeName) || '.bin';
