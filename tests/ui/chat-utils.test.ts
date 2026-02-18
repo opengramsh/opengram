@@ -24,7 +24,7 @@ describe('chat utils', () => {
     expect(shouldStartEdgeSwipeBack(21)).toBe(false);
   });
 
-  it('triggers back navigation only with threshold and positive velocity', () => {
+  it('triggers back navigation with horizontal threshold crossing', () => {
     const triggered = resolveEdgeSwipeBack(80, 8, 250);
     expect(triggered.shouldNavigateBack).toBe(true);
     expect(triggered.velocity).toBeGreaterThan(0);
@@ -33,7 +33,7 @@ describe('chat utils', () => {
     expect(shortSwipe.shouldNavigateBack).toBe(false);
 
     const slowSwipe = resolveEdgeSwipeBack(80, 2, 1200);
-    expect(slowSwipe.shouldNavigateBack).toBe(false);
+    expect(slowSwipe.shouldNavigateBack).toBe(true);
 
     const verticalSwipe = resolveEdgeSwipeBack(80, 120, 200);
     expect(verticalSwipe.shouldNavigateBack).toBe(false);

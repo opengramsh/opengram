@@ -21,7 +21,12 @@ function insertEvent(id: string, createdAt: number) {
   );
 }
 
-async function readSomeChunks(response: Response, abort: AbortController, maxChunks: number) {
+async function readSomeChunks(
+  response: Response,
+  abort: AbortController,
+  maxChunks: number,
+  stopWhen?: (output: string) => boolean,
+) {
   const body = response.body;
   if (!body) {
     return '';
@@ -44,6 +49,10 @@ async function readSomeChunks(response: Response, abort: AbortController, maxChu
     }
 
     output += decoder.decode(readResult.value);
+    if (stopWhen?.(output)) {
+      break;
+    }
+
     if (output.includes('id: 222222222222222222222') && output.includes('id: 333333333333333333333')) {
       break;
     }
@@ -103,5 +112,27 @@ describe('events stream API', () => {
     expect(output).toContain('id: 222222222222222222222');
     expect(output).toContain('id: 333333333333333333333');
     expect(output).not.toContain('id: 111111111111111111111');
+  });
+
+  it('streams newer events inserted at the same timestamp as cursor', async () => {
+    insertEvent('zzzzzzzzzzzzzzzzzzzzz', 2000);
+    insertEvent('aaaaaaaaaaaaaaaaaaaaa', 2000);
+    insertEvent('mmmmmmmmmmmmmmmmmmmmm', 3000);
+
+    const abort = new AbortController();
+    const response = await eventsStreamGet(
+      new Request('http://localhost/api/v1/events/stream?cursor=zzzzzzzzzzzzzzzzzzzzz&limit=100', { signal: abort.signal }),
+    );
+    const output = await readSomeChunks(
+      response,
+      abort,
+      6,
+      (value) => value.includes('id: aaaaaaaaaaaaaaaaaaaaa') && value.includes('id: mmmmmmmmmmmmmmmmmmmmm'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(output).toContain('id: aaaaaaaaaaaaaaaaaaaaa');
+    expect(output).toContain('id: mmmmmmmmmmmmmmmmmmmmm');
+    expect(output).not.toContain('id: zzzzzzzzzzzzzzzzzzzzz');
   });
 });

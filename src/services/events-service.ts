@@ -5,6 +5,7 @@ import { validationError } from '@/src/api/http';
 import { createSqliteConnection } from '@/src/db/client';
 
 type EventRecord = {
+  rowid: number;
   id: string;
   type: string;
   payload: string;
@@ -68,14 +69,14 @@ export function listEventsAfterCursor(cursor: string | null, limit: number) {
   return withDb((db) => {
     if (!cursor) {
       const rows = db
-        .prepare('SELECT id, type, payload, created_at FROM events ORDER BY created_at ASC, id ASC LIMIT ?')
+        .prepare('SELECT rowid, id, type, payload, created_at FROM events ORDER BY rowid ASC LIMIT ?')
         .all(limit) as EventRecord[];
       return rows.map(serializeEvent);
     }
 
     const cursorRow = db
-      .prepare('SELECT created_at, id FROM events WHERE id = ?')
-      .get(cursor) as { created_at: number; id: string } | undefined;
+      .prepare('SELECT rowid FROM events WHERE id = ?')
+      .get(cursor) as { rowid: number } | undefined;
 
     if (!cursorRow) {
       throw validationError('cursor event id was not found.', { field: 'cursor' });
@@ -84,13 +85,13 @@ export function listEventsAfterCursor(cursor: string | null, limit: number) {
     const rows = db
       .prepare(
         [
-          'SELECT id, type, payload, created_at FROM events',
-          'WHERE created_at > ? OR (created_at = ? AND id > ?)',
-          'ORDER BY created_at ASC, id ASC',
+          'SELECT rowid, id, type, payload, created_at FROM events',
+          'WHERE rowid > ?',
+          'ORDER BY rowid ASC',
           'LIMIT ?',
         ].join(' '),
       )
-      .all(cursorRow.created_at, cursorRow.created_at, cursorRow.id, limit) as EventRecord[];
+      .all(cursorRow.rowid, limit) as EventRecord[];
 
     return rows.map(serializeEvent);
   });
@@ -99,7 +100,7 @@ export function listEventsAfterCursor(cursor: string | null, limit: number) {
 export function getLatestEventCursor() {
   return withDb((db) => {
     const row = db
-      .prepare('SELECT id FROM events ORDER BY created_at DESC, id DESC LIMIT 1')
+      .prepare('SELECT id FROM events ORDER BY rowid DESC LIMIT 1')
       .get() as { id: string } | undefined;
     return row?.id ?? null;
   });

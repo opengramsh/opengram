@@ -19,7 +19,6 @@ export type EdgeSwipeResolution = {
 
 const DEFAULT_EDGE_WIDTH_PX = 20;
 const DEFAULT_BACK_THRESHOLD_PX = 60;
-const DEFAULT_MIN_VELOCITY_PX_PER_MS = 0.15;
 
 function parseTimestamp(value: string | null) {
   if (!value) {
@@ -52,13 +51,12 @@ export function resolveEdgeSwipeBack(
   deltaY: number,
   elapsedMs: number,
   thresholdPx = DEFAULT_BACK_THRESHOLD_PX,
-  minVelocityPxPerMs = DEFAULT_MIN_VELOCITY_PX_PER_MS,
 ): EdgeSwipeResolution {
   const velocity = elapsedMs > 0 ? deltaX / elapsedMs : 0;
   const horizontalDominant = Math.abs(deltaX) > Math.abs(deltaY);
 
   return {
-    shouldNavigateBack: horizontalDominant && deltaX >= thresholdPx && velocity > minVelocityPxPerMs,
+    shouldNavigateBack: horizontalDominant && deltaX >= thresholdPx,
     velocity,
   };
 }
