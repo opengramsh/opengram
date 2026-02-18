@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Facehash } from 'facehash';
 import { Plus } from 'lucide-react';
 
 import { buildChatsQuery, sortInboxChats } from '@/src/lib/inbox';
@@ -12,6 +11,7 @@ import {
   selectNewChatModelId,
 } from '@/src/lib/new-chat';
 import { ChatList } from '@/src/components/chats/chat-list';
+import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
 import type { Agent, Chat, ChatsResponse, ConfigResponse, Model } from '@/src/components/chats/types';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 
@@ -239,6 +239,10 @@ export default function ArchivedPage() {
     setIsNewChatOpen(true);
   }, [agents, defaultModelIdForNewChats, models]);
 
+  const closeNewChatSheet = useCallback(() => {
+    setIsNewChatOpen(false);
+  }, []);
+
   const createNewChat = useCallback(async () => {
     if (!newChatAgentId || !newChatModelId || isCreatingNewChat) {
       return;
@@ -377,103 +381,30 @@ export default function ArchivedPage() {
         </button>
       </div>
 
-      {isNewChatOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setIsNewChatOpen(false)}>
-          <div
-            className="liquid-glass absolute inset-x-0 bottom-0 rounded-t-3xl border-x border-t border-border p-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="text-sm font-semibold text-foreground">New Chat</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Choose an agent and model, then send your first message.
-            </p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Agent</p>
-                <div className="space-y-2">
-                  {agents.map((agent) => {
-                    const selected = newChatAgentId === agent.id;
-                    return (
-                      <button
-                        key={agent.id}
-                        type="button"
-                        className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
-                          selected
-                            ? 'border-primary/70 bg-primary/10'
-                            : 'border-border bg-card hover:border-primary/40'
-                        }`}
-                        onClick={() => {
-                          setNewChatAgentId(agent.id);
-                          setNewChatError(null);
-                        }}
-                      >
-                        <Facehash
-                          name={agent.id}
-                          size={34}
-                          interactive={false}
-                          className="shrink-0 rounded-lg text-black"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-foreground">{agent.name}</span>
-                          <span className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Model</span>
-                <select
-                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70"
-                  value={newChatModelId}
-                  onChange={(event) => setNewChatModelId(event.target.value)}
-                >
-                  {models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">First message</span>
-                <textarea
-                  rows={3}
-                  value={newChatFirstMessage}
-                  onChange={(event) => {
-                    setNewChatFirstMessage(event.target.value);
-                    if (newChatError) {
-                      setNewChatError(null);
-                    }
-                  }}
-                  className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/70"
-                  placeholder="Start with a message..."
-                />
-              </label>
-              {newChatError && <p className="text-xs text-red-300">{newChatError}</p>}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="h-10 flex-1 rounded-xl border border-border bg-card text-sm font-medium text-foreground"
-                  onClick={() => setIsNewChatOpen(false)}
-                  disabled={isCreatingNewChat}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                  onClick={() => void createNewChat()}
-                  disabled={isCreatingNewChat || !canSendNewChat}
-                >
-                  {isCreatingNewChat ? 'Sending...' : 'Send'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <NewChatSheet
+        open={isNewChatOpen}
+        agents={agents}
+        models={models}
+        selectedAgentId={newChatAgentId}
+        selectedModelId={newChatModelId}
+        firstMessage={newChatFirstMessage}
+        error={newChatError}
+        isSubmitting={isCreatingNewChat}
+        canSubmit={canSendNewChat}
+        onClose={closeNewChatSheet}
+        onSelectAgent={(agentId) => {
+          setNewChatAgentId(agentId);
+          setNewChatError(null);
+        }}
+        onSelectModel={setNewChatModelId}
+        onChangeFirstMessage={(value) => {
+          setNewChatFirstMessage(value);
+          if (newChatError) {
+            setNewChatError(null);
+          }
+        }}
+        onSubmit={() => void createNewChat()}
+      />
     </div>
   );
 }
