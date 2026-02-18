@@ -246,4 +246,39 @@ describe('search API', () => {
       },
     });
   });
+
+  it('returns validation error for malformed fts query syntax', async () => {
+    const now = Date.now();
+    db.prepare(
+      'INSERT INTO chats (id, title, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('eeeeeeeeeeeeeeeeeeeee', 'Malformed fts test', 'model-default', now, now);
+    db.prepare(
+      [
+        'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      'fffffffffffffffffffff',
+      'eeeeeeeeeeeeeeeeeeeee',
+      'agent',
+      'agent-default',
+      now,
+      now,
+      'seed text',
+      'complete',
+    );
+
+    const response = await searchGet(
+      createRequest('http://localhost/api/v1/search?q=foo%20AND&scope=messages'),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid full-text search query.',
+        details: { field: 'q' },
+      },
+    });
+  });
 });

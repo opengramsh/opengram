@@ -195,6 +195,20 @@ function queryMessageMatches(
 ) {
   const cursorClause = buildCursorClause(cursor, 'message', 'm.created_at', 'm.id');
 
+  const isInvalidMatchQueryError = (error: unknown) => {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('fts5')
+      || message.includes('malformed match')
+      || message.includes('unterminated string')
+      || message.includes('syntax error')
+    );
+  };
+
   try {
     const rows = db
       .prepare(
@@ -228,7 +242,7 @@ function queryMessageMatches(
       },
     }));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('fts5')) {
+    if (isInvalidMatchQueryError(error)) {
       throw validationError('Invalid full-text search query.', { field: 'q' });
     }
 
