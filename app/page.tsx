@@ -12,6 +12,11 @@ import {
   shouldStartInboxSwipeDrag,
   sortInboxChats,
 } from '@/src/lib/inbox';
+import {
+  normalizeFirstMessageForNewChat,
+  selectNewChatAgentId,
+  selectNewChatModelId,
+} from '@/src/lib/new-chat';
 
 type Agent = {
   id: string;
@@ -85,6 +90,7 @@ export default function Home() {
   const [appName, setAppName] = useState('OpenGram');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<Model[]>([]);
+  const [defaultModelIdForNewChats, setDefaultModelIdForNewChats] = useState('');
   const [customStates, setCustomStates] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
@@ -110,6 +116,13 @@ export default function Home() {
     }
     return map;
   }, [agents]);
+
+  const normalizedNewChatFirstMessage = useMemo(
+    () => normalizeFirstMessageForNewChat(newChatFirstMessage),
+    [newChatFirstMessage],
+  );
+
+  const canSendNewChat = Boolean(newChatAgentId && newChatModelId && normalizedNewChatFirstMessage);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -145,10 +158,12 @@ export default function Home() {
     setAgents(config.agents ?? []);
     setModels(config.models ?? []);
     setCustomStates(config.customStates ?? []);
-    const fallbackAgentId = config.agents[0]?.id ?? '';
-    const fallbackModelId = config.defaultModelIdForNewChats || config.models[0]?.id || '';
-    setNewChatAgentId((current) => current || fallbackAgentId);
-    setNewChatModelId((current) => current || fallbackModelId);
+    const resolvedDefaultModelId = config.defaultModelIdForNewChats || config.models[0]?.id || '';
+    setDefaultModelIdForNewChats(resolvedDefaultModelId);
+    setNewChatAgentId((current) => selectNewChatAgentId(config.agents ?? [], current));
+    setNewChatModelId((current) =>
+      selectNewChatModelId(config.models ?? [], resolvedDefaultModelId, current),
+    );
   }, []);
 
   const loadPendingSummary = useCallback(async () => {
@@ -240,16 +255,20 @@ export default function Home() {
   );
 
   const openNewChatSheet = useCallback(() => {
-    const fallbackAgentId = agents[0]?.id ?? '';
-    const fallbackModelId = models[0]?.id ?? '';
-    setNewChatAgentId((current) => current || fallbackAgentId);
-    setNewChatModelId((current) => current || fallbackModelId);
+    setNewChatAgentId(selectNewChatAgentId(agents));
+    setNewChatModelId(selectNewChatModelId(models, defaultModelIdForNewChats));
+    setNewChatFirstMessage('');
     setNewChatError(null);
     setIsNewChatOpen(true);
-  }, [agents, models]);
+  }, [agents, defaultModelIdForNewChats, models]);
 
   const createNewChat = useCallback(async () => {
     if (!newChatAgentId || !newChatModelId || isCreatingNewChat) {
+      return;
+    }
+
+    if (!normalizedNewChatFirstMessage) {
+      setNewChatError('Enter a first message to create chat.');
       return;
     }
 
@@ -262,7 +281,7 @@ export default function Home() {
         body: JSON.stringify({
           agentIds: [newChatAgentId],
           modelId: newChatModelId,
-          firstMessage: newChatFirstMessage.trim() || undefined,
+          firstMessage: normalizedNewChatFirstMessage,
         }),
       });
 
@@ -278,7 +297,13 @@ export default function Home() {
     } finally {
       setIsCreatingNewChat(false);
     }
-  }, [isCreatingNewChat, newChatAgentId, newChatModelId, newChatFirstMessage, refreshChats]);
+  }, [
+    isCreatingNewChat,
+    newChatAgentId,
+    newChatModelId,
+    normalizedNewChatFirstMessage,
+    refreshChats,
+  ]);
 
   const markChatRead = useCallback(
     async (chat: Chat) => {
@@ -536,22 +561,44 @@ export default function Home() {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="text-sm font-semibold text-foreground">New Chat</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Choose agent, model, and optional first message.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Choose an agent and model, then send your first message.
+            </p>
             <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Agent</span>
-                <select
-                  className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70"
-                  value={newChatAgentId}
-                  onChange={(event) => setNewChatAgentId(event.target.value)}
-                >
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Agent</p>
+                <div className="space-y-2">
+                  {agents.map((agent) => {
+                    const selected = newChatAgentId === agent.id;
+                    return (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                          selected
+                            ? 'border-primary/70 bg-primary/10'
+                            : 'border-border bg-card hover:border-primary/40'
+                        }`}
+                        onClick={() => {
+                          setNewChatAgentId(agent.id);
+                          setNewChatError(null);
+                        }}
+                      >
+                        <Facehash
+                          name={agent.id}
+                          size={34}
+                          interactive={false}
+                          className="shrink-0 rounded-lg text-black"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-foreground">{agent.name}</span>
+                          <span className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">Model</span>
                 <select
@@ -567,11 +614,16 @@ export default function Home() {
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">First message (optional)</span>
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">First message</span>
                 <textarea
                   rows={3}
                   value={newChatFirstMessage}
-                  onChange={(event) => setNewChatFirstMessage(event.target.value)}
+                  onChange={(event) => {
+                    setNewChatFirstMessage(event.target.value);
+                    if (newChatError) {
+                      setNewChatError(null);
+                    }
+                  }}
                   className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/70"
                   placeholder="Start with a message..."
                 />
@@ -590,9 +642,9 @@ export default function Home() {
                   type="button"
                   className="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60"
                   onClick={() => void createNewChat()}
-                  disabled={isCreatingNewChat || !newChatAgentId || !newChatModelId}
+                  disabled={isCreatingNewChat || !canSendNewChat}
                 >
-                  {isCreatingNewChat ? 'Creating...' : 'Create'}
+                  {isCreatingNewChat ? 'Sending...' : 'Send'}
                 </button>
               </div>
             </div>
