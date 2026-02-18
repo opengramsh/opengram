@@ -9,6 +9,7 @@ import { notFoundError, validationError } from '@/src/api/http';
 
 const TITLE_FALLBACK = 'New Chat';
 const PREVIEW_MAX_CHARS = 180;
+const USER_SENDER_ID = 'user:primary';
 
 type ChatRecord = {
   id: string;
@@ -90,6 +91,15 @@ function normalizeTitle(title: string | undefined, firstMessage: string | undefi
   }
 
   return normalized.slice(0, maxChars);
+}
+
+function normalizeFirstMessageContent(firstMessage: string | undefined) {
+  if (firstMessage === undefined) {
+    return null;
+  }
+
+  const normalized = firstMessage.trim();
+  return normalized ? firstMessage : null;
 }
 
 function parseJsonArray(value: string, fieldName: string): string[] {
@@ -279,6 +289,7 @@ export function createChat(input: CreateChatInput) {
   const now = Date.now();
   const chatId = nanoid();
   const title = normalizeTitle(input.title, input.firstMessage, config.titleMaxChars);
+  const firstMessageContent = normalizeFirstMessageContent(input.firstMessage);
   const tags = input.tags ?? [];
   const customState = input.customState ?? config.defaultCustomState;
 
@@ -305,6 +316,29 @@ export function createChat(input: CreateChatInput) {
       now,
       now,
     );
+
+    if (firstMessageContent !== null) {
+      db.prepare(
+        [
+          'INSERT INTO messages (',
+          'id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial,',
+          'stream_state, model_id, trace',
+          ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ].join(' '),
+      ).run(
+        nanoid(),
+        chatId,
+        'user',
+        USER_SENDER_ID,
+        now,
+        now,
+        firstMessageContent,
+        null,
+        'complete',
+        input.modelId,
+        null,
+      );
+    }
 
     updateDenormalizedFields(db, chatId);
     return serializeChat(getChatRecord(db, chatId));

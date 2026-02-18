@@ -11,6 +11,7 @@ import { GET as chatGet, PATCH as chatPatch } from '@/app/api/v1/chats/[chatId]/
 import { POST as archivePost } from '@/app/api/v1/chats/[chatId]/archive/route';
 import { POST as markReadPost } from '@/app/api/v1/chats/[chatId]/mark-read/route';
 import { POST as markUnreadPost } from '@/app/api/v1/chats/[chatId]/mark-unread/route';
+import { GET as messagesGet } from '@/app/api/v1/chats/[chatId]/messages/route';
 import { POST as unarchivePost } from '@/app/api/v1/chats/[chatId]/unarchive/route';
 import { GET as pendingSummaryGet } from '@/app/api/v1/chats/pending-summary/route';
 import { GET as chatsGet, POST as chatsPost } from '@/app/api/v1/chats/route';
@@ -116,6 +117,24 @@ describe('chats API', () => {
     expect(json.title.length).toBeLessThanOrEqual(48);
     expect(json.title).toContain('This is the first message');
     expect(json.unread_count).toBe(0);
+  });
+
+  it('persists first message as an initial user message', async () => {
+    const firstMessage = 'hello from the new chat form';
+    const created = await createChat({ firstMessage });
+    const chatId = created.json.id as string;
+
+    const messagesResponse = await messagesGet(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages?limit=10`, 'GET'),
+      routeContext(chatId),
+    );
+    const messagesBody = await messagesResponse.json();
+
+    expect(messagesResponse.status).toBe(200);
+    expect(messagesBody.data).toHaveLength(1);
+    expect(messagesBody.data[0].role).toBe('user');
+    expect(messagesBody.data[0].sender_id).toBe('user:primary');
+    expect(messagesBody.data[0].content_final).toBe(firstMessage);
   });
 
   it('returns validation error envelope for invalid create payload', async () => {
