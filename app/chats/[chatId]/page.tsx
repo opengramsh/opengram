@@ -245,6 +245,7 @@ export default function ChatPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<BlobPart[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const swipeRef = useRef<{
     active: boolean;
     startX: number;
@@ -836,6 +837,10 @@ export default function ChatPage() {
   }, [chat, isChatSettingsOpen, tagInput]);
 
   useEffect(() => {
+    knownMessageIdsRef.current = new Set(messages.map((message) => message.id));
+  }, [messages]);
+
+  useEffect(() => {
     if (!chatId) {
       return;
     }
@@ -885,15 +890,12 @@ export default function ChatPage() {
         const deltaText = typeof event.payload.deltaText === 'string' ? event.payload.deltaText : null;
 
         if (messageId && deltaText !== null) {
-          let applied = false;
-          setMessages((current) => {
-            const next = applyStreamingChunk(current, messageId, deltaText);
-            applied = next !== current;
-            return next;
-          });
-          if (!applied) {
+          if (!knownMessageIdsRef.current.has(messageId)) {
             void refreshMessages();
+            return;
           }
+
+          setMessages((current) => applyStreamingChunk(current, messageId, deltaText));
         } else {
           void refreshMessages();
         }
@@ -906,15 +908,12 @@ export default function ChatPage() {
         const streamState = event.payload.streamState === 'cancelled' ? 'cancelled' : 'complete';
 
         if (messageId) {
-          let applied = false;
-          setMessages((current) => {
-            const next = applyStreamingComplete(current, messageId, finalText, streamState);
-            applied = next !== current;
-            return next;
-          });
-          if (!applied) {
+          if (!knownMessageIdsRef.current.has(messageId)) {
             void refreshMessages();
+            return;
           }
+
+          setMessages((current) => applyStreamingComplete(current, messageId, finalText, streamState));
         } else {
           void refreshMessages();
         }
