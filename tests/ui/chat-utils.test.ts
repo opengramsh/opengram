@@ -73,4 +73,22 @@ describe('chat utils', () => {
     expect(completed[0]?.content_partial).toBeNull();
     expect(completed[0]?.stream_state).toBe('complete');
   });
+
+  it('marks streaming message as cancelled without dropping partial text', () => {
+    const initial = [
+      {
+        id: 'm1',
+        role: 'agent' as const,
+        sender_id: 'agent-default',
+        created_at: '2026-02-18T10:00:00.000Z',
+        content_final: null,
+        content_partial: 'still here',
+        stream_state: 'streaming' as const,
+      },
+    ];
+
+    const cancelled = applyStreamingComplete(initial, 'm1', undefined, 'cancelled');
+    expect(cancelled[0]?.content_partial).toBe('still here');
+    expect(cancelled[0]?.stream_state).toBe('cancelled');
+  });
 });

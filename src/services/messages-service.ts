@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 
-import { notFoundError, validationError } from '@/src/api/http';
+import { conflictError, notFoundError, validationError } from '@/src/api/http';
 import { encodeMessageCursor, parseMessagePagination } from '@/src/api/pagination';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { createSqliteConnection } from '@/src/db/client';
@@ -27,6 +27,8 @@ type MessageRecord = {
   trace: string | null;
 };
 
+type StreamState = MessageRecord['stream_state'];
+
 type ChatMessageMetadata = {
   id: string;
   model_id: string;
@@ -46,6 +48,13 @@ type ListMessagesResult = {
   nextCursor: string | null;
   hasMore: boolean;
 };
+
+type SweepResult = {
+  cancelledMessageIds: string[];
+};
+
+const STREAM_SWEEPER_INTERVAL_MS = 30_000;
+const STREAM_SWEEPER_GLOBAL_KEY = '__opengramStreamSweeperInterval';
 
 function toTimestamp(value: number | null) {
   return value === null ? null : new Date(value).toISOString();
@@ -88,6 +97,16 @@ function withDb<T>(callback: (db: Database.Database) => T): T {
   }
 }
 
+function getMessageMetadata(db: Database.Database, messageId: string): MessageRecord {
+  const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as MessageRecord | undefined;
+
+  if (!row) {
+    throw notFoundError('Message not found.', { messageId });
+  }
+
+  return row;
+}
+
 function getChatMessageMetadata(db: Database.Database, chatId: string): ChatMessageMetadata {
   const row = db
     .prepare('SELECT id, model_id FROM chats WHERE id = ?')
@@ -98,6 +117,15 @@ function getChatMessageMetadata(db: Database.Database, chatId: string): ChatMess
   }
 
   return row;
+}
+
+function requireStreamingState(message: MessageRecord) {
+  if (message.stream_state !== 'streaming') {
+    throw conflictError('Message is not in streaming state.', {
+      messageId: message.id,
+      streamState: message.stream_state,
+    });
+  }
 }
 
 function requireRole(value: unknown): MessageRole {
@@ -274,6 +302,11 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
       senderId: serialized.sender_id,
       streamState: serialized.stream_state,
     });
+
+    if (normalized.streaming) {
+      ensureStreamingTimeoutSweeperStarted();
+    }
+
     return serialized;
   });
 }
@@ -318,4 +351,226 @@ export function listMessages(chatId: string, url: URL): ListMessagesResult {
       hasMore,
     };
   });
+}
+
+function requireDeltaText(value: unknown) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw validationError('deltaText must be a non-empty string.', { field: 'deltaText' });
+  }
+
+  return value;
+}
+
+function requireOptionalFinalText(value: unknown) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw validationError('finalText must be a string.', { field: 'finalText' });
+  }
+
+  return value;
+}
+
+export function appendStreamingChunk(messageId: string, deltaText: unknown) {
+  const normalizedDeltaText = requireDeltaText(deltaText);
+
+  return withDb((db) => {
+    const now = Date.now();
+    const tx = db.transaction(() => {
+      const message = getMessageMetadata(db, messageId);
+      requireStreamingState(message);
+
+      const nextPartial = `${message.content_partial ?? ''}${normalizedDeltaText}`;
+      db.prepare(
+        'UPDATE messages SET content_partial = ?, updated_at = ? WHERE id = ?',
+      ).run(nextPartial, now, messageId);
+
+      db.prepare(
+        'UPDATE chats SET updated_at = ? WHERE id = ?',
+      ).run(now, message.chat_id);
+
+      const updated = getMessageMetadata(db, messageId);
+      return { updated, deltaText: normalizedDeltaText };
+    });
+
+    const { updated, deltaText: emittedDeltaText } = tx();
+    const serialized = serializeMessage(updated);
+    emitEvent(
+      'message.streaming.chunk',
+      {
+        chatId: serialized.chat_id,
+        messageId: serialized.id,
+        deltaText: emittedDeltaText,
+      },
+      { ephemeral: true, timestampMs: now },
+    );
+    return serialized;
+  });
+}
+
+type CompleteStreamingInput = {
+  finalText?: unknown;
+};
+
+function completeOrCancelStreamingMessage(
+  messageId: string,
+  targetState: Extract<StreamState, 'complete' | 'cancelled'>,
+  input?: CompleteStreamingInput,
+) {
+  return withDb((db) => {
+    const now = Date.now();
+    const tx = db.transaction(() => {
+      const message = getMessageMetadata(db, messageId);
+      requireStreamingState(message);
+      const normalizedFinalText = requireOptionalFinalText(input?.finalText);
+      const resolvedFinalText = normalizedFinalText ?? message.content_partial ?? '';
+
+      if (targetState === 'complete') {
+        db.prepare(
+          [
+            'UPDATE messages',
+            'SET content_final = ?, content_partial = NULL, stream_state = ?, updated_at = ?',
+            'WHERE id = ?',
+          ].join(' '),
+        ).run(resolvedFinalText, 'complete', now, messageId);
+
+        const preview = resolvedFinalText.trim() ? resolvedFinalText.trim().slice(0, 180) : null;
+        db.prepare(
+          [
+            'UPDATE chats',
+            'SET last_message_preview = ?,',
+            'last_message_role = ?,',
+            'last_message_at = ?,',
+            'updated_at = ?',
+            'WHERE id = ?',
+          ].join(' '),
+        ).run(preview, message.role, now, now, message.chat_id);
+      } else {
+        db.prepare(
+          'UPDATE messages SET stream_state = ?, updated_at = ? WHERE id = ?',
+        ).run('cancelled', now, messageId);
+      }
+
+      return getMessageMetadata(db, messageId);
+    });
+
+    const updated = tx();
+    const serialized = serializeMessage(updated);
+    emitEvent('message.streaming.complete', {
+      chatId: serialized.chat_id,
+      messageId: serialized.id,
+      streamState: serialized.stream_state,
+      finalText: serialized.content_final,
+    }, { timestampMs: now });
+    return serialized;
+  });
+}
+
+export function completeStreamingMessage(messageId: string, input: CompleteStreamingInput = {}) {
+  return completeOrCancelStreamingMessage(messageId, 'complete', input);
+}
+
+export function cancelStreamingMessage(messageId: string) {
+  return completeOrCancelStreamingMessage(messageId, 'cancelled');
+}
+
+function autoCancelStreamingMessageIfStale(
+  db: Database.Database,
+  messageId: string,
+  now: number,
+) {
+  const updated = db.prepare(
+    [
+      'UPDATE messages',
+      'SET stream_state = ?, updated_at = ?',
+      'WHERE id = ? AND stream_state = ?',
+    ].join(' '),
+  ).run('cancelled', now, messageId, 'streaming');
+
+  if (updated.changes === 0) {
+    return null;
+  }
+
+  return getMessageMetadata(db, messageId);
+}
+
+export function sweepStaleStreamingMessages(nowMs = Date.now()): SweepResult {
+  const timeoutMs = loadOpengramConfig().server.streamTimeoutSeconds * 1_000;
+  const staleBefore = nowMs - timeoutMs;
+
+  return withDb((db) => {
+    const staleIds = db
+      .prepare(
+        [
+          'SELECT id FROM messages',
+          'WHERE stream_state = ? AND updated_at < ?',
+        ].join(' '),
+      )
+      .all('streaming', staleBefore) as { id: string }[];
+
+    const cancelled: MessageRecord[] = [];
+    const tx = db.transaction(() => {
+      for (const stale of staleIds) {
+        const updated = autoCancelStreamingMessageIfStale(db, stale.id, nowMs);
+        if (updated) {
+          cancelled.push(updated);
+        }
+      }
+    });
+    tx();
+
+    for (const message of cancelled) {
+      const serialized = serializeMessage(message);
+      emitEvent('message.streaming.complete', {
+        chatId: serialized.chat_id,
+        messageId: serialized.id,
+        streamState: serialized.stream_state,
+        finalText: serialized.content_final,
+      }, { timestampMs: nowMs });
+    }
+
+    return { cancelledMessageIds: cancelled.map((message) => message.id) };
+  });
+}
+
+export function ensureStreamingTimeoutSweeperStarted() {
+  if (process.env.NODE_ENV === 'test') {
+    return false;
+  }
+
+  const scopedGlobal = globalThis as typeof globalThis & {
+    [STREAM_SWEEPER_GLOBAL_KEY]?: ReturnType<typeof setInterval>;
+  };
+  if (scopedGlobal[STREAM_SWEEPER_GLOBAL_KEY]) {
+    return false;
+  }
+
+  const interval = setInterval(() => {
+    try {
+      sweepStaleStreamingMessages();
+    } catch {
+      // Keep the interval alive even if one sweep iteration fails.
+    }
+  }, STREAM_SWEEPER_INTERVAL_MS);
+
+  if (typeof interval.unref === 'function') {
+    interval.unref();
+  }
+
+  scopedGlobal[STREAM_SWEEPER_GLOBAL_KEY] = interval;
+  return true;
+}
+
+export function resetStreamingTimeoutSweeperForTests() {
+  const scopedGlobal = globalThis as typeof globalThis & {
+    [STREAM_SWEEPER_GLOBAL_KEY]?: ReturnType<typeof setInterval>;
+  };
+
+  const interval = scopedGlobal[STREAM_SWEEPER_GLOBAL_KEY];
+  if (interval) {
+    clearInterval(interval);
+    delete scopedGlobal[STREAM_SWEEPER_GLOBAL_KEY];
+  }
 }

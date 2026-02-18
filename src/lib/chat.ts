@@ -90,10 +90,18 @@ export function applyStreamingComplete<T extends RealtimeMessage>(
   messages: T[],
   messageId: string,
   finalText?: string,
+  streamState: 'complete' | 'cancelled' = 'complete',
 ): T[] {
   return messages.map((message) => {
     if (message.id !== messageId) {
       return message;
+    }
+
+    if (streamState === 'cancelled') {
+      return {
+        ...message,
+        stream_state: 'cancelled',
+      };
     }
 
     const contentFinal = finalText ?? message.content_partial ?? message.content_final;

@@ -877,9 +877,10 @@ export default function ChatPage() {
       if (payload?.type === 'message.streaming.complete') {
         const messageId = typeof payload.payload?.messageId === 'string' ? payload.payload.messageId : null;
         const finalText = typeof payload.payload?.finalText === 'string' ? payload.payload.finalText : undefined;
+        const streamState = payload.payload?.streamState === 'cancelled' ? 'cancelled' : 'complete';
 
         if (messageId) {
-          setMessages((current) => applyStreamingComplete(current, messageId, finalText));
+          setMessages((current) => applyStreamingComplete(current, messageId, finalText, streamState));
         } else {
           void refreshMessages();
         }

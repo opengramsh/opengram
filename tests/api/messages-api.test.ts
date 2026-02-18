@@ -7,11 +7,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { GET as chatGet } from '@/app/api/v1/chats/[chatId]/route';
 import { GET as messagesGet, POST as messagesPost } from '@/app/api/v1/chats/[chatId]/messages/route';
+import { POST as messageCancelPost } from '@/app/api/v1/messages/[messageId]/cancel/route';
+import { POST as messageChunksPost } from '@/app/api/v1/messages/[messageId]/chunks/route';
+import { POST as messageCompletePost } from '@/app/api/v1/messages/[messageId]/complete/route';
 import { POST as chatsPost } from '@/app/api/v1/chats/route';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
+import { resetEventSubscribersForTests, subscribeToEvents } from '@/src/services/events-service';
+import { resetStreamingTimeoutSweeperForTests, sweepStaleStreamingMessages } from '@/src/services/messages-service';
 
 type Context = {
   params: Promise<{ chatId: string }>;
+};
+type MessageContext = {
+  params: Promise<{ messageId: string }>;
 };
 
 const repoRoot = join(import.meta.dirname, '..', '..');
@@ -21,6 +29,10 @@ let db: Database.Database;
 
 function routeContext(chatId: string): Context {
   return { params: Promise.resolve({ chatId }) };
+}
+
+function messageRouteContext(messageId: string): MessageContext {
+  return { params: Promise.resolve({ messageId }) };
 }
 
 function createJsonRequest(url: string, method: string, body?: unknown) {
@@ -52,12 +64,16 @@ beforeEach(() => {
   db = new Database(dbPath);
   db.exec(migrationSql);
   resetWriteRateLimitForTests();
+  resetEventSubscribersForTests();
+  resetStreamingTimeoutSweeperForTests();
 });
 
 afterEach(() => {
   db.close();
   delete process.env.DATABASE_URL;
   resetWriteRateLimitForTests();
+  resetEventSubscribersForTests();
+  resetStreamingTimeoutSweeperForTests();
 });
 
 describe('messages API', () => {
@@ -257,6 +273,257 @@ describe('messages API', () => {
           chatId: 'missing',
         },
       },
+    });
+  });
+
+  it('appends streaming chunks, bumps chat updated_at, and emits ephemeral chunk events', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+    const started = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+        role: 'agent',
+        senderId: 'agent-default',
+        streaming: true,
+      }),
+      routeContext(chatId),
+    );
+    const startedMessage = await started.json();
+    const messageId = startedMessage.id as string;
+
+    const before = db
+      .prepare('SELECT updated_at FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number };
+
+    const seenEvents: Array<{ messageId: string; deltaText: string }> = [];
+    const unsubscribe = subscribeToEvents(true, (event) => {
+      if (event.type !== 'message.streaming.chunk') {
+        return;
+      }
+
+      seenEvents.push({
+        messageId: String(event.payload.messageId),
+        deltaText: String(event.payload.deltaText),
+      });
+    });
+
+    const firstChunk = await messageChunksPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+        deltaText: 'hello ',
+      }),
+      messageRouteContext(messageId),
+    );
+    const secondChunk = await messageChunksPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+        deltaText: 'world',
+      }),
+      messageRouteContext(messageId),
+    );
+    unsubscribe();
+
+    expect(firstChunk.status).toBe(200);
+    expect(secondChunk.status).toBe(200);
+    await expect(secondChunk.json()).resolves.toMatchObject({
+      id: messageId,
+      content_partial: 'hello world',
+      stream_state: 'streaming',
+    });
+
+    const row = db
+      .prepare('SELECT content_partial FROM messages WHERE id = ?')
+      .get(messageId) as { content_partial: string };
+    expect(row.content_partial).toBe('hello world');
+
+    const after = db
+      .prepare('SELECT updated_at FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number };
+    expect(after.updated_at).toBeGreaterThanOrEqual(before.updated_at);
+
+    expect(seenEvents).toEqual([
+      { messageId, deltaText: 'hello ' },
+      { messageId, deltaText: 'world' },
+    ]);
+
+    const persistedChunkCount = (
+      db.prepare('SELECT COUNT(*) as count FROM events WHERE type = ?').get('message.streaming.chunk') as { count: number }
+    ).count;
+    expect(persistedChunkCount).toBe(0);
+  });
+
+  it('completes a streaming message, updates chat timestamps, and indexes final text', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+    const started = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+        role: 'agent',
+        senderId: 'agent-default',
+        streaming: true,
+      }),
+      routeContext(chatId),
+    );
+    const startedMessage = await started.json();
+    const messageId = startedMessage.id as string;
+
+    await messageChunksPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+        deltaText: 'partial completion',
+      }),
+      messageRouteContext(messageId),
+    );
+
+    const beforeChat = db
+      .prepare('SELECT updated_at, last_message_at FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number; last_message_at: number | null };
+
+    const response = await messageCompletePost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/complete`, 'POST'),
+      messageRouteContext(messageId),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: messageId,
+      stream_state: 'complete',
+      content_final: 'partial completion',
+      content_partial: null,
+    });
+
+    const afterChat = db
+      .prepare('SELECT updated_at, last_message_at, last_message_preview FROM chats WHERE id = ?')
+      .get(chatId) as { updated_at: number; last_message_at: number; last_message_preview: string | null };
+    expect(afterChat.updated_at).toBeGreaterThanOrEqual(beforeChat.updated_at);
+    expect(afterChat.last_message_at).toBeGreaterThanOrEqual(beforeChat.last_message_at ?? 0);
+    expect(afterChat.last_message_preview).toBe('partial completion');
+
+    const fts = db
+      .prepare('SELECT content_final FROM messages_fts WHERE message_id = ?')
+      .get(messageId) as { content_final: string } | undefined;
+    expect(fts?.content_final).toBe('partial completion');
+
+    const event = db
+      .prepare('SELECT type, payload FROM events WHERE type = ? ORDER BY rowid DESC LIMIT 1')
+      .get('message.streaming.complete') as { type: string; payload: string };
+    expect(event.type).toBe('message.streaming.complete');
+    expect(JSON.parse(event.payload)).toMatchObject({
+      chatId,
+      messageId,
+      streamState: 'complete',
+      finalText: 'partial completion',
+    });
+  });
+
+  it('cancels a streaming message and emits completion event with cancelled state', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+    const started = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+        role: 'agent',
+        senderId: 'agent-default',
+        streaming: true,
+      }),
+      routeContext(chatId),
+    );
+    const startedMessage = await started.json();
+    const messageId = startedMessage.id as string;
+
+    await messageChunksPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+        deltaText: 'cancel me',
+      }),
+      messageRouteContext(messageId),
+    );
+
+    const response = await messageCancelPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/cancel`, 'POST'),
+      messageRouteContext(messageId),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      id: messageId,
+      stream_state: 'cancelled',
+      content_partial: 'cancel me',
+      content_final: null,
+    });
+
+    const event = db
+      .prepare('SELECT type, payload FROM events WHERE type = ? ORDER BY rowid DESC LIMIT 1')
+      .get('message.streaming.complete') as { type: string; payload: string };
+    expect(event.type).toBe('message.streaming.complete');
+    expect(JSON.parse(event.payload)).toMatchObject({
+      chatId,
+      messageId,
+      streamState: 'cancelled',
+      finalText: null,
+    });
+  });
+
+  it('rejects stream lifecycle operations when message is not in streaming state', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+    const created = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+        role: 'agent',
+        senderId: 'agent-default',
+        content: 'already complete',
+      }),
+      routeContext(chatId),
+    );
+    const createdMessage = await created.json();
+    const messageId = createdMessage.id as string;
+
+    const chunkResponse = await messageChunksPost(
+      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+        deltaText: 'late chunk',
+      }),
+      messageRouteContext(messageId),
+    );
+
+    expect(chunkResponse.status).toBe(409);
+    await expect(chunkResponse.json()).resolves.toEqual({
+      error: {
+        code: 'CONFLICT',
+        message: 'Message is not in streaming state.',
+        details: {
+          messageId,
+          streamState: 'complete',
+        },
+      },
+    });
+  });
+
+  it('auto-cancels stale streaming messages and emits completion events', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+    const started = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+        role: 'agent',
+        senderId: 'agent-default',
+        streaming: true,
+      }),
+      routeContext(chatId),
+    );
+    const startedMessage = await started.json();
+    const messageId = startedMessage.id as string;
+
+    const staleUpdatedAt = Date.now() - 65_000;
+    db.prepare('UPDATE messages SET updated_at = ? WHERE id = ?').run(staleUpdatedAt, messageId);
+
+    const result = sweepStaleStreamingMessages(Date.now());
+    expect(result.cancelledMessageIds).toContain(messageId);
+
+    const message = db
+      .prepare('SELECT stream_state FROM messages WHERE id = ?')
+      .get(messageId) as { stream_state: string };
+    expect(message.stream_state).toBe('cancelled');
+
+    const event = db
+      .prepare('SELECT type, payload FROM events WHERE type = ? ORDER BY rowid DESC LIMIT 1')
+      .get('message.streaming.complete') as { type: string; payload: string };
+    expect(event.type).toBe('message.streaming.complete');
+    expect(JSON.parse(event.payload)).toMatchObject({
+      chatId,
+      messageId,
+      streamState: 'cancelled',
     });
   });
 });
