@@ -28,9 +28,9 @@ sudo ./install.sh
 3. Creates `/opt/opengram/web`, `/opt/opengram/data`, `/opt/opengram/config`
 4. Runs Drizzle migrations for `/opt/opengram/data/opengram.db`
 5. Installs `opengram-web.service`
-6. Writes `/opt/opengram/config/opengram.env`
+6. Creates `/opt/opengram/config/opengram.env` (if missing)
 7. Generates default `/opt/opengram/config/opengram.config.json` (if missing)
-8. Enables and starts the service
+8. Enables service on boot and starts/restarts it for the deployed version
 
 ### Service management
 
@@ -63,16 +63,44 @@ curl -fsS http://127.0.0.1:3000/api/v1/health
 
 OpenGram is intended to run behind Tailscale. Keep OpenGram listening on local/private interfaces and expose HTTPS through your Tailnet.
 
+### Option A: MagicDNS + `tailscale cert` (spec default)
+
 1. Install and authenticate Tailscale on the host:
 
 ```bash
 sudo tailscale up
 ```
 
-2. Enable HTTPS for the host in your Tailnet (MagicDNS should be enabled).
-3. Access OpenGram using the Tailscale HTTPS URL for the machine.
+2. In the Tailscale admin console, enable **MagicDNS** for the Tailnet.
+3. Determine the host's MagicDNS name:
 
-Set `server.publicBaseUrl` in `/opt/opengram/config/opengram.config.json` to that HTTPS URL, then restart:
+```bash
+tailscale status --self --json | jq -r '.Self.DNSName'
+```
+
+4. Mint a certificate for that hostname:
+
+```bash
+sudo tailscale cert <hostname.ts.net>
+```
+
+`tailscale cert` writes a keypair in the working directory by default. Terminate TLS with that certificate using your reverse proxy, or use `tailscale serve` (below) for built-in HTTPS forwarding.
+
+5. Set `server.publicBaseUrl` in `/opt/opengram/config/opengram.config.json` to your HTTPS URL and restart OpenGram:
+
+```bash
+sudo systemctl restart opengram-web
+```
+
+### Option B: `tailscale serve` HTTPS forwarding
+
+Use Tailscale to terminate TLS and forward to local OpenGram:
+
+```bash
+sudo tailscale serve --https=443 http://127.0.0.1:3000
+```
+
+Then set `server.publicBaseUrl` to the `https://<hostname>.ts.net` URL and restart OpenGram:
 
 ```bash
 sudo systemctl restart opengram-web

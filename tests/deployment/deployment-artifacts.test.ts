@@ -13,7 +13,11 @@ describe("deployment artifacts", () => {
     expect(script).toContain('CONFIG_DIR="${INSTALL_ROOT}/config"');
     expect(script).toContain("npm run build");
     expect(script).toContain("npm run db:migrate");
-    expect(script).toContain("systemctl enable --now");
+    expect(script).toContain('if [[ -f "${ENV_FILE}" ]]; then');
+    expect(script).toContain('systemctl enable "${SERVICE_NAME}"');
+    expect(script).toContain('systemctl is-active --quiet "${SERVICE_NAME}"');
+    expect(script).toContain('systemctl restart "${SERVICE_NAME}"');
+    expect(script).toContain('systemctl start "${SERVICE_NAME}"');
     expect(script).toContain("opengram-web.service");
   });
 
@@ -40,6 +44,9 @@ describe("deployment artifacts", () => {
     const doc = readFileSync("docs/deployment.md", "utf8");
 
     expect(doc).toContain("Tailscale TLS Setup");
+    expect(doc).toContain("MagicDNS");
+    expect(doc).toContain("tailscale cert");
+    expect(doc).toContain("tailscale serve");
     expect(doc).toContain("Optional Reverse Proxy");
     expect(doc).toContain("Caddy");
     expect(doc).toContain("nginx");

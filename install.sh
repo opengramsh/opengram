@@ -114,6 +114,11 @@ ensure_default_config() {
 }
 
 write_env_file() {
+  if [[ -f "${ENV_FILE}" ]]; then
+    log "Env file exists; leaving it unchanged: ${ENV_FILE}"
+    return
+  fi
+
   cat >"${ENV_FILE}" <<EOF
 NODE_ENV=production
 HOSTNAME=0.0.0.0
@@ -140,7 +145,12 @@ install_systemd_unit() {
 
   install -m 0644 "${SERVICE_SRC}" "${SERVICE_DST}"
   systemctl daemon-reload
-  systemctl enable --now "${SERVICE_NAME}"
+  systemctl enable "${SERVICE_NAME}"
+  if systemctl is-active --quiet "${SERVICE_NAME}"; then
+    systemctl restart "${SERVICE_NAME}"
+  else
+    systemctl start "${SERVICE_NAME}"
+  fi
 }
 
 print_next_steps() {
