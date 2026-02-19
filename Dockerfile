@@ -30,9 +30,12 @@ RUN apt-get update \
 COPY --from=builder /app/.next/standalone/ /opt/opengram/web/
 COPY --from=builder /app/.next/static/ /opt/opengram/web/.next/static/
 COPY --from=builder /app/public/ /opt/opengram/web/public/
+COPY --from=builder /app/drizzle/ /opt/opengram/web/drizzle/
+COPY --from=builder /app/deploy/docker/ /opt/opengram/web/deploy/docker/
 COPY --from=builder /app/config/opengram.config.json /opt/opengram/config/opengram.config.json
 
-RUN chown -R opengram:opengram /opt/opengram
+RUN chmod +x /opt/opengram/web/deploy/docker/entrypoint.sh \
+  && chown -R opengram:opengram /opt/opengram
 
 USER opengram
 EXPOSE 3000
@@ -40,4 +43,4 @@ VOLUME ["/opt/opengram/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:3000/api/v1/health || exit 1
 
-CMD ["node", "server.js"]
+CMD ["/opt/opengram/web/deploy/docker/entrypoint.sh"]

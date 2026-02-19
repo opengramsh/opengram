@@ -129,8 +129,11 @@ The image includes:
 
 - Next.js standalone server
 - `better-sqlite3` native addon support
+- Container startup migrations before server launch
 - `VOLUME /opt/opengram/data` for SQLite DB and uploads
 - Container health check on `GET /api/v1/health`
+
+On each container boot, `deploy/docker/entrypoint.sh` runs `deploy/docker/run-migrations.js` first. It applies any pending SQL files from `drizzle/` (tracked in `__opengram_migrations`) and then starts `node server.js`.
 
 ## Optional Reverse Proxy (Non-Tailscale)
 

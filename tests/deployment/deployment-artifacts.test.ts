@@ -35,6 +35,8 @@ describe("deployment artifacts", () => {
     const dockerfile = readFileSync("Dockerfile", "utf8");
 
     expect(dockerfile).toContain(".next/standalone/");
+    expect(dockerfile).toContain("COPY --from=builder /app/deploy/docker/");
+    expect(dockerfile).toContain("entrypoint.sh");
     expect(dockerfile).toContain('VOLUME ["/opt/opengram/data"]');
     expect(dockerfile).toContain("/api/v1/health");
   });
