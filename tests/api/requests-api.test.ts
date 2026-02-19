@@ -346,6 +346,43 @@ describe('requests API', () => {
     });
   });
 
+  it('does not let pending count go negative when resolving with drifted counter state', async () => {
+    const chat = await createChat();
+    const now = Date.now();
+
+    db.prepare(
+      [
+        'INSERT INTO requests (id, chat_id, type, status, title, config, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      '777777777777777777777',
+      chat.id,
+      'text_input',
+      'pending',
+      'Need details',
+      JSON.stringify({ placeholder: 'details' }),
+      now,
+    );
+
+    const resolveResponse = await resolveRequestPost(
+      createJsonRequest('http://localhost/api/v1/requests/777777777777777777777/resolve', 'POST', {
+        text: 'all set',
+      }),
+      requestContext('777777777777777777777'),
+    );
+
+    expect(resolveResponse.status).toBe(200);
+
+    const chatAfterResponse = await chatGet(
+      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}`, 'GET'),
+      chatContext(chat.id),
+    );
+    const chatAfter = await chatAfterResponse.json();
+
+    expect(chatAfter.pending_requests_count).toBe(0);
+  });
+
   it('rejects duplicate selectedOptionIds when resolving a choice request', async () => {
     const chat = await createChat();
     const now = Date.now();

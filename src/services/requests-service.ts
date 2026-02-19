@@ -397,16 +397,27 @@ function getRequestRecord(db: Database.Database, requestId: string) {
   return record;
 }
 
-function updateChatPendingCount(db: Database.Database, chatId: string) {
-  const pendingRow = db
-    .prepare('SELECT COUNT(*) as count FROM requests WHERE chat_id = ? AND status = ?')
-    .get(chatId, 'pending') as { count: number };
+function incrementChatPendingCount(db: Database.Database, chatId: string) {
+  db.prepare(
+    [
+      'UPDATE chats',
+      'SET pending_requests_count = pending_requests_count + 1, updated_at = ?',
+      'WHERE id = ?',
+    ].join(' '),
+  ).run(Date.now(), chatId);
+}
 
-  db.prepare('UPDATE chats SET pending_requests_count = ?, updated_at = ? WHERE id = ?').run(
-    pendingRow.count,
-    Date.now(),
-    chatId,
-  );
+function decrementChatPendingCount(db: Database.Database, chatId: string) {
+  db.prepare(
+    [
+      'UPDATE chats',
+      'SET pending_requests_count = CASE',
+      'WHEN pending_requests_count > 0 THEN pending_requests_count - 1',
+      'ELSE 0',
+      'END, updated_at = ?',
+      'WHERE id = ?',
+    ].join(' '),
+  ).run(Date.now(), chatId);
 }
 
 function ensureChatExists(db: Database.Database, chatId: string) {
@@ -648,7 +659,7 @@ export function createRequest(chatId: string, input: CreateRequestInput) {
       normalized.trace === null ? null : JSON.stringify(normalized.trace),
     );
 
-    updateChatPendingCount(db, chatId);
+    incrementChatPendingCount(db, chatId);
 
     emitEvent('request.created', {
       chatId,
@@ -723,7 +734,7 @@ export function cancelRequest(requestId: string) {
     }
 
     db.prepare('UPDATE requests SET status = ? WHERE id = ?').run('cancelled', requestId);
-    updateChatPendingCount(db, current.chat_id);
+    decrementChatPendingCount(db, current.chat_id);
     const updated = getRequestRecord(db, requestId);
     const serialized = serializeRequest(updated);
 
@@ -779,7 +790,7 @@ export function resolveRequest(requestId: string, payload: unknown) {
       ].join(' '),
     ).run('resolved', now, resolvedBy, JSON.stringify(resolutionPayload), requestId);
 
-    updateChatPendingCount(db, current.chat_id);
+    decrementChatPendingCount(db, current.chat_id);
     const updated = getRequestRecord(db, requestId);
     const serialized = serializeRequest(updated);
 
