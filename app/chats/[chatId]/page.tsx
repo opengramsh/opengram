@@ -101,6 +101,47 @@ type TagSuggestion = {
 };
 
 type RequestDraftMap = Record<string, Record<string, unknown>>;
+type RequestErrorMap = Record<string, string | null>;
+
+type ChoiceVariant = 'primary' | 'secondary' | 'danger';
+
+type ChoiceRequestOption = {
+  id: string;
+  label: string;
+  variant: ChoiceVariant;
+};
+
+type ChoiceRequestConfig = {
+  options: ChoiceRequestOption[];
+  minSelections: number;
+  maxSelections: number;
+};
+
+type TextInputValidationConfig = {
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+};
+
+type TextInputRequestConfig = {
+  placeholder: string;
+  validation: TextInputValidationConfig;
+};
+
+type FormFieldType = 'text' | 'textarea' | 'select' | 'multiselect' | 'checkbox' | 'date';
+
+type FormRequestField = {
+  name: string;
+  type: FormFieldType;
+  label: string;
+  required: boolean;
+  options: string[];
+};
+
+type FormRequestConfig = {
+  fields: FormRequestField[];
+  submitLabel: string;
+};
 
 function messageText(message: Message) {
   if (message.content_final?.trim()) {
@@ -139,51 +180,135 @@ function mediaIdFromTrace(message: Message) {
   return mediaId;
 }
 
-function optionsFromRequestConfig(config: Record<string, unknown>) {
-  if (!Array.isArray(config.options)) {
-    return [];
-  }
+function parseChoiceRequestConfig(config: Record<string, unknown>): ChoiceRequestConfig {
+  const options = Array.isArray(config.options)
+    ? config.options
+        .map((option) => {
+          if (!option || typeof option !== 'object') {
+            return null;
+          }
 
-  return config.options
-    .map((option) => {
-      if (!option || typeof option !== 'object') {
-        return null;
-      }
+          const id = typeof (option as { id?: unknown }).id === 'string' ? (option as { id: string }).id.trim() : '';
+          const label = typeof (option as { label?: unknown }).label === 'string' ? (option as { label: string }).label.trim() : '';
+          if (!id || !label) {
+            return null;
+          }
 
-      const id = typeof (option as { id?: unknown }).id === 'string' ? (option as { id: string }).id : null;
-      const label = typeof (option as { label?: unknown }).label === 'string' ? (option as { label: string }).label : null;
-      if (!id || !label) {
-        return null;
-      }
+          const variantRaw = (option as { variant?: unknown }).variant;
+          const variant: ChoiceVariant = variantRaw === 'primary' || variantRaw === 'danger' ? variantRaw : 'secondary';
+          return { id, label, variant };
+        })
+        .filter((option): option is ChoiceRequestOption => option !== null)
+    : [];
 
-      return { id, label };
-    })
-    .filter((option): option is { id: string; label: string } => option !== null);
+  const maxSelectionsRaw = config.maxSelections;
+  const minSelectionsRaw = config.minSelections;
+  const maxSelections = Number.isInteger(maxSelectionsRaw) && (maxSelectionsRaw as number) >= 1
+    ? (maxSelectionsRaw as number)
+    : 1;
+  const minSelectionsCandidate = Number.isInteger(minSelectionsRaw) && (minSelectionsRaw as number) >= 0
+    ? (minSelectionsRaw as number)
+    : 0;
+  const minSelections = Math.min(minSelectionsCandidate, maxSelections);
+
+  return { options, maxSelections, minSelections };
 }
 
-function fieldsFromRequestConfig(config: Record<string, unknown>) {
-  if (!Array.isArray(config.fields)) {
-    return [];
+function parseTextInputRequestConfig(config: Record<string, unknown>): TextInputRequestConfig {
+  const placeholder = typeof config.placeholder === 'string' && config.placeholder.trim()
+    ? config.placeholder
+    : 'Type your response';
+  const validation: TextInputValidationConfig = {};
+  const validationRaw = config.validation;
+  if (validationRaw && typeof validationRaw === 'object' && !Array.isArray(validationRaw)) {
+    const minLengthRaw = (validationRaw as { minLength?: unknown }).minLength;
+    const maxLengthRaw = (validationRaw as { maxLength?: unknown }).maxLength;
+    const patternRaw = (validationRaw as { pattern?: unknown }).pattern;
+
+    if (Number.isInteger(minLengthRaw) && (minLengthRaw as number) >= 0) {
+      validation.minLength = minLengthRaw as number;
+    }
+    if (Number.isInteger(maxLengthRaw) && (maxLengthRaw as number) > 0) {
+      validation.maxLength = maxLengthRaw as number;
+    }
+    if (
+      validation.minLength !== undefined
+      && validation.maxLength !== undefined
+      && validation.minLength > validation.maxLength
+    ) {
+      validation.minLength = validation.maxLength;
+    }
+    if (typeof patternRaw === 'string') {
+      try {
+        new RegExp(patternRaw);
+        validation.pattern = patternRaw;
+      } catch {
+        // Ignore invalid regex in UI and defer to backend for final validation.
+      }
+    }
   }
 
-  return config.fields
-    .map((field) => {
-      if (!field || typeof field !== 'object') {
-        return null;
-      }
+  return { placeholder, validation };
+}
 
-      const id = typeof (field as { id?: unknown }).id === 'string' ? (field as { id: string }).id : null;
-      if (!id) {
-        return null;
-      }
+function parseFormRequestConfig(config: Record<string, unknown>): FormRequestConfig {
+  const fields = Array.isArray(config.fields)
+    ? config.fields
+        .map((field) => {
+          if (!field || typeof field !== 'object') {
+            return null;
+          }
+          const name = typeof (field as { name?: unknown }).name === 'string' ? (field as { name: string }).name.trim() : '';
+          if (!name) {
+            return null;
+          }
+          const typeRaw = (field as { type?: unknown }).type;
+          if (
+            typeRaw !== 'text'
+            && typeRaw !== 'textarea'
+            && typeRaw !== 'select'
+            && typeRaw !== 'multiselect'
+            && typeRaw !== 'checkbox'
+            && typeRaw !== 'date'
+          ) {
+            return null;
+          }
 
-      const label = typeof (field as { label?: unknown }).label === 'string' ? (field as { label: string }).label : id;
-      const inputType = (field as { inputType?: unknown }).inputType;
-      const type = inputType === 'number' || inputType === 'email' ? inputType : 'text';
+          const labelRaw = (field as { label?: unknown }).label;
+          const label = typeof labelRaw === 'string' && labelRaw.trim() ? labelRaw : name;
+          const required = (field as { required?: unknown }).required === true;
+          const optionsRaw = (field as { options?: unknown }).options;
+          const options = (typeRaw === 'select' || typeRaw === 'multiselect') && Array.isArray(optionsRaw)
+            ? optionsRaw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+            : [];
 
-      return { id, label, type };
-    })
-    .filter((field): field is { id: string; label: string; type: string } => field !== null);
+          return { name, type: typeRaw, label, required, options };
+        })
+        .filter((field): field is FormRequestField => field !== null)
+    : [];
+
+  const submitLabel = typeof config.submitLabel === 'string' && config.submitLabel.trim()
+    ? config.submitLabel
+    : 'Submit';
+
+  return { fields, submitLabel };
+}
+
+function choiceOptionClass(variant: ChoiceVariant, selected: boolean, disabled: boolean) {
+  const byVariant: Record<ChoiceVariant, string> = {
+    primary: selected
+      ? 'border-sky-200 bg-sky-400/30 text-sky-50'
+      : 'border-sky-200/50 text-sky-100 hover:bg-sky-300/10',
+    secondary: selected
+      ? 'border-amber-100 bg-amber-100/20 text-amber-50'
+      : 'border-amber-200/40 text-amber-100 hover:bg-amber-100/10',
+    danger: selected
+      ? 'border-rose-200 bg-rose-500/30 text-rose-50'
+      : 'border-rose-200/50 text-rose-100 hover:bg-rose-300/10',
+  };
+
+  const disabledClass = disabled ? 'opacity-50' : '';
+  return `rounded-lg border px-2 py-1 text-[11px] ${byVariant[variant]} ${disabledClass}`;
 }
 
 function normalizeTagInput(value: string) {
@@ -389,7 +514,8 @@ export default function ChatPage() {
   const [isLoadingTagSuggestions, setIsLoadingTagSuggestions] = useState(false);
   const [isRequestWidgetOpen, setIsRequestWidgetOpen] = useState(true);
   const [requestDrafts, setRequestDrafts] = useState<RequestDraftMap>({});
-  const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
+  const [requestErrors, setRequestErrors] = useState<RequestErrorMap>({});
+  const [resolvingRequestIds, setResolvingRequestIds] = useState<Record<string, boolean>>({});
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -811,52 +937,200 @@ export default function ChatPage() {
     [chat, patchChatSettings],
   );
 
+  const updateRequestDraft = useCallback((requestId: string, updater: (draft: Record<string, unknown>) => Record<string, unknown>) => {
+    setRequestDrafts((current) => {
+      const nextDraft = updater(current[requestId] ?? {});
+      return {
+        ...current,
+        [requestId]: nextDraft,
+      };
+    });
+    setRequestErrors((current) => ({
+      ...current,
+      [requestId]: null,
+    }));
+  }, []);
+
+  const validateRequestResolutionPayload = useCallback((request: RequestItem): {
+    payload: Record<string, unknown> | null;
+    error: string | null;
+  } => {
+    const draft = requestDrafts[request.id] ?? {};
+
+    if (request.type === 'choice') {
+      const config = parseChoiceRequestConfig(request.config);
+      const selectedIds = Array.isArray(draft.selectedOptionIds)
+        ? (draft.selectedOptionIds as unknown[]).filter((item): item is string => typeof item === 'string')
+        : [];
+      const allowedIds = new Set(config.options.map((option) => option.id));
+      const uniqueSelected = Array.from(new Set(selectedIds.filter((id) => allowedIds.has(id))));
+
+      if (uniqueSelected.length < config.minSelections) {
+        return {
+          payload: null,
+          error: config.minSelections === 1
+            ? 'Select at least 1 option.'
+            : `Select at least ${config.minSelections} options.`,
+        };
+      }
+      if (uniqueSelected.length > config.maxSelections) {
+        return {
+          payload: null,
+          error: `Select no more than ${config.maxSelections} options.`,
+        };
+      }
+
+      return { payload: { selectedOptionIds: uniqueSelected }, error: null };
+    }
+
+    if (request.type === 'text_input') {
+      const config = parseTextInputRequestConfig(request.config);
+      const text = typeof draft.text === 'string' ? draft.text.trim() : '';
+      if (!text) {
+        return { payload: null, error: 'Response cannot be empty.' };
+      }
+      if (config.validation.minLength !== undefined && text.length < config.validation.minLength) {
+        return { payload: null, error: `Response must be at least ${config.validation.minLength} characters.` };
+      }
+      if (config.validation.maxLength !== undefined && text.length > config.validation.maxLength) {
+        return { payload: null, error: `Response must be ${config.validation.maxLength} characters or fewer.` };
+      }
+      if (config.validation.pattern) {
+        const regex = new RegExp(config.validation.pattern);
+        if (!regex.test(text)) {
+          return { payload: null, error: 'Response does not match the required format.' };
+        }
+      }
+
+      return { payload: { text }, error: null };
+    }
+
+    const config = parseFormRequestConfig(request.config);
+    const draftValuesRaw = draft.values;
+    const draftValues = draftValuesRaw && typeof draftValuesRaw === 'object' && !Array.isArray(draftValuesRaw)
+      ? draftValuesRaw as Record<string, unknown>
+      : {};
+    const values: Record<string, unknown> = {};
+
+    for (const field of config.fields) {
+      const raw = draftValues[field.name];
+      if (field.type === 'checkbox') {
+        if (typeof raw === 'boolean') {
+          values[field.name] = raw;
+        }
+      } else if (field.type === 'multiselect') {
+        const selected = Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : [];
+        const normalized = selected.filter((item) => field.options.includes(item));
+        if (normalized.length > 0) {
+          values[field.name] = normalized;
+        }
+      } else {
+        const text = typeof raw === 'string' ? raw : '';
+        if (text.length > 0) {
+          values[field.name] = text;
+        }
+      }
+    }
+
+    for (const field of config.fields) {
+      if (!field.required) {
+        continue;
+      }
+      const value = values[field.name];
+      if (value === undefined) {
+        return { payload: null, error: `${field.label} is required.` };
+      }
+      if (typeof value === 'string' && !value.trim()) {
+        return { payload: null, error: `${field.label} is required.` };
+      }
+      if (Array.isArray(value) && value.length === 0) {
+        return { payload: null, error: `${field.label} is required.` };
+      }
+    }
+
+    return { payload: { values }, error: null };
+  }, [requestDrafts]);
+
   const resolvePendingRequest = useCallback(
     async (request: RequestItem) => {
-      if (resolvingRequestId) {
+      if (resolvingRequestIds[request.id]) {
         return;
       }
 
-      const draft = requestDrafts[request.id] ?? {};
-      let payload: Record<string, unknown>;
-
-      if (request.type === 'choice') {
-        const selected = Array.isArray(draft.selectedOptionIds) ? (draft.selectedOptionIds as string[]) : [];
-        payload = { selectedOptionIds: selected };
-      } else if (request.type === 'text_input') {
-        payload = { text: typeof draft.text === 'string' ? draft.text : '' };
-      } else {
-        payload = { values: typeof draft.values === 'object' && draft.values ? draft.values : {} };
+      const validation = validateRequestResolutionPayload(request);
+      if (!validation.payload) {
+        setRequestErrors((current) => ({
+          ...current,
+          [request.id]: validation.error ?? 'Invalid request response.',
+        }));
+        return;
       }
 
-      setResolvingRequestId(request.id);
+      const previousPendingRequests = pendingRequests;
+      const previousPendingCount = chat?.pending_requests_count ?? 0;
+      setRequestErrors((current) => ({ ...current, [request.id]: null }));
+      setResolvingRequestIds((current) => ({ ...current, [request.id]: true }));
+      setPendingRequests((current) => current.filter((item) => item.id !== request.id));
+      setChat((current) =>
+        current
+          ? {
+              ...current,
+              pending_requests_count: Math.max(0, current.pending_requests_count - 1),
+            }
+          : current,
+      );
+
       try {
         const response = await fetch(`/api/v1/requests/${request.id}/resolve`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(validation.payload),
         });
 
         if (!response.ok) {
           throw new Error('Failed to resolve request');
         }
 
-        setPendingRequests((current) => current.filter((item) => item.id !== request.id));
+        setRequestDrafts((current) => {
+          const next = { ...current };
+          delete next[request.id];
+          return next;
+        });
+        setRequestErrors((current) => {
+          const next = { ...current };
+          delete next[request.id];
+          return next;
+        });
+      } catch {
+        setPendingRequests((current) => {
+          if (current.some((item) => item.id === request.id)) {
+            return current;
+          }
+          return previousPendingRequests;
+        });
         setChat((current) =>
           current
             ? {
                 ...current,
-                pending_requests_count: Math.max(0, current.pending_requests_count - 1),
+                pending_requests_count: previousPendingCount,
               }
             : current,
         );
-      } catch {
+        void refreshPendingRequests().catch(() => undefined);
         setError('Failed to resolve request.');
+        setRequestErrors((current) => ({
+          ...current,
+          [request.id]: 'Failed to submit. Try again.',
+        }));
       } finally {
-        setResolvingRequestId(null);
+        setResolvingRequestIds((current) => {
+          const next = { ...current };
+          delete next[request.id];
+          return next;
+        });
       }
     },
-    [requestDrafts, resolvingRequestId],
+    [chat?.pending_requests_count, pendingRequests, refreshPendingRequests, resolvingRequestIds, validateRequestResolutionPayload],
   );
 
   const uploadVoiceNote = useCallback(
@@ -1423,40 +1697,59 @@ export default function ChatPage() {
               <div className="space-y-2 pt-2">
                 {pendingRequests.map((request) => {
                   const draft = requestDrafts[request.id] ?? {};
-                  const options = optionsFromRequestConfig(request.config);
-                  const fields = fieldsFromRequestConfig(request.config);
+                  const requestError = requestErrors[request.id];
+                  const isResolving = Boolean(resolvingRequestIds[request.id]);
+                  const choiceConfig = request.type === 'choice' ? parseChoiceRequestConfig(request.config) : null;
+                  const textConfig = request.type === 'text_input' ? parseTextInputRequestConfig(request.config) : null;
+                  const formConfig = request.type === 'form' ? parseFormRequestConfig(request.config) : null;
 
                   return (
                     <div key={request.id} className="rounded-xl border border-amber-200/30 bg-amber-950/30 p-2">
                       <p className="text-xs font-semibold text-amber-50">{request.title}</p>
                       {request.body && <p className="pt-1 text-xs text-amber-100/90">{request.body}</p>}
 
-                      {request.type === 'choice' && (
+                      {request.type === 'choice' && choiceConfig && (
                         <div className="pt-2">
                           <div className="flex flex-wrap gap-1">
-                            {options.map((option) => {
+                            {choiceConfig.options.map((option) => {
+                              const selectedIds = Array.isArray(draft.selectedOptionIds)
+                                ? (draft.selectedOptionIds as unknown[]).filter((item): item is string => typeof item === 'string')
+                                : [];
                               const selected = Array.isArray(draft.selectedOptionIds)
-                                ? (draft.selectedOptionIds as string[]).includes(option.id)
+                                ? selectedIds.includes(option.id)
                                 : false;
+                              const isSingleSelect = choiceConfig.maxSelections === 1;
+                              const canAddMore = selectedIds.length < choiceConfig.maxSelections;
+                              const disabled = !selected && !isSingleSelect && !canAddMore;
 
                               return (
                                 <button
                                   key={option.id}
                                   type="button"
-                                  className={`rounded-lg border px-2 py-1 text-[11px] ${selected ? 'border-amber-100 bg-amber-100/20 text-amber-50' : 'border-amber-200/40 text-amber-100'}`}
+                                  className={choiceOptionClass(option.variant, selected, disabled)}
+                                  disabled={disabled || isResolving}
                                   onClick={() => {
-                                    setRequestDrafts((current) => {
-                                      const prev = current[request.id] ?? {};
+                                    updateRequestDraft(request.id, (prev) => {
                                       const prevIds = Array.isArray(prev.selectedOptionIds)
-                                        ? (prev.selectedOptionIds as string[])
+                                        ? (prev.selectedOptionIds as unknown[]).filter((item): item is string => typeof item === 'string')
                                         : [];
-                                      const nextIds = prevIds.includes(option.id)
-                                        ? prevIds.filter((id) => id !== option.id)
-                                        : [...prevIds, option.id];
+                                      let nextIds = prevIds;
+                                      if (choiceConfig.maxSelections === 1) {
+                                        if (prevIds.includes(option.id) && choiceConfig.minSelections === 0) {
+                                          nextIds = [];
+                                        } else {
+                                          nextIds = [option.id];
+                                        }
+                                      } else if (prevIds.includes(option.id)) {
+                                        const tentative = prevIds.filter((id) => id !== option.id);
+                                        nextIds = tentative.length < choiceConfig.minSelections ? prevIds : tentative;
+                                      } else if (prevIds.length < choiceConfig.maxSelections) {
+                                        nextIds = [...prevIds, option.id];
+                                      }
 
                                       return {
-                                        ...current,
-                                        [request.id]: { ...prev, selectedOptionIds: nextIds },
+                                        ...prev,
+                                        selectedOptionIds: nextIds,
                                       };
                                     });
                                   }}
@@ -1469,65 +1762,193 @@ export default function ChatPage() {
                         </div>
                       )}
 
-                      {request.type === 'text_input' && (
+                      {request.type === 'text_input' && textConfig && (
                         <div className="pt-2">
                           <input
                             value={typeof draft.text === 'string' ? draft.text : ''}
                             onChange={(event) => {
                               const value = event.target.value;
-                              setRequestDrafts((current) => ({
-                                ...current,
-                                [request.id]: { ...(current[request.id] ?? {}), text: value },
-                              }));
+                              updateRequestDraft(request.id, (prev) => ({ ...prev, text: value }));
                             }}
-                            placeholder="Type your response"
+                            placeholder={textConfig.placeholder}
+                            minLength={textConfig.validation.minLength}
+                            maxLength={textConfig.validation.maxLength}
+                            pattern={textConfig.validation.pattern}
                             className="h-8 w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 text-xs text-amber-50 outline-none"
+                            disabled={isResolving}
                           />
                         </div>
                       )}
 
-                      {request.type === 'form' && (
+                      {request.type === 'form' && formConfig && (
                         <div className="space-y-1 pt-2">
-                          {fields.map((field) => (
-                            <input
-                              key={field.id}
-                              value={
-                                typeof (draft.values as Record<string, unknown> | undefined)?.[field.id] === 'string'
-                                  ? ((draft.values as Record<string, unknown>)[field.id] as string)
-                                  : ''
-                              }
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setRequestDrafts((current) => {
-                                  const prev = current[request.id] ?? {};
-                                  const prevValues = typeof prev.values === 'object' && prev.values
-                                    ? (prev.values as Record<string, unknown>)
-                                    : {};
-                                  return {
-                                    ...current,
-                                    [request.id]: {
-                                      ...prev,
-                                      values: { ...prevValues, [field.id]: value },
-                                    },
-                                  };
-                                });
-                              }}
-                              placeholder={field.label}
-                              type={field.type}
-                              className="h-8 w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 text-xs text-amber-50 outline-none"
-                            />
-                          ))}
+                          {formConfig.fields.map((field) => {
+                            const values = typeof draft.values === 'object' && draft.values && !Array.isArray(draft.values)
+                              ? draft.values as Record<string, unknown>
+                              : {};
+                            const fieldValue = values[field.name];
+
+                            if (field.type === 'checkbox') {
+                              return (
+                                <label key={field.name} className="flex items-center gap-2 text-xs text-amber-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={fieldValue === true}
+                                    onChange={(event) => {
+                                      updateRequestDraft(request.id, (prev) => {
+                                        const prevValues = typeof prev.values === 'object' && prev.values && !Array.isArray(prev.values)
+                                          ? prev.values as Record<string, unknown>
+                                          : {};
+                                        return {
+                                          ...prev,
+                                          values: { ...prevValues, [field.name]: event.target.checked },
+                                        };
+                                      });
+                                    }}
+                                    disabled={isResolving}
+                                  />
+                                  {field.label}
+                                </label>
+                              );
+                            }
+
+                            if (field.type === 'textarea') {
+                              return (
+                                <label key={field.name} className="block">
+                                  <span className="mb-1 block text-[11px] text-amber-100">
+                                    {field.label}
+                                    {field.required ? ' *' : ''}
+                                  </span>
+                                  <textarea
+                                    value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      updateRequestDraft(request.id, (prev) => {
+                                        const prevValues = typeof prev.values === 'object' && prev.values && !Array.isArray(prev.values)
+                                          ? prev.values as Record<string, unknown>
+                                          : {};
+                                        return {
+                                          ...prev,
+                                          values: { ...prevValues, [field.name]: value },
+                                        };
+                                      });
+                                    }}
+                                    rows={3}
+                                    className="w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-50 outline-none"
+                                    disabled={isResolving}
+                                  />
+                                </label>
+                              );
+                            }
+
+                            if (field.type === 'select') {
+                              return (
+                                <label key={field.name} className="block">
+                                  <span className="mb-1 block text-[11px] text-amber-100">
+                                    {field.label}
+                                    {field.required ? ' *' : ''}
+                                  </span>
+                                  <select
+                                    value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      updateRequestDraft(request.id, (prev) => {
+                                        const prevValues = typeof prev.values === 'object' && prev.values && !Array.isArray(prev.values)
+                                          ? prev.values as Record<string, unknown>
+                                          : {};
+                                        return {
+                                          ...prev,
+                                          values: { ...prevValues, [field.name]: value },
+                                        };
+                                      });
+                                    }}
+                                    className="h-8 w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 text-xs text-amber-50 outline-none"
+                                    disabled={isResolving}
+                                  >
+                                    <option value="">Select an option</option>
+                                    {field.options.map((option) => (
+                                      <option key={option} value={option}>{option}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              );
+                            }
+
+                            if (field.type === 'multiselect') {
+                              const selected = Array.isArray(fieldValue)
+                                ? fieldValue.filter((item): item is string => typeof item === 'string')
+                                : [];
+                              return (
+                                <label key={field.name} className="block">
+                                  <span className="mb-1 block text-[11px] text-amber-100">
+                                    {field.label}
+                                    {field.required ? ' *' : ''}
+                                  </span>
+                                  <select
+                                    multiple
+                                    value={selected}
+                                    onChange={(event) => {
+                                      const next = Array.from(event.currentTarget.selectedOptions).map((item) => item.value);
+                                      updateRequestDraft(request.id, (prev) => {
+                                        const prevValues = typeof prev.values === 'object' && prev.values && !Array.isArray(prev.values)
+                                          ? prev.values as Record<string, unknown>
+                                          : {};
+                                        return {
+                                          ...prev,
+                                          values: { ...prevValues, [field.name]: next },
+                                        };
+                                      });
+                                    }}
+                                    className="w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-50 outline-none"
+                                    disabled={isResolving}
+                                  >
+                                    {field.options.map((option) => (
+                                      <option key={option} value={option}>{option}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              );
+                            }
+
+                            return (
+                              <label key={field.name} className="block">
+                                <span className="mb-1 block text-[11px] text-amber-100">
+                                  {field.label}
+                                  {field.required ? ' *' : ''}
+                                </span>
+                                <input
+                                  value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                  onChange={(event) => {
+                                    const value = event.target.value;
+                                    updateRequestDraft(request.id, (prev) => {
+                                      const prevValues = typeof prev.values === 'object' && prev.values && !Array.isArray(prev.values)
+                                        ? prev.values as Record<string, unknown>
+                                        : {};
+                                      return {
+                                        ...prev,
+                                        values: { ...prevValues, [field.name]: value },
+                                      };
+                                    });
+                                  }}
+                                  type={field.type === 'date' ? 'date' : 'text'}
+                                  className="h-8 w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 text-xs text-amber-50 outline-none"
+                                  disabled={isResolving}
+                                />
+                              </label>
+                            );
+                          })}
                         </div>
                       )}
 
+                      {requestError && <p className="pt-2 text-[11px] text-rose-200">{requestError}</p>}
                       <div className="pt-2">
                         <button
                           type="button"
                           className="rounded-lg border border-amber-200/50 px-2 py-1 text-[11px] text-amber-50 disabled:opacity-60"
                           onClick={() => void resolvePendingRequest(request)}
-                          disabled={resolvingRequestId === request.id}
+                          disabled={isResolving}
                         >
-                          {resolvingRequestId === request.id ? 'Submitting...' : 'Submit'}
+                          {isResolving ? 'Submitting...' : request.type === 'form' && formConfig ? formConfig.submitLabel : 'Submit'}
                         </button>
                       </div>
                     </div>

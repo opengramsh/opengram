@@ -255,6 +255,16 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
     ) : chat.unread_count === 1 ? (
       <span className="h-2.5 w-2.5 rounded-full bg-primary" />
     ) : null;
+  const pendingBadge = chat.pending_requests_count > 0
+    ? (
+      <span
+        aria-label={`${chat.pending_requests_count} pending requests`}
+        className="rounded-full border border-amber-200/60 bg-amber-400/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100"
+      >
+        {chat.pending_requests_count}
+      </span>
+    )
+    : null;
 
   return (
     <div className="relative mx-2 mb-2 overflow-hidden rounded-2xl">
@@ -299,7 +309,10 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
             <p className="truncate text-xs text-muted-foreground">
               {chat.last_message_preview?.trim() || 'No messages yet'}
             </p>
-            {unreadBadge}
+            <div className="flex items-center gap-1.5">
+              {pendingBadge}
+              {unreadBadge}
+            </div>
           </div>
         </div>
       </div>
