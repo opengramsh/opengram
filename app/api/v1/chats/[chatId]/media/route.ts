@@ -9,7 +9,7 @@ import {
   toErrorResponse,
   validationError,
 } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { createMedia, listChatMedia } from '@/src/services/media-service';
 
 type MediaKind = 'image' | 'audio' | 'file';
@@ -114,7 +114,7 @@ export async function GET(request: Request, context: RouteContext) {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const chatId = await resolveChatId(context);
     const config = loadOpengramConfig();
 

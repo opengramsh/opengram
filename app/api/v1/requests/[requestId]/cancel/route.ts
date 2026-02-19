@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { toErrorResponse } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { cancelRequest } from '@/src/services/requests-service';
 
 type RouteContext = {
@@ -15,7 +15,7 @@ async function resolveRequestId(context: RouteContext) {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const requestId = await resolveRequestId(context);
     const cancelled = cancelRequest(requestId);
     return NextResponse.json(cancelled);

@@ -39,6 +39,28 @@ function createJsonRequest(url: string, method: string, body?: unknown) {
   });
 }
 
+function createJsonRequestWithHeaders(
+  url: string,
+  method: string,
+  body: unknown | undefined,
+  headers: Record<string, string>,
+) {
+  return new Request(url, {
+    method,
+    headers: {
+      'content-type': 'application/json',
+      ...headers,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function setInstanceSecretConfig(secret: string) {
   setConfigOverrides({
     security: {
@@ -647,16 +669,21 @@ describe('chats API', () => {
     expect(authorized.status).toBe(201);
   });
 
-  it('rate limits write endpoints and returns retry-after header', async () => {
-    process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '5';
+  it('rate limits write endpoints per IP and returns retry-after header', async () => {
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '2';
     process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
     const created = await createChat({ title: 'rate-limit-target' });
     const chatId = created.json.id as string;
 
     let rateLimitedResponse: Response | null = null;
-    for (let i = 0; i < 20; i += 1) {
+    for (let i = 0; i < 3; i += 1) {
       const response = await archivePost(
-        createJsonRequest(`http://localhost/api/v1/chats/${chatId}/archive`, 'POST'),
+        createJsonRequestWithHeaders(
+          `http://localhost/api/v1/chats/${chatId}/archive`,
+          'POST',
+          {},
+          { 'x-forwarded-for': '192.168.0.1' },
+        ),
         routeContext(chatId),
       );
       if (response.status === 429) {
@@ -666,9 +693,77 @@ describe('chats API', () => {
     }
 
     expect(rateLimitedResponse).not.toBeNull();
-    expect(rateLimitedResponse?.headers.get('Retry-After')).toBeTypeOf('string');
+    expect(Number(rateLimitedResponse?.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
     const body = await rateLimitedResponse!.json();
     expect(body.error.code).toBe('RATE_LIMITED');
+
+    const differentIpResponse = await archivePost(
+      createJsonRequestWithHeaders(
+        `http://localhost/api/v1/chats/${chatId}/archive`,
+        'POST',
+        {},
+        { 'x-forwarded-for': '192.168.0.2' },
+      ),
+      routeContext(chatId),
+    );
+    expect(differentIpResponse.status).toBe(200);
+  });
+
+  it('resets write rate limit after the configured window elapses', async () => {
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '1';
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '50';
+    const created = await createChat({ title: 'window-rollover-target' });
+    const chatId = created.json.id as string;
+
+    const first = await archivePost(
+      createJsonRequestWithHeaders(
+        `http://localhost/api/v1/chats/${chatId}/archive`,
+        'POST',
+        {},
+        { 'x-forwarded-for': '198.51.100.10' },
+      ),
+      routeContext(chatId),
+    );
+    expect(first.status).toBe(200);
+
+    const limited = await archivePost(
+      createJsonRequestWithHeaders(
+        `http://localhost/api/v1/chats/${chatId}/archive`,
+        'POST',
+        {},
+        { 'x-forwarded-for': '198.51.100.10' },
+      ),
+      routeContext(chatId),
+    );
+    expect(limited.status).toBe(429);
+
+    await sleep(80);
+
+    const afterWindow = await archivePost(
+      createJsonRequestWithHeaders(
+        `http://localhost/api/v1/chats/${chatId}/archive`,
+        'POST',
+        {},
+        { 'x-forwarded-for': '198.51.100.10' },
+      ),
+      routeContext(chatId),
+    );
+    expect(afterWindow.status).toBe(200);
+  });
+
+  it('does not apply write rate limits to read endpoints', async () => {
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '1';
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
+
+    for (let i = 0; i < 5; i += 1) {
+      const response = await chatsGet(
+        createJsonRequestWithHeaders('http://localhost/api/v1/chats?limit=2', 'GET', undefined, {
+          'x-forwarded-for': '203.0.113.25',
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Retry-After')).toBeNull();
+    }
   });
 
   it('returns not found envelope for unknown chat', async () => {

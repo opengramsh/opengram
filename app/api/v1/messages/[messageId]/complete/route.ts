@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { toErrorResponse, validationError } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { completeStreamingMessage, ensureStreamingTimeoutSweeperStarted } from '@/src/services/messages-service';
 
 type CompleteRequest = {
@@ -19,7 +19,7 @@ async function resolveMessageId(context: RouteContext) {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     ensureStreamingTimeoutSweeperStarted();
     const messageId = await resolveMessageId(context);
     const raw = await request.text();

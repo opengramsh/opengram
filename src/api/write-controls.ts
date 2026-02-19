@@ -4,6 +4,8 @@ import { rateLimitedError, unauthorizedError } from '@/src/api/http';
 
 const RATE_LIMIT_MAX_REQUESTS = 100;
 const RATE_LIMIT_WINDOW_MS = 1_000;
+const RATE_LIMIT_SWEEP_INTERVAL_MS = 10_000;
+const UNKNOWN_CLIENT_IP = 'unknown';
 
 type RateLimitBucket = {
   windowStartedAt: number;
@@ -11,17 +13,70 @@ type RateLimitBucket = {
 };
 
 const writeRateBuckets = new Map<string, RateLimitBucket>();
+let lastSweepAt = 0;
 
-function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  if (!forwardedFor) {
-    return 'local';
+type WriteRateLimitConfig = {
+  maxRequests: number;
+  windowMs: number;
+};
+
+export type WriteMiddleware = (request: Request) => void;
+
+function normalizeIp(value: string | null): string | null {
+  if (!value) {
+    return null;
   }
 
-  return forwardedFor.split(',')[0]?.trim() || 'local';
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'unknown') {
+    return null;
+  }
+
+  return trimmed;
 }
 
-function requireWriteAuth(request: Request) {
+function parseForwardedFor(forwardedFor: string | null): string | null {
+  if (!forwardedFor) {
+    return null;
+  }
+
+  const first = forwardedFor.split(',')[0];
+  return normalizeIp(first ?? null);
+}
+
+function getClientIp(request: Request) {
+  return (
+    parseForwardedFor(request.headers.get('x-forwarded-for'))
+    ?? normalizeIp(request.headers.get('x-real-ip'))
+    ?? normalizeIp(request.headers.get('cf-connecting-ip'))
+    ?? UNKNOWN_CLIENT_IP
+  );
+}
+
+function resolveRateLimitConfig(): WriteRateLimitConfig {
+  const envMax = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX);
+  const envWindowMs = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS);
+  const maxRequests = Number.isFinite(envMax) && envMax > 0 ? Math.floor(envMax) : RATE_LIMIT_MAX_REQUESTS;
+  const windowMs = Number.isFinite(envWindowMs) && envWindowMs > 0 ? Math.floor(envWindowMs) : RATE_LIMIT_WINDOW_MS;
+  return { maxRequests, windowMs };
+}
+
+function sweepExpiredBuckets(now: number, windowMs: number) {
+  if (now - lastSweepAt < RATE_LIMIT_SWEEP_INTERVAL_MS) {
+    return;
+  }
+
+  const staleAfter = now - windowMs;
+  for (const [key, bucket] of writeRateBuckets.entries()) {
+    if (bucket.windowStartedAt < staleAfter) {
+      writeRateBuckets.delete(key);
+    }
+  }
+
+  lastSweepAt = now;
+}
+
+export function requireWriteAuth(request: Request) {
   const config = loadOpengramConfig();
   if (!config.security.instanceSecretEnabled) {
     return;
@@ -34,17 +89,11 @@ function requireWriteAuth(request: Request) {
   }
 }
 
-function enforceWriteRateLimit(request: Request) {
-  const configuredMax = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX ?? RATE_LIMIT_MAX_REQUESTS);
-  const configuredWindowMs = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS ?? RATE_LIMIT_WINDOW_MS);
-  const maxRequests = Number.isFinite(configuredMax) && configuredMax > 0
-    ? Math.floor(configuredMax)
-    : RATE_LIMIT_MAX_REQUESTS;
-  const windowMs = Number.isFinite(configuredWindowMs) && configuredWindowMs > 0
-    ? Math.floor(configuredWindowMs)
-    : RATE_LIMIT_WINDOW_MS;
-
+export function enforceWriteRateLimit(request: Request) {
+  const { maxRequests, windowMs } = resolveRateLimitConfig();
   const now = Date.now();
+  sweepExpiredBuckets(now, windowMs);
+
   const ip = getClientIp(request);
   const existing = writeRateBuckets.get(ip);
 
@@ -67,11 +116,20 @@ function enforceWriteRateLimit(request: Request) {
   existing.count += 1;
 }
 
+export function applyWriteMiddlewares(
+  request: Request,
+  middlewares: WriteMiddleware[] = [requireWriteAuth, enforceWriteRateLimit],
+) {
+  for (const middleware of middlewares) {
+    middleware(request);
+  }
+}
+
 export function enforceWriteGuards(request: Request) {
-  requireWriteAuth(request);
-  enforceWriteRateLimit(request);
+  applyWriteMiddlewares(request);
 }
 
 export function resetWriteRateLimitForTests() {
   writeRateBuckets.clear();
+  lastSweepAt = 0;
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { toErrorResponse } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { deleteMedia, getMedia } from '@/src/services/media-service';
 
 type RouteContext = {
@@ -25,7 +25,7 @@ export async function GET(_: Request, context: RouteContext) {
 
 export async function DELETE(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const mediaId = await resolveMediaId(context);
     const deleted = deleteMedia(mediaId, { requireUnattached: true });
     return NextResponse.json(deleted);

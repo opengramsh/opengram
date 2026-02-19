@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { parseJsonBody, toErrorResponse } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { sendTestPushNotification } from '@/src/services/push-service';
 
 type TestPushBody = {
@@ -13,7 +13,7 @@ type TestPushBody = {
 
 export async function POST(request: Request) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const body = await parseJsonBody<TestPushBody>(request);
     const result = await sendTestPushNotification(body);
     return NextResponse.json({ ok: true, ...result });

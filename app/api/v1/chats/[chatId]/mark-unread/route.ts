@@ -1,5 +1,5 @@
 import { successOk, toErrorResponse } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { markChatUnread } from '@/src/services/chats-service';
 
 type RouteContext = {
@@ -8,7 +8,7 @@ type RouteContext = {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const { chatId } = await context.params;
     markChatUnread(chatId);
     return successOk();

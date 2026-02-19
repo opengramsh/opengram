@@ -3,7 +3,7 @@ import {
   executeWithIdempotency,
   getIdempotencyKey,
 } from '@/src/api/idempotency';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { createChat, listChats } from '@/src/services/chats-service';
 
 type CreateChatRequest = {
@@ -17,7 +17,7 @@ type CreateChatRequest = {
 
 export async function POST(request: Request) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const body = await parseJsonBody<CreateChatRequest>(request);
     const idempotencyKey = getIdempotencyKey(request);
     return await executeWithIdempotency(idempotencyKey, body, 201, () => createChat(body));

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { parseJsonBody, toErrorResponse } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { updateRequest } from '@/src/services/requests-service';
 
 type RouteContext = {
@@ -22,7 +22,7 @@ async function resolveRequestId(context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const requestId = await resolveRequestId(context);
     const body = await parseJsonBody<UpdateRequestBody>(request);
     const updated = updateRequest(requestId, body);

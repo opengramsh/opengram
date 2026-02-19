@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { parseJsonBody, successCollection, toErrorResponse } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { createMessage, listMessages } from '@/src/services/messages-service';
 
 type CreateMessageRequest = {
@@ -24,7 +24,7 @@ async function resolveChatId(context: RouteContext) {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const chatId = await resolveChatId(context);
     const body = await parseJsonBody<CreateMessageRequest>(request);
     const message = createMessage(chatId, body);

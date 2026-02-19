@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { executeWithIdempotency, getIdempotencyKey } from '@/src/api/idempotency';
 import { parseJsonBody, toErrorResponse, validationError } from '@/src/api/http';
-import { enforceWriteGuards } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { createRequest, listChatRequests } from '@/src/services/requests-service';
 
 type RouteContext = {
@@ -43,7 +43,7 @@ type CreateRequestBody = {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    enforceWriteGuards(request);
+    applyWriteMiddlewares(request);
     const chatId = await resolveChatId(context);
     const body = await parseJsonBody<CreateRequestBody>(request);
     const idempotencyKey = getIdempotencyKey(request);
