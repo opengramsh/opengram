@@ -46,3 +46,28 @@ export type ListChatsResponse = {
     hasMore: boolean;
   };
 };
+
+import type { TSchema } from "@sinclair/typebox";
+
+export type TextContent = { type: "text"; text: string };
+
+export type AgentToolResult<T = unknown> = {
+  content: TextContent[];
+  details: T;
+};
+
+/**
+ * Matches the real AgentTool interface from @mariozechner/pi-agent-core.
+ * Channel-scoped tools returned by ChannelPlugin.agentTools must conform to this.
+ */
+export type AgentTool = {
+  name: string;
+  label: string;
+  description: string;
+  parameters: TSchema;
+  execute: (
+    toolCallId: string,
+    params: any,
+    signal?: AbortSignal,
+  ) => Promise<AgentToolResult>;
+};

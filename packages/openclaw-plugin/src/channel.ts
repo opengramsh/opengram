@@ -1,10 +1,20 @@
-import type { ChannelPlugin } from "openclaw/plugin-sdk";
+import type { ChannelPlugin, OpenClawConfig } from "openclaw/plugin-sdk";
 import { buildChannelConfigSchema } from "openclaw/plugin-sdk";
 
 import { OpenGramClient } from "./api-client.js";
-import { initializeChatManager } from "./chat-manager.js";
+import { getActiveChatIds, initializeChatManager } from "./chat-manager.js";
 import { OpenGramConfigSchema, resolveOpenGramAccount, type ResolvedOpenGramAccount } from "./config.js";
+import { startInboundListener } from "./inbound.js";
 import { sendMedia, sendText } from "./outbound.js";
+import { opengramChatTool } from "./tools/opengram-chat.js";
+import { opengramMediaTool } from "./tools/opengram-media.js";
+import { opengramRequestTool } from "./tools/opengram-request.js";
+import { opengramSearchTool } from "./tools/opengram-search.js";
+
+/** Access the opengram config section from the raw config. */
+function getOpenGramSection(cfg: OpenClawConfig | undefined | null): Record<string, any> | undefined {
+  return (cfg?.channels as Record<string, any> | undefined)?.opengram;
+}
 
 export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
   id: "opengram",
@@ -29,8 +39,8 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
   reload: { configPrefixes: ["channels.opengram"] },
   configSchema: buildChannelConfigSchema(OpenGramConfigSchema),
   config: {
-    listAccountIds: (cfg) => (cfg.channels?.opengram?.enabled !== false ? ["default"] : []),
-    resolveAccount: (cfg, accountId) => resolveOpenGramAccount(cfg, accountId ?? "default"),
+    listAccountIds: (cfg) => (getOpenGramSection(cfg)?.enabled !== false ? ["default"] : []),
+    resolveAccount: (cfg, accountId) => resolveOpenGramAccount(cfg as any, accountId ?? "default"),
     defaultAccountId: () => "default",
     isConfigured: (account) => Boolean(account.config.baseUrl?.trim()),
     describeAccount: (account) => ({
@@ -55,6 +65,24 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
       looksLikeId: (raw) => /^[a-zA-Z0-9_-]{10,30}$/.test(raw),
       hint: "<chatId>",
     },
+  },
+  agentTools: ({ cfg }) => {
+    if (!getOpenGramSection(cfg!)?.enabled) return [];
+    return [opengramRequestTool, opengramChatTool, opengramMediaTool, opengramSearchTool];
+  },
+  agentPrompt: {
+    messageToolHints: ({ cfg }) => {
+      if (!getOpenGramSection(cfg!)?.enabled) return [];
+      return [
+        "This conversation is via OpenGram. You can create structured Requests " +
+          "(choice/text_input/form) using the opengram_request tool instead of asking " +
+          "questions in plain text. Requests appear as tappable UI widgets in the mobile app. " +
+          "When using OpenGram tools, pass the chatId from the current conversation context.",
+      ];
+    },
+  },
+  streaming: {
+    blockStreamingCoalesceDefaults: { minChars: 200, idleMs: 300 },
   },
   outbound: {
     deliveryMode: "direct",
@@ -93,12 +121,50 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
       probe,
     }),
   },
+  heartbeat: {
+    checkReady: async ({ cfg }) => {
+      try {
+        const section = getOpenGramSection(cfg);
+        if (!section?.baseUrl) return { ok: false, reason: "OpenGram not configured" };
+        const client = new OpenGramClient(section.baseUrl, section.instanceSecret);
+        await client.health();
+        return { ok: true, reason: "OpenGram reachable" };
+      } catch {
+        return { ok: false, reason: "OpenGram unreachable" };
+      }
+    },
+    resolveRecipients: () => ({
+      recipients: [...getActiveChatIds()],
+      source: "opengram",
+    }),
+  },
   gateway: {
-    start: async ({ cfg, account, logger }) => {
-      const client = new OpenGramClient(account.config.baseUrl, account.config.instanceSecret);
+    startAccount: async (ctx) => {
+      const { cfg, account, abortSignal, log } = ctx;
+      const config = account.config;
+      const client = new OpenGramClient(config.baseUrl, config.instanceSecret);
+      const logger = log ?? { info: () => {}, warn: () => {}, error: () => {} };
+
+      try {
+        const health = await client.health();
+        logger.info?.(`[opengram] Connected to OpenGram v${health.version} at ${config.baseUrl}`);
+      } catch (err) {
+        logger.warn?.(`[opengram] OpenGram not reachable at ${config.baseUrl}: ${err}`);
+      }
+
       await initializeChatManager(client, cfg);
-      logger.info("OpenGram plugin gateway initialized");
-      return { stop: async () => void 0 };
+
+      const lifecycle = startInboundListener({
+        client,
+        cfg,
+        abortSignal,
+        log: logger,
+        reconnectDelayMs: config.reconnectDelayMs,
+      });
+
+      logger.info?.("[opengram] Inbound SSE listener started");
+
+      return lifecycle;
     },
   },
 };

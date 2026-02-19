@@ -1,5 +1,5 @@
 import { OpenGramClient } from "./api-client.js";
-import type { OpenClawConfig } from "./types.js";
+import type { OpenClawConfig } from "openclaw/plugin-sdk";
 
 let clientRef: OpenGramClient | null = null;
 let configRef: OpenClawConfig | null = null;
@@ -28,6 +28,13 @@ export function getOpenGramClient(): OpenGramClient {
   return clientRef;
 }
 
+export function getConfig(): OpenClawConfig {
+  if (!configRef) {
+    throw new Error("Config not initialized");
+  }
+  return configRef;
+}
+
 export async function resolveAgentForChat(chatId: string, cfg?: OpenClawConfig): Promise<string> {
   const cached = chatAgentCache.get(chatId);
   if (cached) {
@@ -47,7 +54,7 @@ export async function resolveAgentForChat(chatId: string, cfg?: OpenClawConfig):
   }
 
   const resolvedCfg = cfg ?? configRef;
-  const agents = resolvedCfg?.channels?.opengram?.agents;
+  const agents = (resolvedCfg?.channels as Record<string, any> | undefined)?.opengram?.agents;
   return agents?.[0] ?? "unknown";
 }
 

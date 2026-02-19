@@ -1,0 +1,8 @@
+test/
+src/
+*.ts
+!dist/**/*.d.ts
+tsconfig.json
+.gitignore
+node_modules/
+openclaw.plugin.json

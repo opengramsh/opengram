@@ -1,0 +1,323 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { OpenGramClient } from "../src/api-client.js";
+import {
+  cancelStream,
+  clearActiveStreamsForTests,
+  finalizeStream,
+  handleBlockReply,
+  hasActiveStream,
+} from "../src/streaming.js";
+
+function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
+  return {
+    createMessage: vi.fn().mockResolvedValue({ id: "msg-stream-1" }),
+    sendChunk: vi.fn().mockResolvedValue(undefined),
+    completeMessage: vi.fn().mockResolvedValue(undefined),
+    cancelMessage: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as OpenGramClient;
+}
+
+describe("streaming", () => {
+  beforeEach(() => {
+    clearActiveStreamsForTests();
+  });
+
+  afterEach(() => {
+    clearActiveStreamsForTests();
+  });
+
+  describe("handleBlockReply", () => {
+    it("creates a streaming message on first block reply", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+
+      expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
+        role: "agent",
+        senderId: "grami",
+        streaming: true,
+      });
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-stream-1", "Hello");
+      expect(hasActiveStream("dispatch-1")).toBe(true);
+    });
+
+    it("sends only the delta on subsequent block replies", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello world" });
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", {
+        text: "Hello world, how are you?",
+      });
+
+      // createMessage should only be called once (first block)
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
+
+      // sendChunk called three times with deltas
+      expect(client.sendChunk).toHaveBeenCalledTimes(3);
+      expect(client.sendChunk).toHaveBeenNthCalledWith(1, "msg-stream-1", "Hello");
+      expect(client.sendChunk).toHaveBeenNthCalledWith(2, "msg-stream-1", " world");
+      expect(client.sendChunk).toHaveBeenNthCalledWith(3, "msg-stream-1", ", how are you?");
+    });
+
+    it("skips sendChunk when accumulated text has not grown", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+      // Same text again — no new delta
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+
+      expect(client.sendChunk).toHaveBeenCalledTimes(1);
+    });
+
+    it("handles empty payload text", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", {});
+
+      // Creates streaming message but no delta to send (empty string)
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
+      expect(client.sendChunk).not.toHaveBeenCalled();
+    });
+
+    it("handles payload with empty string", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "" });
+
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
+      expect(client.sendChunk).not.toHaveBeenCalled();
+    });
+
+    it("isolates streams by dispatchId", async () => {
+      let messageCounter = 0;
+      const client = createMockClient({
+        createMessage: vi.fn().mockImplementation(() =>
+          Promise.resolve({ id: `msg-${++messageCounter}` }),
+        ),
+      });
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-A", { text: "Stream A" });
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-B", { text: "Stream B" });
+
+      expect(client.createMessage).toHaveBeenCalledTimes(2);
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-1", "Stream A");
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-2", "Stream B");
+      expect(hasActiveStream("dispatch-A")).toBe(true);
+      expect(hasActiveStream("dispatch-B")).toBe(true);
+    });
+
+    it("correctly diffs when text is shorter than lastSentLength", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello world" });
+      // Shorter text — should not send a chunk (text.length <= lastSentLength)
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+
+      expect(client.sendChunk).toHaveBeenCalledTimes(1);
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-stream-1", "Hello world");
+    });
+  });
+
+  describe("finalizeStream", () => {
+    it("completes an active stream and returns true", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+      const result = await finalizeStream(client, "dispatch-1", "Hello world — final.");
+
+      expect(result).toBe(true);
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-stream-1", "Hello world — final.");
+      expect(hasActiveStream("dispatch-1")).toBe(false);
+    });
+
+    it("returns false when no active stream exists", async () => {
+      const client = createMockClient();
+
+      const result = await finalizeStream(client, "nonexistent", "Final text");
+
+      expect(result).toBe(false);
+      expect(client.completeMessage).not.toHaveBeenCalled();
+    });
+
+    it("cleans up the stream state after finalization", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Partial" });
+      expect(hasActiveStream("dispatch-1")).toBe(true);
+
+      await finalizeStream(client, "dispatch-1", "Final");
+      expect(hasActiveStream("dispatch-1")).toBe(false);
+
+      // Subsequent handleBlockReply should create a new stream
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "New stream" });
+      expect(client.createMessage).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("cancelStream", () => {
+    it("cancels an active stream", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+      cancelStream(client, "dispatch-1");
+
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-stream-1");
+      expect(hasActiveStream("dispatch-1")).toBe(false);
+    });
+
+    it("is a no-op when no active stream exists", () => {
+      const client = createMockClient();
+
+      cancelStream(client, "nonexistent");
+
+      expect(client.cancelMessage).not.toHaveBeenCalled();
+    });
+
+    it("swallows errors from cancelMessage", async () => {
+      const client = createMockClient({
+        cancelMessage: vi.fn().mockRejectedValue(new Error("network error")),
+      });
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-1", { text: "Hello" });
+
+      // Should not throw
+      cancelStream(client, "dispatch-1");
+      expect(hasActiveStream("dispatch-1")).toBe(false);
+    });
+  });
+
+  describe("full stream lifecycle", () => {
+    it("create → chunks → complete", async () => {
+      const client = createMockClient();
+
+      // Simulate progressive block replies
+      await handleBlockReply(client, "chat-1", "grami", "d-1", { text: "The answer" });
+      await handleBlockReply(client, "chat-1", "grami", "d-1", { text: "The answer is 42" });
+      await handleBlockReply(client, "chat-1", "grami", "d-1", { text: "The answer is 42." });
+
+      const finalized = await finalizeStream(client, "d-1", "The answer is 42.");
+
+      expect(finalized).toBe(true);
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
+      expect(client.sendChunk).toHaveBeenCalledTimes(3);
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-stream-1", "The answer is 42.");
+      expect(hasActiveStream("d-1")).toBe(false);
+    });
+
+    it("create → chunks → cancel on error", async () => {
+      const client = createMockClient();
+
+      await handleBlockReply(client, "chat-1", "grami", "d-1", { text: "Partial output" });
+      cancelStream(client, "d-1");
+
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-stream-1");
+      expect(hasActiveStream("d-1")).toBe(false);
+
+      // finalizeStream after cancel should return false
+      const result = await finalizeStream(client, "d-1", "Doesn't matter");
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("concurrent dispatch safety", () => {
+    it("two dispatches to the same chat create separate streams", async () => {
+      let msgCounter = 0;
+      const client = createMockClient({
+        createMessage: vi.fn().mockImplementation(() =>
+          Promise.resolve({ id: `msg-${++msgCounter}` }),
+        ),
+      });
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-A", { text: "A1" });
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-B", { text: "B1" });
+
+      expect(client.createMessage).toHaveBeenCalledTimes(2);
+      expect(hasActiveStream("dispatch-A")).toBe(true);
+      expect(hasActiveStream("dispatch-B")).toBe(true);
+
+      // Each stream gets its own message
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-1", "A1");
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-2", "B1");
+    });
+
+    it("finalizing one dispatch does not affect another", async () => {
+      let msgCounter = 0;
+      const client = createMockClient({
+        createMessage: vi.fn().mockImplementation(() =>
+          Promise.resolve({ id: `msg-${++msgCounter}` }),
+        ),
+      });
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-A", { text: "A text" });
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-B", { text: "B text" });
+
+      const resultA = await finalizeStream(client, "dispatch-A", "A final");
+      expect(resultA).toBe(true);
+      expect(hasActiveStream("dispatch-A")).toBe(false);
+      expect(hasActiveStream("dispatch-B")).toBe(true);
+
+      // dispatch-B can still receive blocks
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-B", { text: "B text more" });
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-2", " more");
+    });
+
+    it("canceling one dispatch does not affect another", async () => {
+      let msgCounter = 0;
+      const client = createMockClient({
+        createMessage: vi.fn().mockImplementation(() =>
+          Promise.resolve({ id: `msg-${++msgCounter}` }),
+        ),
+      });
+
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-X", { text: "X" });
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-Y", { text: "Y" });
+
+      cancelStream(client, "dispatch-X");
+      expect(hasActiveStream("dispatch-X")).toBe(false);
+      expect(hasActiveStream("dispatch-Y")).toBe(true);
+
+      const resultY = await finalizeStream(client, "dispatch-Y", "Y final");
+      expect(resultY).toBe(true);
+    });
+
+    it("rapid block replies accumulate deltas correctly", async () => {
+      const client = createMockClient();
+
+      // Simulate rapid successive blocks
+      await handleBlockReply(client, "chat-1", "grami", "d-rapid", { text: "A" });
+      await handleBlockReply(client, "chat-1", "grami", "d-rapid", { text: "AB" });
+      await handleBlockReply(client, "chat-1", "grami", "d-rapid", { text: "ABC" });
+      await handleBlockReply(client, "chat-1", "grami", "d-rapid", { text: "ABCD" });
+      await handleBlockReply(client, "chat-1", "grami", "d-rapid", { text: "ABCDE" });
+
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
+      expect(client.sendChunk).toHaveBeenCalledTimes(5);
+      expect(client.sendChunk).toHaveBeenNthCalledWith(1, "msg-stream-1", "A");
+      expect(client.sendChunk).toHaveBeenNthCalledWith(2, "msg-stream-1", "B");
+      expect(client.sendChunk).toHaveBeenNthCalledWith(3, "msg-stream-1", "C");
+      expect(client.sendChunk).toHaveBeenNthCalledWith(4, "msg-stream-1", "D");
+      expect(client.sendChunk).toHaveBeenNthCalledWith(5, "msg-stream-1", "E");
+    });
+
+    it("re-creating a stream after finalization works", async () => {
+      const client = createMockClient({
+        createMessage: vi.fn()
+          .mockResolvedValueOnce({ id: "msg-1" })
+          .mockResolvedValueOnce({ id: "msg-2" }),
+      });
+
+      await handleBlockReply(client, "chat-1", "grami", "d-reuse", { text: "First" });
+      await finalizeStream(client, "d-reuse", "First final");
+
+      expect(hasActiveStream("d-reuse")).toBe(false);
+
+      await handleBlockReply(client, "chat-1", "grami", "d-reuse", { text: "Second" });
+      expect(hasActiveStream("d-reuse")).toBe(true);
+      expect(client.createMessage).toHaveBeenCalledTimes(2);
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-2", "Second");
+    });
+  });
+});

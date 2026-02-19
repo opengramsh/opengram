@@ -19,7 +19,7 @@ export class OpenGramClient {
     return headers;
   }
 
-  async fetchWithRetry(url: string, opts: RequestInit, retries = MAX_RETRIES): Promise<Response> {
+  private async fetchWithRetry(url: string, opts: RequestInit, retries = MAX_RETRIES): Promise<Response> {
     for (let attempt = 0; attempt <= retries; attempt += 1) {
       try {
         const response = await fetch(url, opts);
@@ -171,7 +171,7 @@ export class OpenGramClient {
     messageId?: string;
   }): Promise<Media> {
     const form = new FormData();
-    form.append("file", new Blob([params.file], { type: params.contentType }), params.filename);
+    form.append("file", new Blob([new Uint8Array(params.file)], { type: params.contentType }), params.filename);
     if (params.messageId) {
       form.append("messageId", params.messageId);
     }
