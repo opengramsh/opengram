@@ -47,7 +47,7 @@ export async function POST(request: Request, context: RouteContext) {
     const chatId = await resolveChatId(context);
     const body = await parseJsonBody<CreateRequestBody>(request);
     const idempotencyKey = getIdempotencyKey(request);
-    return await executeWithIdempotency(idempotencyKey, body, 201, () => createRequest(chatId, body));
+    return await executeWithIdempotency(idempotencyKey, { chatId, body }, 201, () => createRequest(chatId, body));
   } catch (error) {
     return toErrorResponse(error);
   }

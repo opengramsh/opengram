@@ -219,6 +219,65 @@ describe('requests API', () => {
     });
   });
 
+  it('returns conflict when the same idempotency key is reused across different chats', async () => {
+    const firstChat = await createChat('requests-chat-a');
+    const secondChat = await createChat('requests-chat-b');
+    const requestPayload = {
+      type: 'text_input',
+      title: 'Provide details',
+      config: { placeholder: 'details' },
+    };
+
+    const firstResponse = await chatRequestsPost(
+      new Request(`http://localhost/api/v1/chats/${firstChat.id}/requests`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': 'req-scope-key',
+        },
+        body: JSON.stringify(requestPayload),
+      }),
+      chatContext(firstChat.id),
+    );
+    const firstBody = await firstResponse.json();
+
+    const secondResponse = await chatRequestsPost(
+      new Request(`http://localhost/api/v1/chats/${secondChat.id}/requests`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': 'req-scope-key',
+        },
+        body: JSON.stringify(requestPayload),
+      }),
+      chatContext(secondChat.id),
+    );
+    const secondBody = await secondResponse.json();
+
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(409);
+    expect(secondBody).toEqual({
+      error: {
+        code: 'CONFLICT',
+        message: 'Idempotency-Key already used with a different request payload.',
+        details: {
+          field: 'Idempotency-Key',
+          key: 'req-scope-key',
+        },
+      },
+    });
+
+    const firstCount = db
+      .prepare('SELECT COUNT(*) AS count FROM requests WHERE chat_id = ?')
+      .get(firstChat.id) as { count: number };
+    const secondCount = db
+      .prepare('SELECT COUNT(*) AS count FROM requests WHERE chat_id = ?')
+      .get(secondChat.id) as { count: number };
+
+    expect(firstCount.count).toBe(1);
+    expect(secondCount.count).toBe(0);
+  });
+
   it('patches requests and validates type-specific config updates', async () => {
     const chat = await createChat();
     const now = Date.now();
