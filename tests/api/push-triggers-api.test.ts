@@ -31,6 +31,7 @@ const repoRoot = join(import.meta.dirname, '..', '..');
 const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 function chatContext(chatId: string): ChatContext {
   return { params: Promise.resolve({ chatId }) };
@@ -44,7 +45,7 @@ function createJsonRequest(url: string, method: string, body?: unknown) {
   });
 }
 
-function writePushEnabledConfig() {
+function writePushEnabledConfig(agentName = 'Agent Default') {
   const tempDir = mkdtempSync(join(tmpdir(), 'opengram-push-trigger-config-'));
   const filePath = join(tempDir, 'opengram.config.json');
   writeFileSync(
@@ -55,7 +56,7 @@ function writePushEnabledConfig() {
         agents: [
           {
             id: 'agent-default',
-            name: 'Agent Default',
+            name: agentName,
             description: 'Default',
             defaultModelId: 'model-default',
           },
@@ -113,6 +114,7 @@ beforeEach(() => {
   sendNotificationMock.mockReset();
   sendNotificationMock.mockResolvedValue(undefined);
   setVapidDetailsMock.mockReset();
+  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   resetPushServiceForTests();
   resetWriteRateLimitForTests();
 });
@@ -123,6 +125,7 @@ afterEach(() => {
   delete process.env.OPENGRAM_CONFIG_PATH;
   sendNotificationMock.mockReset();
   setVapidDetailsMock.mockReset();
+  consoleErrorSpy.mockRestore();
   resetPushServiceForTests();
   resetWriteRateLimitForTests();
 });
@@ -224,5 +227,60 @@ describe('push triggers', () => {
         url: `/chats/${chat.id}`,
       },
     });
+  });
+
+  it('contains push failures for message-created notifications', async () => {
+    process.env.OPENGRAM_CONFIG_PATH = writePushEnabledConfig('A'.repeat(5000));
+    resetPushServiceForTests();
+    const chat = await createChat();
+
+    const response = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/messages`, 'POST', {
+        role: 'agent',
+        senderId: 'agent-default',
+        content: 'Agent message that fails push',
+      }),
+      chatContext(chat.id),
+    );
+    expect(response.status).toBe(201);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to send message.created push notification.',
+      expect.any(Error),
+    );
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+  });
+
+  it('contains push failures for request-created notifications', async () => {
+    process.env.OPENGRAM_CONFIG_PATH = writePushEnabledConfig('A'.repeat(5000));
+    resetPushServiceForTests();
+    const chat = await createChat();
+
+    const response = await chatRequestsPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/requests`, 'POST', {
+        type: 'choice',
+        title: 'Request that fails push',
+        config: {
+          options: [
+            { id: 'yes', label: 'Yes' },
+            { id: 'no', label: 'No' },
+          ],
+          minSelections: 1,
+          maxSelections: 1,
+        },
+      }),
+      chatContext(chat.id),
+    );
+    expect(response.status).toBe(201);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to send request.created push notification.',
+      expect.any(Error),
+    );
+    expect(sendNotificationMock).not.toHaveBeenCalled();
   });
 });

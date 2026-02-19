@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { isIP } from 'node:net';
 import { nanoid } from 'nanoid';
 import webpush from 'web-push';
 
@@ -43,6 +44,96 @@ type WebPushSubscription = {
 const MAX_BODY_CHARS = 240;
 const MAX_PAYLOAD_BYTES = 4000;
 let vapidConfigured = false;
+
+function isDisallowedHost(hostname: string) {
+  const normalized = hostname.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  if (normalized === 'localhost' || normalized.endsWith('.localhost')) {
+    return true;
+  }
+
+  if (normalized.endsWith('.local') || normalized.endsWith('.internal')) {
+    return true;
+  }
+
+  if (!normalized.includes('.')) {
+    return true;
+  }
+
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 0) {
+    return false;
+  }
+
+  if (ipVersion === 4) {
+    const segments = normalized.split('.').map((part) => Number.parseInt(part, 10));
+    if (segments.length !== 4 || segments.some((segment) => Number.isNaN(segment) || segment < 0 || segment > 255)) {
+      return true;
+    }
+
+    const [a, b] = segments;
+    if (
+      a === 10
+      || a === 127
+      || a === 0
+      || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168)
+      || (a === 100 && b >= 64 && b <= 127)
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  const lower = normalized.toLowerCase();
+  if (
+    lower === '::'
+    || lower === '::1'
+    || lower.startsWith('fc')
+    || lower.startsWith('fd')
+    || lower.startsWith('fe8')
+    || lower.startsWith('fe9')
+    || lower.startsWith('fea')
+    || lower.startsWith('feb')
+  ) {
+    return true;
+  }
+
+  if (lower.startsWith('::ffff:')) {
+    const mapped = lower.slice('::ffff:'.length);
+    return isDisallowedHost(mapped);
+  }
+
+  return false;
+}
+
+function normalizeSubscriptionEndpoint(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw validationError('endpoint is required.', { field: 'endpoint' });
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw validationError('endpoint must be a valid URL.', { field: 'endpoint' });
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw validationError('endpoint must use HTTPS.', { field: 'endpoint' });
+  }
+
+  if (isDisallowedHost(parsed.hostname)) {
+    throw validationError('endpoint host is not allowed.', { field: 'endpoint' });
+  }
+
+  return parsed.toString();
+}
 
 function withDb<T>(callback: (db: Database.Database) => T): T {
   const db = createSqliteConnection();
@@ -99,22 +190,14 @@ function parseSubscriptionKeys(value: unknown): PushSubscriptionKeys {
 }
 
 function normalizeSubscription(input: PushSubscriptionInput): WebPushSubscription {
-  if (typeof input.endpoint !== 'string' || !input.endpoint.trim()) {
-    throw validationError('endpoint is required.', { field: 'endpoint' });
-  }
-
   return {
-    endpoint: input.endpoint.trim(),
+    endpoint: normalizeSubscriptionEndpoint(input.endpoint),
     keys: parseSubscriptionKeys(input.keys),
   };
 }
 
 function normalizeEndpoint(endpoint: unknown) {
-  if (typeof endpoint !== 'string' || !endpoint.trim()) {
-    throw validationError('endpoint is required.', { field: 'endpoint' });
-  }
-
-  return endpoint.trim();
+  return normalizeSubscriptionEndpoint(endpoint);
 }
 
 function normalizeBodyPreview(value: string) {
@@ -138,8 +221,12 @@ function buildPayload(payload: PushNotificationPayload) {
   };
 
   let encoded = JSON.stringify(compact);
-  while (Buffer.byteLength(encoded, 'utf8') > MAX_PAYLOAD_BYTES && compact.body.length > 1) {
-    const nextBody = `${compact.body.slice(0, Math.max(1, compact.body.length - 16)).trimEnd()}…`;
+  while (Buffer.byteLength(encoded, 'utf8') > MAX_PAYLOAD_BYTES && compact.body.length > 0) {
+    const sliced = compact.body.slice(0, Math.max(0, compact.body.length - 16)).trimEnd();
+    const nextBody = sliced ? `${sliced}…` : '';
+    if (nextBody === compact.body) {
+      break;
+    }
     compact.body = nextBody;
     encoded = JSON.stringify(compact);
   }

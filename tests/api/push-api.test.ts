@@ -140,6 +140,30 @@ describe('push API', () => {
     });
   });
 
+  it('rejects non-https and private-network subscription endpoints', async () => {
+    const insecureResponse = await pushSubscribePost(
+      createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
+        endpoint: 'http://example.com/sub/1',
+        keys: {
+          p256dh: 'p256dh-key',
+          auth: 'auth-key',
+        },
+      }),
+    );
+    expect(insecureResponse.status).toBe(400);
+
+    const privateResponse = await pushSubscribePost(
+      createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
+        endpoint: 'https://127.0.0.1/sub/1',
+        keys: {
+          p256dh: 'p256dh-key',
+          auth: 'auth-key',
+        },
+      }),
+    );
+    expect(privateResponse.status).toBe(400);
+  });
+
   it('deletes subscription by endpoint', async () => {
     db.prepare(
       [

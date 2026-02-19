@@ -37,17 +37,23 @@ self.addEventListener('notificationclick', (event) => {
     : '/';
 
   event.waitUntil((async () => {
+    const resolvedTarget = new URL(targetUrl, self.location.origin);
     const matchedClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
     for (const client of matchedClients) {
-      if (client.url.includes(targetUrl) && 'focus' in client) {
+      const clientUrl = new URL(client.url);
+      const samePage = clientUrl.origin === resolvedTarget.origin
+        && clientUrl.pathname === resolvedTarget.pathname
+        && clientUrl.search === resolvedTarget.search;
+
+      if (samePage && 'focus' in client) {
         await client.focus();
         return;
       }
     }
 
     if (self.clients.openWindow) {
-      await self.clients.openWindow(targetUrl);
+      await self.clients.openWindow(resolvedTarget.toString());
     }
   })());
 });

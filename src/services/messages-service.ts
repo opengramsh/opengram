@@ -407,6 +407,8 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
         chatId: serialized.chat_id,
         senderId: serialized.sender_id,
         preview: serialized.content_final,
+      }).catch((error) => {
+        console.error('Failed to send message.created push notification.', error);
       });
     }
 

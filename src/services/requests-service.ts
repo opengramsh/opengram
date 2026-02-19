@@ -672,6 +672,8 @@ export function createRequest(chatId: string, input: CreateRequestInput) {
     void notifyRequestCreated({
       chatId,
       title: normalized.title,
+    }).catch((error) => {
+      console.error('Failed to send request.created push notification.', error);
     });
 
     const created = getRequestRecord(db, requestId);
