@@ -739,6 +739,66 @@ describe('chats API', () => {
     expect(authorized.status).toBe(201);
   });
 
+  it('does not enforce read bearer auth when read toggle is disabled', async () => {
+    setInstanceSecretConfig('s3cret');
+
+    const response = await chatsGet(
+      createJsonRequest('http://localhost/api/v1/chats?limit=5', 'GET'),
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it('enforces read bearer auth when read toggle is enabled', async () => {
+    setConfigOverrides({
+      security: {
+        instanceSecretEnabled: true,
+        instanceSecret: 's3cret',
+        readEndpointsRequireInstanceSecret: true,
+      },
+    });
+
+    const unauthorized = await chatsGet(
+      createJsonRequest('http://localhost/api/v1/chats?limit=5', 'GET'),
+    );
+    expect(unauthorized.status).toBe(401);
+    await expect(unauthorized.json()).resolves.toEqual({
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Missing or invalid instance secret.',
+        details: undefined,
+      },
+    });
+
+    const invalidSecret = await chatsGet(
+      createJsonRequestWithHeaders('http://localhost/api/v1/chats?limit=5', 'GET', undefined, {
+        authorization: 'Bearer not-the-secret',
+      }),
+    );
+    expect(invalidSecret.status).toBe(401);
+
+    const authorized = await chatsGet(
+      createJsonRequestWithHeaders('http://localhost/api/v1/chats?limit=5', 'GET', undefined, {
+        authorization: 'Bearer s3cret',
+      }),
+    );
+    expect(authorized.status).toBe(200);
+  });
+
+  it('does not enforce read bearer auth when instance secret auth is disabled', async () => {
+    setConfigOverrides({
+      security: {
+        instanceSecretEnabled: false,
+        instanceSecret: '',
+        readEndpointsRequireInstanceSecret: true,
+      },
+    });
+
+    const response = await chatsGet(
+      createJsonRequest('http://localhost/api/v1/chats?limit=5', 'GET'),
+    );
+    expect(response.status).toBe(200);
+  });
+
   it('rate limits write endpoints per IP and returns retry-after header', async () => {
     process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '2';
     process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
@@ -957,7 +1017,7 @@ describe('chats API', () => {
 
 describe('system endpoints', () => {
   it('returns health payload', async () => {
-    const response = await healthGet();
+    const response = await healthGet(new Request('http://localhost/api/v1/health'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -967,12 +1027,38 @@ describe('system endpoints', () => {
   });
 
   it('returns safe config without secrets', async () => {
-    const response = await configGet();
+    const response = await configGet(new Request('http://localhost/api/v1/config'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.security).toEqual({ instanceSecretEnabled: false });
+    expect(body.security).toEqual({
+      instanceSecretEnabled: false,
+      readEndpointsRequireInstanceSecret: false,
+    });
     expect(body.push.vapidPrivateKey).toBeUndefined();
     expect(body.security.instanceSecret).toBeUndefined();
+  });
+
+  it('keeps health public while enforcing read bearer auth for config when read toggle is enabled', async () => {
+    setConfigOverrides({
+      security: {
+        instanceSecretEnabled: true,
+        instanceSecret: 'system-secret',
+        readEndpointsRequireInstanceSecret: true,
+      },
+    });
+
+    const publicHealth = await healthGet(new Request('http://localhost/api/v1/health'));
+    expect(publicHealth.status).toBe(200);
+
+    const unauthorizedConfig = await configGet(new Request('http://localhost/api/v1/config'));
+    expect(unauthorizedConfig.status).toBe(401);
+
+    const authorizedConfig = await configGet(
+      new Request('http://localhost/api/v1/config', {
+        headers: { authorization: 'Bearer system-secret' },
+      }),
+    );
+    expect(authorizedConfig.status).toBe(200);
   });
 });

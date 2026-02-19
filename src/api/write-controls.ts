@@ -1,4 +1,5 @@
 import { loadOpengramConfig } from '@/src/config/opengram-config';
+import type { OpengramConfig } from '@/src/config/opengram-config';
 
 import { rateLimitedError, unauthorizedError } from '@/src/api/http';
 
@@ -22,6 +23,7 @@ type WriteRateLimitConfig = {
 };
 
 export type WriteMiddleware = (request: Request) => void;
+export type ReadMiddleware = (request: Request) => void;
 
 function normalizeIp(value: string | null): string | null {
   if (!value) {
@@ -111,8 +113,7 @@ function sweepExpiredBuckets(now: number, windowMs: number) {
   lastSweepAt = now;
 }
 
-export function requireWriteAuth(request: Request) {
-  const config = loadOpengramConfig();
+function requireInstanceSecret(request: Request, config: OpengramConfig = loadOpengramConfig()) {
   if (!config.security.instanceSecretEnabled) {
     return;
   }
@@ -122,6 +123,25 @@ export function requireWriteAuth(request: Request) {
   if (authHeader !== expected) {
     throw unauthorizedError('Missing or invalid instance secret.');
   }
+}
+
+export function requireWriteAuth(request: Request) {
+  const config = loadOpengramConfig();
+  requireInstanceSecret(request, config);
+}
+
+export function requireReadAuth(request: Request) {
+  const config = loadOpengramConfig();
+  if (!config.security.instanceSecretEnabled || !config.security.readEndpointsRequireInstanceSecret) {
+    return;
+  }
+
+  requireInstanceSecret(request, config);
+}
+
+export function requireSseAuth(request: Request) {
+  const config = loadOpengramConfig();
+  requireInstanceSecret(request, config);
 }
 
 export function enforceWriteRateLimit(request: Request) {
@@ -154,6 +174,15 @@ export function enforceWriteRateLimit(request: Request) {
 export function applyWriteMiddlewares(
   request: Request,
   middlewares: WriteMiddleware[] = [requireWriteAuth, enforceWriteRateLimit],
+) {
+  for (const middleware of middlewares) {
+    middleware(request);
+  }
+}
+
+export function applyReadMiddlewares(
+  request: Request,
+  middlewares: ReadMiddleware[] = [requireReadAuth],
 ) {
   for (const middleware of middlewares) {
     middleware(request);
