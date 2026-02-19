@@ -68,7 +68,7 @@ const PROD_CONFIG_PATH = "/opt/opengram/config/opengram.config.json";
 const defaultConfig: OpengramConfig = {
   appName: "OpenGram",
   maxUploadBytes: 50_000_000,
-  allowedMimeTypes: ["image/*", "audio/*", "application/pdf", "text/plain"],
+  allowedMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp", "audio/*", "application/pdf", "text/plain"],
   titleMaxChars: 48,
   defaultCustomState: "Open",
   customStates: ["Open"],

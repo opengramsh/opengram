@@ -14,6 +14,15 @@ type ParsedRange = {
   end: number;
 };
 
+const SAFE_INLINE_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]);
+
+const FILE_RESPONSE_CSP = "default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
 async function resolveMediaId(context: RouteContext) {
   const params = await context.params;
   return params.mediaId;
@@ -72,11 +81,12 @@ function quotedFileName(name: string) {
 }
 
 function isSafeInlineType(contentType: string) {
+  const normalizedContentType = contentType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
   return (
-    contentType.startsWith('image/')
-    || contentType.startsWith('audio/')
-    || contentType.startsWith('video/')
-    || contentType === 'application/pdf'
+    SAFE_INLINE_IMAGE_TYPES.has(normalizedContentType)
+    || normalizedContentType.startsWith('audio/')
+    || normalizedContentType.startsWith('video/')
+    || normalizedContentType === 'application/pdf'
   );
 }
 
@@ -101,6 +111,7 @@ export async function GET(request: Request, context: RouteContext) {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=86400',
       'Content-Disposition': contentDisposition(media.contentType, media.filename),
+      'Content-Security-Policy': FILE_RESPONSE_CSP,
       'Content-Type': media.contentType,
       'X-Content-Type-Options': 'nosniff',
     });

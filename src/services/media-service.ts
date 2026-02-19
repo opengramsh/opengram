@@ -54,6 +54,8 @@ type ListChatMediaResult = {
   hasMore: boolean;
 };
 
+const SVG_MIME_TYPE = 'image/svg+xml';
+
 function withDb<T>(callback: (db: Database.Database) => T): T {
   const db = createSqliteConnection();
   try {
@@ -116,20 +118,33 @@ function detectKind(contentType: string): MediaKind {
   return 'file';
 }
 
+function normalizeMimeType(contentType: string) {
+  return contentType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+}
+
 function ensureAllowedContentType(contentType: string) {
+  const normalizedContentType = normalizeMimeType(contentType);
+  if (normalizedContentType === SVG_MIME_TYPE) {
+    throw unsupportedMediaTypeError('SVG uploads are not allowed.', {
+      field: 'file',
+      contentType,
+    });
+  }
+
   const allowed = loadOpengramConfig().allowedMimeTypes;
   if (allowed.includes('*/*')) {
     return;
   }
 
   const matched = allowed.some((rule) => {
-    if (rule === contentType) {
+    const normalizedRule = normalizeMimeType(rule);
+    if (normalizedRule === normalizedContentType) {
       return true;
     }
 
-    if (rule.endsWith('/*')) {
-      const prefix = rule.slice(0, -1);
-      return contentType.startsWith(prefix);
+    if (normalizedRule.endsWith('/*')) {
+      const prefix = normalizedRule.slice(0, -1);
+      return normalizedContentType.startsWith(prefix);
     }
 
     return false;

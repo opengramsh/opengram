@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,6 +29,7 @@ const repoRoot = join(import.meta.dirname, '..', '..');
 const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
 const ONE_PIXEL_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+const FILE_RESPONSE_CSP = "default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 let db: Database.Database;
 let tempDir: string;
@@ -196,6 +197,7 @@ describe('media API', () => {
     expect(fullResponse.headers.get('content-type')).toBe('audio/webm');
     expect(fullResponse.headers.get('accept-ranges')).toBe('bytes');
     expect(fullResponse.headers.get('content-disposition')).toBe('inline; filename="voice.webm"');
+    expect(fullResponse.headers.get('content-security-policy')).toBe(FILE_RESPONSE_CSP);
     expect(fullResponse.headers.get('x-content-type-options')).toBe('nosniff');
     await expect(fullResponse.text()).resolves.toBe('fake-audio');
 
@@ -247,8 +249,62 @@ describe('media API', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="note.txt"');
+    expect(response.headers.get('content-security-policy')).toBe(FILE_RESPONSE_CSP);
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     await expect(response.text()).resolves.toBe('note-text');
+  });
+
+  it('rejects SVG uploads even when wildcard MIME rules are configured', async () => {
+    const configPath = join(tempDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        maxUploadBytes: 1024,
+        allowedMimeTypes: ['*/*'],
+      }),
+    );
+    process.env.OPENGRAM_CONFIG_PATH = configPath;
+
+    const chat = await createChat();
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    const response = await uploadBase64Media(chat.id, 'evil.svg', 'image/svg+xml', svg);
+
+    expect(response.status).toBe(415);
+  });
+
+  it('serves legacy SVG media as attachment with CSP and nosniff headers', async () => {
+    const chat = await createChat();
+    const mediaId = 'MED000000000000000001';
+    const relativePath = `uploads/${chat.id}/${mediaId}.svg`;
+    mkdirSync(join(tempDir, 'uploads', chat.id), { recursive: true });
+    writeFileSync(join(tempDir, relativePath), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    db.prepare(
+      [
+        'INSERT INTO media (id, chat_id, message_id, storage_path, thumbnail_path, filename, content_type, byte_size, kind, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      mediaId,
+      chat.id,
+      null,
+      relativePath,
+      null,
+      'legacy.svg',
+      'image/svg+xml',
+      46,
+      'image',
+      Date.now(),
+    );
+
+    const response = await fileGet(
+      createJsonRequest(`http://localhost/api/v1/files/${mediaId}`, 'GET'),
+      mediaContext(mediaId),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-disposition')).toBe('attachment; filename="legacy.svg"');
+    expect(response.headers.get('content-security-policy')).toBe(FILE_RESPONSE_CSP);
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
   it('returns 404 for thumbnail endpoint on non-image media', async () => {
