@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Facehash } from 'facehash';
-import { ArrowLeft, Camera, ChevronDown, FileText, GalleryVerticalEnd, Images, Mic, Plus, Send, Settings2, Square } from 'lucide-react';
+import { ArrowLeft, Camera, ChevronDown, FileText, GalleryVerticalEnd, Images, Mic, Pause, Play, Plus, Send, Settings2, Square } from 'lucide-react';
 
 import {
   applyStreamingChunk,
@@ -202,6 +202,25 @@ function formatBytes(bytes: number) {
   return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
 }
 
+function formatDuration(totalSeconds: number) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
+    return '0:00';
+  }
+
+  const rounded = Math.floor(totalSeconds);
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function isMicPermissionDenied(error: unknown) {
+  if (error instanceof DOMException) {
+    return error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError';
+  }
+
+  return false;
+}
+
 function mediaSortAsc(a: MediaItem, b: MediaItem) {
   if (a.created_at === b.created_at) {
     return a.id.localeCompare(b.id);
@@ -242,6 +261,96 @@ function buildInlineMessageMedia(messages: Message[], mediaByMessageId: Map<stri
   return map;
 }
 
+function InlineAudioPlayer({ item }: { item: MediaItem }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    const updateTime = () => setCurrentTime(audio.currentTime || 0);
+    const updateDuration = () => setDuration(audio.duration || 0);
+    const handleEnded = () => setIsPlaying(false);
+
+    audio.addEventListener('timeupdate', updateTime);
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('durationchange', updateDuration);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', updateTime);
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('durationchange', updateDuration);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, []);
+
+  const togglePlayback = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    if (audio.paused) {
+      try {
+        await audio.play();
+        setIsPlaying(true);
+      } catch {
+        setIsPlaying(false);
+      }
+      return;
+    }
+
+    audio.pause();
+    setIsPlaying(false);
+  }, []);
+
+  const handleSeek = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    const nextTime = Number(event.target.value);
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  }, []);
+
+  return (
+    <div key={item.id} className="rounded-xl border border-border/70 bg-card/40 p-2.5">
+      <audio ref={audioRef} preload="metadata" src={`/api/v1/files/${item.id}`} className="hidden" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-muted/50 text-foreground"
+          aria-label={isPlaying ? `Pause ${item.filename || 'audio'}` : `Play ${item.filename || 'audio'}`}
+          onClick={() => void togglePlayback()}
+        >
+          {isPlaying ? <Pause size={14} /> : <Play size={14} className="translate-x-[1px]" />}
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={duration > 0 ? duration : 1}
+          step={0.1}
+          value={Math.min(currentTime, duration > 0 ? duration : 1)}
+          onChange={handleSeek}
+          aria-label={`Progress ${item.filename || item.id}`}
+          className="h-1 w-full accent-primary"
+        />
+        <p className="w-20 shrink-0 text-right text-[11px] text-muted-foreground">
+          {formatDuration(currentTime)} / {formatDuration(duration)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const params = useParams<{ chatId: string }>();
   const chatId = params?.chatId;
@@ -277,6 +386,8 @@ export default function ChatPage() {
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isUploadingVoiceNote, setIsUploadingVoiceNote] = useState(false);
+  const [showMicSettingsPrompt, setShowMicSettingsPrompt] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -288,6 +399,7 @@ export default function ChatPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<BlobPart[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingSecondsRef = useRef(0);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const swipeRef = useRef<{
     active: boolean;
@@ -742,54 +854,76 @@ export default function ChatPage() {
 
   const uploadVoiceNote = useCallback(
     async (blob: Blob) => {
-      if (!chat) {
+      if (!chat || blob.size === 0) {
+        if (blob.size === 0) {
+          setError('Recording was too short. Try again.');
+        }
         return;
       }
 
-      const messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          role: 'user',
-          senderId: 'user:primary',
-          content: 'Voice note',
-        }),
-      });
+      setIsUploadingVoiceNote(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', blob, `voice-${Date.now()}.webm`);
+        formData.append('kind', 'audio');
 
-      if (!messageResponse.ok) {
-        throw new Error('Failed to create voice message');
+        const uploadResponse = await fetch(`/api/v1/chats/${chat.id}/media`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload voice note');
+        }
+
+        const uploadedMedia = (await uploadResponse.json()) as MediaItem;
+
+        const messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            role: 'user',
+            senderId: 'user:primary',
+            trace: { mediaId: uploadedMedia.id, kind: 'audio' },
+          }),
+        });
+
+        if (!messageResponse.ok) {
+          throw new Error('Failed to create voice message');
+        }
+
+        const createdMessage = (await messageResponse.json()) as Message;
+        setMessages((current) => upsertFeedMessage(current, createdMessage));
+        setMedia((current) => (current.some((item) => item.id === uploadedMedia.id) ? current : [...current, uploadedMedia]));
+      } finally {
+        setIsUploadingVoiceNote(false);
       }
-
-      const createdMessage = (await messageResponse.json()) as Message;
-
-      const formData = new FormData();
-      formData.append('file', blob, `voice-${Date.now()}.webm`);
-      formData.append('kind', 'audio');
-      formData.append('messageId', createdMessage.id);
-
-      const uploadResponse = await fetch(`/api/v1/chats/${chat.id}/media`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload voice note');
-      }
-
-      const uploadedMedia = (await uploadResponse.json()) as MediaItem;
-      setMessages((current) =>
-        upsertFeedMessage(current, {
-          ...createdMessage,
-          trace: { ...(createdMessage.trace ?? {}), mediaId: uploadedMedia.id, kind: 'audio' },
-        }),
-      );
-      setMedia((current) => [...current, uploadedMedia]);
     },
     [chat],
   );
 
   const stopRecording = useCallback(() => {
-    mediaRecorderRef.current?.stop();
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  }, []);
+
+  const resetRecordingState = useCallback(() => {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    recordingChunksRef.current = [];
+    mediaRecorderRef.current = null;
+    recordingSecondsRef.current = 0;
+    setIsRecording(false);
+    setRecordingSeconds(0);
+
+    for (const track of recordingStreamRef.current?.getTracks() ?? []) {
+      track.stop();
+    }
+    recordingStreamRef.current = null;
   }, []);
 
   const handleMicAction = useCallback(async () => {
@@ -804,11 +938,14 @@ export default function ChatPage() {
     }
 
     try {
+      setError(null);
+      setShowMicSettingsPrompt(false);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordingStreamRef.current = stream;
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       recordingChunksRef.current = [];
+      recordingSecondsRef.current = 0;
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -817,20 +954,13 @@ export default function ChatPage() {
       };
 
       recorder.onstop = () => {
-        const chunks = recordingChunksRef.current;
-        recordingChunksRef.current = [];
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        const durationSeconds = recordingSecondsRef.current;
+        const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        resetRecordingState();
 
-        if (recordingTimerRef.current) {
-          window.clearInterval(recordingTimerRef.current);
-          recordingTimerRef.current = null;
-        }
-
-        setIsRecording(false);
-        setRecordingSeconds(0);
-
-        for (const track of stream.getTracks()) {
-          track.stop();
+        if (durationSeconds <= 0 || blob.size === 0) {
+          setError('Recording was too short. Try again.');
+          return;
         }
 
         void uploadVoiceNote(blob).catch(() => {
@@ -842,12 +972,21 @@ export default function ChatPage() {
       setIsRecording(true);
       setRecordingSeconds(0);
       recordingTimerRef.current = window.setInterval(() => {
-        setRecordingSeconds((current) => current + 1);
+        recordingSecondsRef.current += 1;
+        setRecordingSeconds(recordingSecondsRef.current);
       }, 1000);
-    } catch {
-      setError('Microphone permission is required to record voice notes.');
+    } catch (micError) {
+      resetRecordingState();
+
+      if (isMicPermissionDenied(micError)) {
+        setShowMicSettingsPrompt(true);
+        setError('Microphone permission was denied.');
+        return;
+      }
+
+      setError('Microphone is unavailable. Check browser permissions and try again.');
     }
-  }, [isRecording, stopRecording, uploadVoiceNote]);
+  }, [isRecording, resetRecordingState, stopRecording, uploadVoiceNote]);
 
   useEffect(() => {
     void loadData();
@@ -1112,15 +1251,9 @@ export default function ChatPage() {
         window.clearTimeout(tagSuggestionsTimerRef.current);
       }
 
-      if (recordingTimerRef.current) {
-        window.clearInterval(recordingTimerRef.current);
-      }
-
-      for (const track of recordingStreamRef.current?.getTracks() ?? []) {
-        track.stop();
-      }
+      resetRecordingState();
     };
-  }, []);
+  }, [resetRecordingState]);
 
   return (
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-3xl flex-col bg-background">
@@ -1233,7 +1366,7 @@ export default function ChatPage() {
                   {audioItems.length > 0 && (
                     <div className="space-y-2 pt-2">
                       {audioItems.map((item) => (
-                        <audio key={item.id} controls className="h-8 w-full max-w-xs" src={`/api/v1/files/${item.id}`} />
+                        <InlineAudioPlayer key={item.id} item={item} />
                       ))}
                     </div>
                   )}
@@ -1436,11 +1569,25 @@ export default function ChatPage() {
             aria-label="Record voice note"
             className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${isRecording ? 'border-red-300 bg-red-500/20 text-red-50' : 'border-border bg-card text-foreground'}`}
             onClick={() => void handleMicAction()}
+            disabled={isUploadingVoiceNote}
           >
             {isRecording ? <Square size={16} /> : <Mic size={16} />}
           </button>
         </div>
-        {isRecording && <p className="px-1 pt-1 text-[11px] text-red-200">Recording {recordingSeconds}s</p>}
+        {isRecording && <p className="px-1 pt-1 text-[11px] text-red-200">Recording {formatDuration(recordingSeconds)}</p>}
+        {isUploadingVoiceNote && <p className="px-1 pt-1 text-[11px] text-muted-foreground">Uploading voice note...</p>}
+        {showMicSettingsPrompt && (
+          <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
+            <p>Microphone access is blocked. Enable it in your browser or OS settings for this site.</p>
+            <button
+              type="button"
+              className="mt-1 rounded border border-amber-200/40 px-1.5 py-0.5 text-[11px] text-amber-50"
+              onClick={() => void handleMicAction()}
+            >
+              Retry microphone access
+            </button>
+          </div>
+        )}
         <input
           ref={cameraInputRef}
           type="file"
@@ -1618,7 +1765,9 @@ export default function ChatPage() {
                         </a>
                       </div>
                       {item.kind === 'audio' && (
-                        <audio controls className="mt-2 h-8 w-full" src={`/api/v1/files/${item.id}`} />
+                        <div className="mt-2">
+                          <InlineAudioPlayer item={item} />
+                        </div>
                       )}
                     </div>
                   ))}

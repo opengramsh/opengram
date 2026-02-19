@@ -156,6 +156,58 @@ describe('messages API', () => {
     expect(fts).toBeUndefined();
   });
 
+  it('creates a media-only voice note message and denormalizes preview to Voice note', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+    const now = Date.now();
+
+    db.prepare(
+      [
+        'INSERT INTO media (',
+        'id, chat_id, message_id, storage_path, thumbnail_path, filename, content_type, byte_size, kind, created_at',
+        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      'VMEDIA000000000000001',
+      chatId,
+      null,
+      `uploads/${chatId}/voice-media-001.webm`,
+      null,
+      'voice-note.webm',
+      'audio/webm',
+      1024,
+      'audio',
+      now,
+    );
+
+    const response = await messagesPost(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+        role: 'user',
+        senderId: 'user:primary',
+        trace: { mediaId: 'VMEDIA000000000000001', kind: 'audio' },
+      }),
+      routeContext(chatId),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.content_final).toBeNull();
+    expect(body.trace).toEqual({ mediaId: 'VMEDIA000000000000001', kind: 'audio' });
+
+    const chatResponse = await chatGet(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'GET'),
+      routeContext(chatId),
+    );
+    const chat = await chatResponse.json();
+    expect(chat.last_message_preview).toBe('Voice note');
+    expect(chat.last_message_role).toBe('user');
+
+    const linkedMedia = db
+      .prepare('SELECT message_id FROM media WHERE id = ?')
+      .get('VMEDIA000000000000001') as { message_id: string | null };
+    expect(linkedMedia.message_id).toBe(body.id);
+  });
+
   it('rejects invalid senderId for role agent', async () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;

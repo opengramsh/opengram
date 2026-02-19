@@ -388,6 +388,65 @@ describe('chats API', () => {
     expect(body.unread_count).toBe(0);
   });
 
+  it('recalculates Voice note preview for audio-only last messages', async () => {
+    const created = await createChat({ title: 'voice-preview' });
+    const chatId = created.json.id as string;
+    const now = Date.now();
+    const messageId = 'VMSG00000000000000001';
+    const mediaId = 'VMEDIA000000000000002';
+
+    db.prepare(
+      [
+        'INSERT INTO messages (',
+        'id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial, stream_state, model_id, trace',
+        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      messageId,
+      chatId,
+      'user',
+      'user:primary',
+      now,
+      now,
+      null,
+      null,
+      'complete',
+      'model-default',
+      JSON.stringify({ mediaId, kind: 'audio' }),
+    );
+
+    db.prepare(
+      [
+        'INSERT INTO media (',
+        'id, chat_id, message_id, storage_path, thumbnail_path, filename, content_type, byte_size, kind, created_at',
+        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      mediaId,
+      chatId,
+      messageId,
+      `uploads/${chatId}/${mediaId}.webm`,
+      null,
+      'voice-note.webm',
+      'audio/webm',
+      1024,
+      'audio',
+      now,
+    );
+
+    const patchResponse = await chatPatch(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'PATCH', {
+        title: 'voice-preview-updated',
+      }),
+      routeContext(chatId),
+    );
+    const patched = await patchResponse.json();
+
+    expect(patchResponse.status).toBe(200);
+    expect(patched.last_message_preview).toBe('Voice note');
+    expect(patched.last_message_role).toBe('user');
+  });
+
   it('counts unread messages for all non-user roles', async () => {
     const created = await createChat({ title: 'non-user unread' });
     const chatId = created.json.id as string;

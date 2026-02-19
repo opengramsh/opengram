@@ -12,6 +12,7 @@ const SYSTEM_SENDER_ID = 'system';
 const TOOL_SENDER_ID = 'tool';
 
 type MessageRole = 'user' | 'agent' | 'system' | 'tool';
+type MediaKind = 'image' | 'audio' | 'file';
 
 type MessageRecord = {
   id: string;
@@ -41,6 +42,18 @@ type CreateMessageInput = {
   streaming?: boolean;
   modelId?: string;
   trace?: Record<string, unknown>;
+};
+
+type MediaReference = {
+  mediaId: string;
+  declaredKind?: MediaKind;
+};
+
+type MediaRecord = {
+  id: string;
+  chat_id: string;
+  message_id: string | null;
+  kind: MediaKind;
 };
 
 type ListMessagesResult = {
@@ -160,6 +173,47 @@ function ensureTrace(value: unknown) {
   }
 }
 
+function extractMediaReference(trace: Record<string, unknown> | null): MediaReference | null {
+  if (!trace || trace.mediaId === undefined) {
+    return null;
+  }
+
+  if (typeof trace.mediaId !== 'string' || !trace.mediaId.trim()) {
+    throw validationError('trace.mediaId must be a non-empty string when provided.', {
+      field: 'trace.mediaId',
+    });
+  }
+
+  const declaredKind = trace.kind;
+  if (declaredKind !== undefined && declaredKind !== 'image' && declaredKind !== 'audio' && declaredKind !== 'file') {
+    throw validationError('trace.kind must be image, audio, or file when provided.', {
+      field: 'trace.kind',
+    });
+  }
+
+  return {
+    mediaId: trace.mediaId,
+    declaredKind,
+  };
+}
+
+function derivePreview(content: string | null, mediaKind: MediaKind | null) {
+  const previewRaw = content?.trim() ?? '';
+  if (previewRaw) {
+    return previewRaw.slice(0, 180);
+  }
+
+  if (mediaKind === 'audio') {
+    return 'Voice note';
+  }
+
+  if (mediaKind) {
+    return 'Attachment';
+  }
+
+  return null;
+}
+
 function ensureModelId(value: unknown) {
   if (value === undefined) {
     return;
@@ -204,6 +258,7 @@ function normalizeCreateInput(input: CreateMessageInput) {
 
   ensureModelId(input.modelId);
   ensureTrace(input.trace);
+  const mediaReference = extractMediaReference(input.trace ?? null);
 
   if (streaming) {
     if (role !== 'agent') {
@@ -222,23 +277,28 @@ function normalizeCreateInput(input: CreateMessageInput) {
       streaming,
       content: null,
       trace: input.trace ?? null,
+      mediaReference: null,
     };
   }
 
-  if (typeof input.content !== 'string') {
-    throw validationError('content is required when streaming is false.', { field: 'content' });
+  if (input.content !== undefined && typeof input.content !== 'string') {
+    throw validationError('content must be a string.', { field: 'content' });
   }
 
-  if (!input.content.trim()) {
-    throw validationError('content cannot be empty.', { field: 'content' });
+  const trimmedContent = input.content?.trim() ?? null;
+  if (!trimmedContent && !mediaReference) {
+    throw validationError('content is required when streaming is false unless trace.mediaId is provided.', {
+      field: 'content',
+    });
   }
 
   return {
     role,
     senderId,
     streaming,
-    content: input.content,
+    content: trimmedContent,
     trace: input.trace ?? null,
+    mediaReference,
   };
 }
 
@@ -253,9 +313,37 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
     const now = Date.now();
     const streamState = normalized.streaming ? 'streaming' : 'complete';
     const contentFinal = normalized.streaming ? null : normalized.content;
-    const preview = contentFinal?.trim() ? contentFinal.trim().slice(0, 180) : null;
 
     const tx = db.transaction(() => {
+      let linkedMedia: MediaRecord | null = null;
+
+      if (normalized.mediaReference) {
+        linkedMedia = db
+          .prepare('SELECT id, chat_id, message_id, kind FROM media WHERE id = ? AND chat_id = ?')
+          .get(normalized.mediaReference.mediaId, chat.id) as MediaRecord | undefined;
+        linkedMedia = linkedMedia ?? null;
+
+        if (!linkedMedia) {
+          throw validationError('trace.mediaId does not belong to this chat.', {
+            field: 'trace.mediaId',
+          });
+        }
+
+        if (linkedMedia.message_id && linkedMedia.message_id !== messageId) {
+          throw validationError('trace.mediaId is already linked to another message.', {
+            field: 'trace.mediaId',
+          });
+        }
+
+        if (normalized.mediaReference.declaredKind && normalized.mediaReference.declaredKind !== linkedMedia.kind) {
+          throw validationError('trace.kind does not match linked media kind.', {
+            field: 'trace.kind',
+          });
+        }
+      }
+
+      const preview = derivePreview(contentFinal, linkedMedia?.kind ?? null);
+
       db.prepare(
         [
           'INSERT INTO messages (',
@@ -276,6 +364,10 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
         chat.model_id,
         normalized.trace ? JSON.stringify(normalized.trace) : null,
       );
+
+      if (linkedMedia) {
+        db.prepare('UPDATE media SET message_id = ? WHERE id = ?').run(messageId, linkedMedia.id);
+      }
 
       db.prepare(
         [

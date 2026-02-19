@@ -11,6 +11,7 @@ import { emitEvent } from '@/src/services/events-service';
 const TITLE_FALLBACK = 'New Chat';
 const PREVIEW_MAX_CHARS = 180;
 const USER_SENDER_ID = 'user:primary';
+type MediaKind = 'image' | 'audio' | 'file';
 
 type ChatRecord = {
   id: string;
@@ -135,6 +136,54 @@ function parseJsonArray(value: string, fieldName: string): string[] {
   }
 }
 
+function mediaIdFromTrace(trace: string | null) {
+  if (!trace) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trace) as Record<string, unknown>;
+    return typeof parsed.mediaId === 'string' ? parsed.mediaId : null;
+  } catch {
+    return null;
+  }
+}
+
+function deriveMediaPreview(
+  db: Database.Database,
+  chatId: string,
+  messageId: string,
+  trace: string | null,
+) {
+  const kinds = new Set<MediaKind>();
+  const linkedRows = db
+    .prepare('SELECT kind FROM media WHERE chat_id = ? AND message_id = ?')
+    .all(chatId, messageId) as Array<{ kind: MediaKind }>;
+  for (const row of linkedRows) {
+    kinds.add(row.kind);
+  }
+
+  const traceMediaId = mediaIdFromTrace(trace);
+  if (traceMediaId) {
+    const traced = db
+      .prepare('SELECT kind FROM media WHERE chat_id = ? AND id = ?')
+      .get(chatId, traceMediaId) as { kind: MediaKind } | undefined;
+    if (traced) {
+      kinds.add(traced.kind);
+    }
+  }
+
+  if (kinds.size === 0) {
+    return null;
+  }
+
+  if (kinds.size === 1 && kinds.has('audio')) {
+    return 'Voice note';
+  }
+
+  return 'Attachment';
+}
+
 function serializeChat(record: ChatRecord) {
   return {
     id: record.id,
@@ -233,7 +282,7 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
   const lastMessage = db
     .prepare(
       [
-        'SELECT role, created_at, content_final, content_partial',
+        'SELECT id, role, created_at, content_final, content_partial, trace',
         'FROM messages',
         'WHERE chat_id = ?',
         'ORDER BY created_at DESC, id DESC',
@@ -242,10 +291,12 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
     )
     .get(chatId) as
     | {
+        id: string;
         role: string;
         created_at: number;
         content_final: string | null;
         content_partial: string | null;
+        trace: string | null;
       }
     | undefined;
 
@@ -274,7 +325,9 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
   }
 
   const previewRaw = (lastMessage?.content_final ?? lastMessage?.content_partial ?? null)?.trim() ?? null;
-  const preview = previewRaw ? previewRaw.slice(0, PREVIEW_MAX_CHARS) : null;
+  const preview = previewRaw
+    ? previewRaw.slice(0, PREVIEW_MAX_CHARS)
+    : (lastMessage ? deriveMediaPreview(db, chatId, lastMessage.id, lastMessage.trace) : null);
 
   db.prepare(
     [
