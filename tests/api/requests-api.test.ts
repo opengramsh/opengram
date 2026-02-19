@@ -340,6 +340,56 @@ describe('requests API', () => {
       chatId: chat.id,
       requestId: '222222222222222222222',
       type: 'text_input',
+      status: 'resolved',
+      resolution_payload: { text: 'all set' },
+      trace: null,
+    });
+  });
+
+  it('rejects duplicate selectedOptionIds when resolving a choice request', async () => {
+    const chat = await createChat();
+    const now = Date.now();
+
+    db.prepare('UPDATE chats SET pending_requests_count = ? WHERE id = ?').run(1, chat.id);
+    db.prepare(
+      [
+        'INSERT INTO requests (id, chat_id, type, status, title, config, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      '666666666666666666666',
+      chat.id,
+      'choice',
+      'pending',
+      'Pick one',
+      JSON.stringify({
+        options: [
+          { id: 'approve', label: 'Approve' },
+          { id: 'reject', label: 'Reject' },
+        ],
+        minSelections: 1,
+        maxSelections: 2,
+      }),
+      now,
+    );
+
+    const response = await resolveRequestPost(
+      createJsonRequest('http://localhost/api/v1/requests/666666666666666666666/resolve', 'POST', {
+        selectedOptionIds: ['approve', 'approve'],
+      }),
+      requestContext('666666666666666666666'),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'selectedOptionIds must be unique.',
+        details: {
+          field: 'selectedOptionIds',
+        },
+      },
     });
   });
 
@@ -381,6 +431,9 @@ describe('requests API', () => {
       chatId: chat.id,
       requestId: '444444444444444444444',
       type: 'form',
+      status: 'cancelled',
+      resolution_payload: null,
+      trace: null,
     });
   });
 

@@ -561,6 +561,11 @@ function normalizeResolutionPayload(type: RequestType, payload: unknown, config:
         field: 'selectedOptionIds',
       });
     }
+    if (new Set(selectedOptionIds).size !== selectedOptionIds.length) {
+      throw validationError('selectedOptionIds must be unique.', {
+        field: 'selectedOptionIds',
+      });
+    }
 
     const optionIds = new Set(
       Array.isArray(config.options)
@@ -719,15 +724,19 @@ export function cancelRequest(requestId: string) {
 
     db.prepare('UPDATE requests SET status = ? WHERE id = ?').run('cancelled', requestId);
     updateChatPendingCount(db, current.chat_id);
+    const updated = getRequestRecord(db, requestId);
+    const serialized = serializeRequest(updated);
 
     emitEvent('request.cancelled', {
-      chatId: current.chat_id,
-      requestId: current.id,
-      type: current.type,
+      chatId: serialized.chat_id,
+      requestId: serialized.id,
+      type: serialized.type,
+      status: serialized.status,
+      resolution_payload: serialized.resolution_payload,
+      trace: serialized.trace,
     });
 
-    const updated = getRequestRecord(db, requestId);
-    return serializeRequest(updated);
+    return serialized;
   });
 }
 
@@ -771,14 +780,18 @@ export function resolveRequest(requestId: string, payload: unknown) {
     ).run('resolved', now, resolvedBy, JSON.stringify(resolutionPayload), requestId);
 
     updateChatPendingCount(db, current.chat_id);
+    const updated = getRequestRecord(db, requestId);
+    const serialized = serializeRequest(updated);
 
     emitEvent('request.resolved', {
-      chatId: current.chat_id,
-      requestId: current.id,
-      type: current.type,
+      chatId: serialized.chat_id,
+      requestId: serialized.id,
+      type: serialized.type,
+      status: serialized.status,
+      resolution_payload: serialized.resolution_payload,
+      trace: serialized.trace,
     });
 
-    const updated = getRequestRecord(db, requestId);
-    return serializeRequest(updated);
+    return serialized;
   });
 }
