@@ -1,0 +1,59 @@
+{
+  "id": "opengram",
+  "name": "openclaw-plugin-opengram",
+  "version": "0.1.0",
+  "description": "OpenGram channel plugin for OpenClaw",
+  "author": "Brice Ventures",
+  "license": "MIT",
+  "channels": ["opengram"],
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "OpenGram instance URL (e.g., http://localhost:3000)"
+      },
+      "instanceSecret": {
+        "type": "string",
+        "description": "OpenGram instance secret for API auth"
+      },
+      "defaultModelId": {
+        "type": "string",
+        "description": "Default model ID for chats created in OpenGram"
+      },
+      "reconnectDelayMs": {
+        "type": "number",
+        "default": 3000,
+        "description": "SSE reconnect delay in ms"
+      },
+      "agents": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Linked OpenClaw agent IDs"
+      }
+    },
+    "required": ["baseUrl"]
+  },
+  "uiHints": {
+    "baseUrl": {
+      "label": "OpenGram URL",
+      "placeholder": "http://localhost:3000"
+    },
+    "instanceSecret": {
+      "label": "Instance Secret",
+      "sensitive": true
+    },
+    "defaultModelId": {
+      "label": "Default Model ID",
+      "placeholder": "claude-opus-4-6"
+    },
+    "reconnectDelayMs": {
+      "label": "Reconnect Delay (ms)"
+    },
+    "agents": {
+      "label": "Linked Agents"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "openclaw-plugin-opengram",
+  "version": "0.1.0",
+  "description": "OpenGram channel plugin for OpenClaw",
+  "license": "MIT",
+  "type": "module",
+  "main": "./index.ts",
+  "peerDependencies": {
+    "openclaw": ">=2026.1.0"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41",
+    "eventsource": "^3.0.7",
+    "mime-types": "^2.1.35"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
