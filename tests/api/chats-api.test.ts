@@ -839,6 +839,33 @@ describe('chats API', () => {
     }
   });
 
+  it('falls back to default rate-limit config when decimal env values floor below one', async () => {
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '0.5';
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '0.5';
+    process.env.OPENGRAM_TRUST_PROXY_HEADERS = 'true';
+    const created = await createChat({ title: 'decimal-rate-limit-env-fallback' });
+    const chatId = created.json.id as string;
+
+    let rateLimited = false;
+    for (let i = 0; i < 3; i += 1) {
+      const response = await archivePost(
+        createJsonRequestWithHeaders(
+          `http://localhost/api/v1/chats/${chatId}/archive`,
+          'POST',
+          {},
+          { 'x-forwarded-for': '203.0.113.99' },
+        ),
+        routeContext(chatId),
+      );
+      if (response.status === 429) {
+        rateLimited = true;
+        break;
+      }
+    }
+
+    expect(rateLimited).toBe(false);
+  });
+
   it('uses instance fallback bucket when forwarded headers are untrusted', async () => {
     process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '1';
     process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';

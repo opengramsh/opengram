@@ -85,8 +85,14 @@ function getRateLimitKey(request: Request) {
 function resolveRateLimitConfig(): WriteRateLimitConfig {
   const envMax = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX);
   const envWindowMs = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS);
-  const maxRequests = Number.isFinite(envMax) && envMax > 0 ? Math.floor(envMax) : RATE_LIMIT_MAX_REQUESTS;
-  const windowMs = Number.isFinite(envWindowMs) && envWindowMs > 0 ? Math.floor(envWindowMs) : RATE_LIMIT_WINDOW_MS;
+  const parsedMaxRequests = Number.isFinite(envMax) && envMax > 0 ? Math.floor(envMax) : null;
+  const parsedWindowMs = Number.isFinite(envWindowMs) && envWindowMs > 0 ? Math.floor(envWindowMs) : null;
+  const maxRequests = parsedMaxRequests !== null && parsedMaxRequests >= 1
+    ? parsedMaxRequests
+    : RATE_LIMIT_MAX_REQUESTS;
+  const windowMs = parsedWindowMs !== null && parsedWindowMs >= 1
+    ? parsedWindowMs
+    : RATE_LIMIT_WINDOW_MS;
   return { maxRequests, windowMs };
 }
 
