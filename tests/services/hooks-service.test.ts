@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -21,6 +21,7 @@ const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'),
 
 let db: Database.Database;
 let configPath: string;
+let tempDir: string;
 
 function writeConfig(hooks: unknown[]) {
   writeFileSync(configPath, JSON.stringify({ hooks }));
@@ -88,7 +89,7 @@ function getDeliveries() {
 }
 
 beforeEach(() => {
-  const tempDir = mkdtempSync(join(tmpdir(), 'opengram-hooks-service-'));
+  tempDir = mkdtempSync(join(tmpdir(), 'opengram-hooks-service-'));
   const dbPath = join(tempDir, 'test.db');
   configPath = join(tempDir, 'opengram.config.json');
 
@@ -105,6 +106,7 @@ beforeEach(() => {
 
 afterEach(() => {
   db.close();
+  rmSync(tempDir, { recursive: true });
   delete process.env.DATABASE_URL;
   delete process.env.OPENGRAM_CONFIG_PATH;
   resetEventSubscribersForTests();

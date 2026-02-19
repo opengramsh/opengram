@@ -15,6 +15,8 @@ const RETENTION_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const IDEMPOTENCY_KEY_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+const CONFIG_CACHE_TTL_MS = 5000; // Re-read config at most every 5 seconds
+
 const HOOKS_SUBSCRIBER_GLOBAL_KEY = '__opengramHooksSubscriber';
 const RETENTION_CLEANUP_GLOBAL_KEY = '__opengramRetentionCleanup';
 
@@ -28,7 +30,7 @@ function withDb<T>(callback: (db: Database.Database) => T): T {
 }
 
 function computeBackoffMs(attempt: number) {
-  return Math.min(1000 * Math.pow(2, attempt), MAX_BACKOFF_MS);
+  return Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, MAX_BACKOFF_MS);
 }
 
 function sleep(ms: number) {
@@ -178,6 +180,9 @@ async function deliverHook(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+      // SECURITY: Hook URLs come from the admin-controlled opengram.config.json,
+      // not user input, so SSRF validation is not applied here. Ensure hook URLs
+      // point to trusted external endpoints only.
       const response = await fetch(hook.url, {
         method: 'POST',
         headers,
@@ -209,8 +214,20 @@ function matchesHook(hook: HookConfig, eventType: string) {
   return hook.events.includes(eventType);
 }
 
-function handleEvent(envelope: EventEnvelope) {
+let cachedConfig: { config: ReturnType<typeof loadOpengramConfig>; loadedAt: number } | null = null;
+
+function getCachedConfig() {
+  const now = Date.now();
+  if (cachedConfig && now - cachedConfig.loadedAt < CONFIG_CACHE_TTL_MS) {
+    return cachedConfig.config;
+  }
   const config = loadOpengramConfig();
+  cachedConfig = { config, loadedAt: now };
+  return config;
+}
+
+function handleEvent(envelope: EventEnvelope) {
+  const config = getCachedConfig();
   const hooks = config.hooks;
 
   if (hooks.length === 0) {
@@ -227,13 +244,9 @@ function handleEvent(envelope: EventEnvelope) {
   void (async () => {
     const enrichedPayload = buildEnrichedPayload(envelope);
 
-    for (const hook of matchingHooks) {
-      try {
-        await deliverHook(envelope, hook, enrichedPayload);
-      } catch {
-        // Best-effort — swallow unhandled errors.
-      }
-    }
+    await Promise.allSettled(
+      matchingHooks.map((hook) => deliverHook(envelope, hook, enrichedPayload)),
+    );
   })();
 }
 
@@ -297,6 +310,8 @@ export function startRetentionCleanupJob() {
 // ── Test helpers ──────────────────────────────────────────────────────
 
 export function resetHooksServiceForTests() {
+  cachedConfig = null;
+
   const scopedGlobal = globalThis as typeof globalThis & {
     [HOOKS_SUBSCRIBER_GLOBAL_KEY]?: boolean;
     [RETENTION_CLEANUP_GLOBAL_KEY]?: ReturnType<typeof setInterval>;
