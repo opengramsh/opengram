@@ -19,7 +19,7 @@ import { GET as mediaGet, POST as mediaPost } from '@/app/api/v1/chats/[chatId]/
 import { POST as chatsPost } from '@/app/api/v1/chats/route';
 import { GET as fileGet } from '@/app/api/v1/files/[mediaId]/route';
 import { GET as thumbnailGet } from '@/app/api/v1/files/[mediaId]/thumbnail/route';
-import { GET as mediaByIdGet } from '@/app/api/v1/media/[mediaId]/route';
+import { DELETE as mediaByIdDelete, GET as mediaByIdGet } from '@/app/api/v1/media/[mediaId]/route';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 
 type ChatContext = { params: Promise<{ chatId: string }> };
@@ -262,6 +262,68 @@ describe('media API', () => {
     );
 
     expect(thumbnailResponse.status).toBe(404);
+  });
+
+  it('deletes unattached media via /api/v1/media/[mediaId] and removes upload file', async () => {
+    const chat = await createChat();
+    const uploadResponse = await uploadBase64Media(chat.id, 'voice.webm', 'audio/webm', Buffer.from('fake-audio'));
+    const uploaded = await uploadResponse.json();
+    expect(uploadResponse.status).toBe(201);
+
+    const deleteResponse = await mediaByIdDelete(
+      createJsonRequest(`http://localhost/api/v1/media/${uploaded.id}`, 'DELETE'),
+      mediaContext(uploaded.id),
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    expect((await deleteResponse.json()).id).toBe(uploaded.id);
+
+    const metadataResponse = await mediaByIdGet(
+      createJsonRequest(`http://localhost/api/v1/media/${uploaded.id}`, 'GET'),
+      mediaContext(uploaded.id),
+    );
+    expect(metadataResponse.status).toBe(404);
+
+    const uploadsDir = join(tempDir, 'uploads', chat.id);
+    const files = existsSync(uploadsDir) ? readdirSync(uploadsDir) : [];
+    expect(files.some((name) => name.includes(uploaded.id))).toBe(false);
+  });
+
+  it('returns 409 when deleting media attached to a message', async () => {
+    const chat = await createChat();
+    const now = Date.now();
+    const messageId = 'MSG000000000000000001';
+    db.prepare(
+      [
+        'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      messageId,
+      chat.id,
+      'user',
+      'user:primary',
+      now,
+      now,
+      null,
+      'complete',
+    );
+
+    const uploadResponse = await uploadBase64Media(
+      chat.id,
+      'voice.webm',
+      'audio/webm',
+      Buffer.from('fake-audio'),
+      { kind: 'audio', messageId },
+    );
+    const uploaded = await uploadResponse.json();
+    expect(uploadResponse.status).toBe(201);
+
+    const deleteResponse = await mediaByIdDelete(
+      createJsonRequest(`http://localhost/api/v1/media/${uploaded.id}`, 'DELETE'),
+      mediaContext(uploaded.id),
+    );
+    expect(deleteResponse.status).toBe(409);
   });
 
   it('returns 415 and 413 for MIME and size validation failures', async () => {

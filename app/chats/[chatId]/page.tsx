@@ -878,17 +878,24 @@ export default function ChatPage() {
 
         const uploadedMedia = (await uploadResponse.json()) as MediaItem;
 
-        const messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            role: 'user',
-            senderId: 'user:primary',
-            trace: { mediaId: uploadedMedia.id, kind: 'audio' },
-          }),
-        });
+        let messageResponse: Response;
+        try {
+          messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              role: 'user',
+              senderId: 'user:primary',
+              trace: { mediaId: uploadedMedia.id, kind: 'audio' },
+            }),
+          });
+        } catch (error) {
+          await fetch(`/api/v1/media/${uploadedMedia.id}`, { method: 'DELETE' }).catch(() => undefined);
+          throw error;
+        }
 
         if (!messageResponse.ok) {
+          await fetch(`/api/v1/media/${uploadedMedia.id}`, { method: 'DELETE' }).catch(() => undefined);
           throw new Error('Failed to create voice message');
         }
 
@@ -954,11 +961,10 @@ export default function ChatPage() {
       };
 
       recorder.onstop = () => {
-        const durationSeconds = recordingSecondsRef.current;
         const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
         resetRecordingState();
 
-        if (durationSeconds <= 0 || blob.size === 0) {
+        if (blob.size === 0) {
           setError('Recording was too short. Try again.');
           return;
         }

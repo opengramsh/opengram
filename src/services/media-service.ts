@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import sharp from 'sharp';
 
 import {
+  conflictError,
   notFoundError,
   payloadTooLargeError,
   unsupportedMediaTypeError,
@@ -360,6 +361,39 @@ export function getMedia(mediaId: string) {
     if (!media) {
       throw notFoundError('Media not found.', { mediaId });
     }
+
+    return serializeMedia(media);
+  });
+}
+
+function unlinkFileIfPresent(path: string | null) {
+  if (!path) {
+    return;
+  }
+
+  const absolutePath = resolveStoragePath(path);
+  if (!existsSync(absolutePath)) {
+    return;
+  }
+
+  try {
+    unlinkSync(absolutePath);
+  } catch {
+    // Best-effort cleanup for media removed from DB.
+  }
+}
+
+export function deleteMedia(mediaId: string, options: { requireUnattached?: boolean } = {}) {
+  return withDb((db) => {
+    const media = getMediaRecord(db, mediaId);
+    if (options.requireUnattached && media.message_id !== null) {
+      throw conflictError('Cannot delete media that is attached to a message.', { mediaId });
+    }
+
+    db.prepare('DELETE FROM media WHERE id = ?').run(mediaId);
+
+    unlinkFileIfPresent(media.storage_path);
+    unlinkFileIfPresent(media.thumbnail_path);
 
     return serializeMedia(media);
   });

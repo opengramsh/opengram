@@ -42,6 +42,8 @@ describe('chat voice notes', () => {
   let fetchMock: FetchMock;
   let messageBodyLog: Array<Record<string, unknown>>;
   let mediaUploadCount: number;
+  let mediaDeleteCount: number;
+  let messageCreateStatus: number;
   let mediaStreamTracks: MockTrack[];
   let getUserMediaMock: ReturnType<typeof vi.fn>;
 
@@ -51,6 +53,8 @@ describe('chat voice notes', () => {
     Element.prototype.scrollTo = vi.fn();
     messageBodyLog = [];
     mediaUploadCount = 0;
+    mediaDeleteCount = 0;
+    messageCreateStatus = 201;
 
     mediaStreamTracks = [{ stop: vi.fn() }];
 
@@ -142,9 +146,22 @@ describe('chat voice notes', () => {
         );
       }
 
+      if (url === '/api/v1/media/aud-up-1' && init?.method === 'DELETE') {
+        mediaDeleteCount += 1;
+        return new Response(
+          JSON.stringify({
+            id: 'aud-up-1',
+          }),
+          { status: 200 },
+        );
+      }
+
       if (url === '/api/v1/chats/chat-1/messages' && init?.method === 'POST') {
         const payload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
         messageBodyLog.push(payload);
+        if (messageCreateStatus >= 400) {
+          return new Response(JSON.stringify({ error: 'failed' }), { status: messageCreateStatus });
+        }
         return new Response(
           JSON.stringify({
             id: 'msg-aud-1',
@@ -201,6 +218,102 @@ describe('chat voice notes', () => {
     expect(mediaStreamTracks[0]?.stop).toHaveBeenCalled();
 
     expect(await screen.findByRole('button', { name: 'Play voice-upload.webm' })).toBeTruthy();
+  });
+
+  it('uploads voice notes even when recording is stopped before one second', async () => {
+    render(<ChatPage />);
+    await screen.findByText('Chat 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    await screen.findByText('Recording 0:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+
+    await waitFor(() => {
+      expect(mediaUploadCount).toBe(1);
+      expect(messageBodyLog).toHaveLength(1);
+    });
+  });
+
+  it('deletes uploaded media if voice message creation fails', async () => {
+    messageCreateStatus = 500;
+
+    render(<ChatPage />);
+    await screen.findByText('Chat 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    await screen.findByText('Recording 0:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+
+    await waitFor(() => {
+      expect(mediaUploadCount).toBe(1);
+      expect(mediaDeleteCount).toBe(1);
+    });
+
+    expect(screen.queryByRole('button', { name: 'Play voice-upload.webm' })).toBeNull();
+    expect(await screen.findByText('Failed to upload voice note.')).toBeTruthy();
+  });
+
+  it('supports inline audio playback controls and seek', async () => {
+    render(<ChatPage />);
+    await screen.findByText('Chat 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    await screen.findByText('Recording 0:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    const playButton = await screen.findByRole('button', { name: 'Play voice-upload.webm' });
+
+    const audio = document.querySelector('audio[src="/api/v1/files/aud-up-1"]') as HTMLAudioElement | null;
+    expect(audio).toBeTruthy();
+    if (!audio) {
+      return;
+    }
+
+    let pausedState = true;
+    Object.defineProperty(audio, 'paused', {
+      configurable: true,
+      get: () => pausedState,
+    });
+    const playSpy = vi.fn(async () => {
+      pausedState = false;
+    });
+    const pauseSpy = vi.fn(() => {
+      pausedState = true;
+    });
+    Object.defineProperty(audio, 'play', { configurable: true, value: playSpy });
+    Object.defineProperty(audio, 'pause', { configurable: true, value: pauseSpy });
+    Object.defineProperty(audio, 'duration', { configurable: true, value: 75 });
+    Object.defineProperty(audio, 'currentTime', { configurable: true, value: 0, writable: true });
+
+    fireEvent(audio, new Event('loadedmetadata'));
+    expect(screen.getByText('0:00 / 1:15')).toBeTruthy();
+
+    fireEvent.click(playButton);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pause voice-upload.webm' })).toBeTruthy();
+    });
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    audio.currentTime = 10;
+    fireEvent(audio, new Event('timeupdate'));
+    expect(screen.getByText('0:10 / 1:15')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Progress voice-upload.webm' }), {
+      target: { value: '20' },
+    });
+    expect(audio.currentTime).toBe(20);
+    expect(screen.getByText('0:20 / 1:15')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause voice-upload.webm' }));
+    expect(pauseSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Play voice-upload.webm' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play voice-upload.webm' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Pause voice-upload.webm' })).toBeTruthy();
+    });
+
+    fireEvent(audio, new Event('ended'));
+    expect(screen.getByRole('button', { name: 'Play voice-upload.webm' })).toBeTruthy();
   });
 
   it('shows settings prompt when microphone permission is denied', async () => {
