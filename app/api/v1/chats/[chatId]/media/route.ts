@@ -70,28 +70,37 @@ async function readFileBytesWithLimit(file: File, maxUploadBytes: number) {
   return bytes;
 }
 
-async function enforceBodyByteLimit(request: Request, maxBodyBytes: number) {
+type StreamingRequestInit = RequestInit & { duplex: 'half' };
+
+function createByteLimitedMultipartRequest(request: Request, maxBodyBytes: number) {
   if (!request.body) {
-    return;
+    return request;
   }
 
-  const reader = request.body.getReader();
-  let total = 0;
+  let totalBytes = 0;
+  const limitedBody = request.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        totalBytes += chunk.byteLength;
+        if (totalBytes > maxBodyBytes) {
+          controller.error(
+            payloadTooLargeError('multipart body exceeds maxUploadBytes.', {
+              field: 'file',
+              maxBodyBytes,
+            }),
+          );
+          return;
+        }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      return;
-    }
+        controller.enqueue(chunk);
+      },
+    }),
+  );
 
-    total += value.byteLength;
-    if (total > maxBodyBytes) {
-      throw payloadTooLargeError('multipart body exceeds maxUploadBytes.', {
-        field: 'file',
-        maxBodyBytes,
-      });
-    }
-  }
+  return new Request(request, {
+    body: limitedBody,
+    duplex: 'half',
+  } satisfies StreamingRequestInit);
 }
 
 async function parseMultipartFormData(request: Request, maxBodyBytes: number) {
@@ -109,9 +118,7 @@ async function parseMultipartFormData(request: Request, maxBodyBytes: number) {
     });
   }
 
-  await enforceBodyByteLimit(request.clone(), maxBodyBytes);
-
-  return request.formData();
+  return createByteLimitedMultipartRequest(request, maxBodyBytes).formData();
 }
 
 export async function GET(request: Request, context: RouteContext) {
