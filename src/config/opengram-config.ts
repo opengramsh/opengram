@@ -211,14 +211,58 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
     throw new Error("Config validation error: server.corsOrigins must be an array of strings.");
   }
 
+  const normalizedCorsOrigins: string[] = [];
+  for (const rawOrigin of config.server.corsOrigins) {
+    const trimmedOrigin = rawOrigin.trim();
+    if (!trimmedOrigin) {
+      throw new Error("Config validation error: server.corsOrigins cannot include empty values.");
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmedOrigin);
+    } catch {
+      throw new Error(`Config validation error: server.corsOrigins contains invalid URL "${rawOrigin}".`);
+    }
+
+    if (parsed.origin === "null") {
+      throw new Error(
+        `Config validation error: server.corsOrigins must use http/https origins. Invalid value "${rawOrigin}".`,
+      );
+    }
+
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      throw new Error(
+        `Config validation error: server.corsOrigins entries must be origins only (no path/query/hash). Invalid value "${rawOrigin}".`,
+      );
+    }
+
+    const normalizedOrigin = parsed.origin;
+    if (!normalizedCorsOrigins.includes(normalizedOrigin)) {
+      normalizedCorsOrigins.push(normalizedOrigin);
+    }
+  }
+  config.server.corsOrigins = normalizedCorsOrigins;
+
   return config;
+}
+
+function syncCorsOriginsEnv(corsOrigins: string[]) {
+  if (!corsOrigins.length) {
+    delete process.env.OPENGRAM_CORS_ORIGINS;
+    return;
+  }
+
+  process.env.OPENGRAM_CORS_ORIGINS = corsOrigins.join(',');
 }
 
 export function loadOpengramConfig(configPath?: string): OpengramConfig {
   const resolvedPath = resolveConfigPath(configPath);
   const hasFile = existsSync(resolvedPath);
   if (!hasFile) {
-    return validateConfig(structuredClone(defaultConfig));
+    const config = validateConfig(structuredClone(defaultConfig));
+    syncCorsOriginsEnv(config.server.corsOrigins);
+    return config;
   }
 
   const raw = readFileSync(resolvedPath, "utf8");
@@ -229,7 +273,9 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
   }
 
   const merged = mergeConfig(structuredClone(defaultConfig), parsed);
-  return validateConfig(merged);
+  const config = validateConfig(merged);
+  syncCorsOriginsEnv(config.server.corsOrigins);
+  return config;
 }
 
 export const OPEN_GRAM_DEFAULT_CONFIG = defaultConfig;

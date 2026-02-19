@@ -1,28 +1,16 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { middleware } from "@/middleware";
+import { handleApiCors } from "@/src/api/cors";
 
-const repoRoot = join(import.meta.dirname, "..", "..");
+let previousCorsOrigins: string | undefined;
 
-let previousConfigPath: string | undefined;
-
-function setCorsConfig(corsOrigins: string[]) {
-  const baseConfig = JSON.parse(readFileSync(join(repoRoot, "config", "opengram.config.json"), "utf8"));
-  const tempDir = mkdtempSync(join(tmpdir(), "opengram-cors-config-"));
-  const configPath = join(tempDir, "opengram.config.json");
-
-  baseConfig.server = {
-    ...baseConfig.server,
-    corsOrigins,
-  };
-
-  writeFileSync(configPath, JSON.stringify(baseConfig), "utf8");
-  process.env.OPENGRAM_CONFIG_PATH = configPath;
+function setCorsOrigins(origins: string[]) {
+  if (origins.length > 0) {
+    process.env.OPENGRAM_CORS_ORIGINS = origins.join(",");
+  } else {
+    delete process.env.OPENGRAM_CORS_ORIGINS;
+  }
 }
 
 function createRequest(url: string, method: string, headers?: Record<string, string>) {
@@ -30,22 +18,22 @@ function createRequest(url: string, method: string, headers?: Record<string, str
 }
 
 beforeEach(() => {
-  previousConfigPath = process.env.OPENGRAM_CONFIG_PATH;
+  previousCorsOrigins = process.env.OPENGRAM_CORS_ORIGINS;
 });
 
 afterEach(() => {
-  if (previousConfigPath === undefined) {
-    delete process.env.OPENGRAM_CONFIG_PATH;
+  if (previousCorsOrigins === undefined) {
+    delete process.env.OPENGRAM_CORS_ORIGINS;
   } else {
-    process.env.OPENGRAM_CONFIG_PATH = previousConfigPath;
+    process.env.OPENGRAM_CORS_ORIGINS = previousCorsOrigins;
   }
 });
 
 describe("API CORS middleware", () => {
   it("responds to preflight for allowed origins", () => {
-    setCorsConfig(["https://app.example.com"]);
+    setCorsOrigins(["https://app.example.com"]);
 
-    const response = middleware(
+    const response = handleApiCors(
       createRequest("http://localhost/api/v1/chats", "OPTIONS", {
         Origin: "https://app.example.com",
         "Access-Control-Request-Method": "POST",
@@ -58,12 +46,13 @@ describe("API CORS middleware", () => {
     expect(response.headers.get("Access-Control-Allow-Headers")).toBe("content-type,authorization");
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("OPTIONS");
     expect(response.headers.get("Vary")).toContain("Origin");
+    expect(response.headers.get("Vary")).toContain("Access-Control-Request-Headers");
   });
 
   it("adds CORS headers for non-OPTIONS requests from allowed origins", () => {
-    setCorsConfig(["https://app.example.com"]);
+    setCorsOrigins(["https://app.example.com"]);
 
-    const response = middleware(
+    const response = handleApiCors(
       createRequest("http://localhost/api/v1/chats", "GET", {
         Origin: "https://app.example.com",
       }),
@@ -75,9 +64,9 @@ describe("API CORS middleware", () => {
   });
 
   it("does not emit CORS headers when origin is not allowed", () => {
-    setCorsConfig(["https://allowed.example.com"]);
+    setCorsOrigins(["https://allowed.example.com"]);
 
-    const response = middleware(
+    const response = handleApiCors(
       createRequest("http://localhost/api/v1/chats", "GET", {
         Origin: "https://app.example.com",
       }),
@@ -87,9 +76,9 @@ describe("API CORS middleware", () => {
   });
 
   it("defaults to same-origin behavior when corsOrigins is empty", () => {
-    setCorsConfig([]);
+    setCorsOrigins([]);
 
-    const response = middleware(
+    const response = handleApiCors(
       createRequest("http://localhost/api/v1/chats", "OPTIONS", {
         Origin: "https://app.example.com",
       }),
@@ -99,5 +88,38 @@ describe("API CORS middleware", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
     expect(response.headers.get("Access-Control-Allow-Methods")).toBeNull();
+  });
+
+  it("supports multiple allowed origins", () => {
+    setCorsOrigins(["https://one.example.com", "https://two.example.com"]);
+
+    const r1 = handleApiCors(
+      createRequest("http://localhost/api/v1/chats", "GET", {
+        Origin: "https://two.example.com",
+      }),
+    );
+    expect(r1.headers.get("Access-Control-Allow-Origin")).toBe("https://two.example.com");
+
+    const r2 = handleApiCors(
+      createRequest("http://localhost/api/v1/chats", "GET", {
+        Origin: "https://other.example.com",
+      }),
+    );
+    expect(r2.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
+  it("uses default allowed headers when no request headers specified", () => {
+    setCorsOrigins(["https://app.example.com"]);
+
+    const response = handleApiCors(
+      createRequest("http://localhost/api/v1/chats", "OPTIONS", {
+        Origin: "https://app.example.com",
+        "Access-Control-Request-Method": "POST",
+      }),
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");
+    expect(response.headers.get("Access-Control-Allow-Headers")).toContain("Content-Type");
   });
 });
