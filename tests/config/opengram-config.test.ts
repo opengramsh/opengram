@@ -31,6 +31,21 @@ describe("loadOpengramConfig", () => {
     expect(config.appName).toBe("OpenGram Dev");
     expect(config.server.port).toBe(3300);
     expect(config.server.streamTimeoutSeconds).toBe(60);
+    expect(config.security.readEndpointsRequireInstanceSecret).toBe(false);
+  });
+
+  it("supports enabling read endpoint auth in security config", () => {
+    const filePath = writeConfigFile({
+      security: {
+        instanceSecretEnabled: true,
+        instanceSecret: "s3cret",
+        readEndpointsRequireInstanceSecret: true,
+      },
+    });
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.security.instanceSecretEnabled).toBe(true);
+    expect(config.security.readEndpointsRequireInstanceSecret).toBe(true);
   });
 
   it("rejects invalid defaultModelIdForNewChats", () => {

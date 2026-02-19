@@ -2,6 +2,7 @@ import { createReadStream, statSync } from 'node:fs';
 import { Readable } from 'node:stream';
 
 import { toErrorResponse, validationError } from '@/src/api/http';
+import { applyReadMiddlewares } from '@/src/api/write-controls';
 import { getMediaFileDescriptor } from '@/src/services/media-service';
 
 type RouteContext = {
@@ -90,6 +91,7 @@ function toWebReadableStream(stream: NodeJS.ReadableStream) {
 
 export async function GET(request: Request, context: RouteContext) {
   try {
+    applyReadMiddlewares(request);
     const mediaId = await resolveMediaId(context);
     const media = getMediaFileDescriptor(mediaId);
     const stat = statSync(media.absolutePath);

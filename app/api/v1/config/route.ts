@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 
 import { toErrorResponse } from '@/src/api/http';
+import { applyReadMiddlewares } from '@/src/api/write-controls';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    applyReadMiddlewares(request);
     const config = loadOpengramConfig();
 
     return NextResponse.json({
@@ -24,6 +26,7 @@ export async function GET() {
       },
       security: {
         instanceSecretEnabled: config.security.instanceSecretEnabled,
+        readEndpointsRequireInstanceSecret: config.security.readEndpointsRequireInstanceSecret,
       },
       server: {
         publicBaseUrl: config.server.publicBaseUrl,

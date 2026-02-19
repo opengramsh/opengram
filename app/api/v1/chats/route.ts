@@ -3,7 +3,7 @@ import {
   executeWithIdempotency,
   getIdempotencyKey,
 } from '@/src/api/idempotency';
-import { applyWriteMiddlewares } from '@/src/api/write-controls';
+import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
 import { createChat, listChats } from '@/src/services/chats-service';
 
 type CreateChatRequest = {
@@ -28,6 +28,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    applyReadMiddlewares(request);
     const result = listChats(new URL(request.url));
     return successCollection(result.data, result.nextCursor, result.hasMore);
   } catch (error) {

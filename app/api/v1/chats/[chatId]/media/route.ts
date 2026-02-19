@@ -9,7 +9,7 @@ import {
   toErrorResponse,
   validationError,
 } from '@/src/api/http';
-import { applyWriteMiddlewares } from '@/src/api/write-controls';
+import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
 import { createMedia, listChatMedia } from '@/src/services/media-service';
 
 type MediaKind = 'image' | 'audio' | 'file';
@@ -90,6 +90,7 @@ async function parseMultipartFormData(request: Request, maxBodyBytes: number) {
 
 export async function GET(request: Request, context: RouteContext) {
   try {
+    applyReadMiddlewares(request);
     const chatId = await resolveChatId(context);
     const url = new URL(request.url);
     const { limit, cursor } = parseMediaPagination(url.searchParams);

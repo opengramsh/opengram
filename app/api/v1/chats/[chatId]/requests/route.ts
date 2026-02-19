@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { executeWithIdempotency, getIdempotencyKey } from '@/src/api/idempotency';
 import { parseJsonBody, toErrorResponse, validationError } from '@/src/api/http';
-import { applyWriteMiddlewares } from '@/src/api/write-controls';
+import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
 import { createRequest, listChatRequests } from '@/src/services/requests-service';
 
 type RouteContext = {
@@ -16,6 +16,7 @@ async function resolveChatId(context: RouteContext) {
 
 export async function GET(request: Request, context: RouteContext) {
   try {
+    applyReadMiddlewares(request);
     const chatId = await resolveChatId(context);
     const statusParam = new URL(request.url).searchParams.get('status') ?? 'pending';
 

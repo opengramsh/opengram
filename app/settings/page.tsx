@@ -23,6 +23,7 @@ type SettingsResponse = {
   };
   security?: {
     instanceSecretEnabled?: boolean;
+    readEndpointsRequireInstanceSecret?: boolean;
   };
 };
 
@@ -193,6 +194,13 @@ export default function SettingsPage() {
               ? 'Instance secret enforcement is enabled.'
               : 'Instance secret enforcement is disabled.'}
           </p>
+          {config?.security?.instanceSecretEnabled && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {config.security.readEndpointsRequireInstanceSecret
+                ? 'Read endpoints also require the instance secret.'
+                : 'Read endpoints do not require the instance secret.'}
+            </p>
+          )}
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-4">

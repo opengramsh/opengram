@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { parseJsonBody, toErrorResponse } from '@/src/api/http';
-import { applyWriteMiddlewares } from '@/src/api/write-controls';
+import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
 import { getChat, updateChat } from '@/src/services/chats-service';
 
 type UpdateChatRequest = {
@@ -21,8 +21,9 @@ async function resolveChatId(context: RouteContext) {
   return params.chatId;
 }
 
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
+    applyReadMiddlewares(request);
     const chatId = await resolveChatId(context);
     const chat = getChat(chatId);
     return NextResponse.json(chat);

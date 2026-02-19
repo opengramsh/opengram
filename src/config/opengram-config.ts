@@ -42,6 +42,7 @@ export type PushConfig = {
 export type SecurityConfig = {
   instanceSecretEnabled: boolean;
   instanceSecret: string;
+  readEndpointsRequireInstanceSecret: boolean;
 };
 
 export type ServerConfig = {
@@ -96,6 +97,7 @@ const defaultConfig: OpengramConfig = {
   security: {
     instanceSecretEnabled: false,
     instanceSecret: "",
+    readEndpointsRequireInstanceSecret: false,
   },
   server: {
     publicBaseUrl: "http://localhost:3000",

@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 
 import { toErrorResponse } from '@/src/api/http';
+import { applyReadMiddlewares } from '@/src/api/write-controls';
 import { listTagSuggestions } from '@/src/services/chats-service';
 
 export async function GET(request: Request) {
   try {
+    applyReadMiddlewares(request);
     const url = new URL(request.url);
     const query = url.searchParams.get('q') ?? '';
     const limitParam = url.searchParams.get('limit');

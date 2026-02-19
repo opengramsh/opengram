@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { toErrorResponse } from '@/src/api/http';
-import { applyWriteMiddlewares } from '@/src/api/write-controls';
+import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
 import { deleteMedia, getMedia } from '@/src/services/media-service';
 
 type RouteContext = {
@@ -13,8 +13,9 @@ async function resolveMediaId(context: RouteContext) {
   return params.mediaId;
 }
 
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
+    applyReadMiddlewares(request);
     const mediaId = await resolveMediaId(context);
     const media = getMedia(mediaId);
     return NextResponse.json(media);

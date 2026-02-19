@@ -1,5 +1,5 @@
-import { loadOpengramConfig } from '@/src/config/opengram-config';
-import { toErrorResponse, unauthorizedError, validationError } from '@/src/api/http';
+import { toErrorResponse, validationError } from '@/src/api/http';
+import { requireSseAuth } from '@/src/api/write-controls';
 import {
   getEventRowidById,
   getLatestEventRowid,
@@ -14,19 +14,6 @@ const MAX_QUEUED_LIVE_EVENTS_DURING_REPLAY = 512;
 function toSseChunk(event: EventEnvelope) {
   const data = JSON.stringify(event);
   return `id: ${event.id}\nevent: ${event.type}\ndata: ${data}\n\n`;
-}
-
-function requireStreamAuth(request: Request) {
-  const config = loadOpengramConfig();
-  if (!config.security.instanceSecretEnabled) {
-    return;
-  }
-
-  const authHeader = request.headers.get('authorization');
-  const expected = `Bearer ${config.security.instanceSecret}`;
-  if (authHeader !== expected) {
-    throw unauthorizedError('Missing or invalid instance secret.');
-  }
 }
 
 function parseEphemeralParam(url: URL) {
@@ -44,7 +31,7 @@ function parseEphemeralParam(url: URL) {
 
 export async function GET(request: Request) {
   try {
-    requireStreamAuth(request);
+    requireSseAuth(request);
     const url = new URL(request.url);
     const cursorParam = url.searchParams.get('cursor');
     const cursor = cursorParam && cursorParam.trim() ? cursorParam.trim() : null;

@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 
 import { toErrorResponse } from '@/src/api/http';
+import { applyReadMiddlewares } from '@/src/api/write-controls';
 import { getThumbnailDescriptor } from '@/src/services/media-service';
 
 type RouteContext = {
@@ -22,8 +23,9 @@ function toWebReadableStream(stream: NodeJS.ReadableStream) {
   return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
 }
 
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
+    applyReadMiddlewares(request);
     const mediaId = await resolveMediaId(context);
     const thumbnail = getThumbnailDescriptor(mediaId);
     const thumbnailStat = await stat(thumbnail.absolutePath);
