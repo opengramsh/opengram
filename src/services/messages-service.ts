@@ -6,6 +6,7 @@ import { encodeMessageCursor, parseMessagePagination } from '@/src/api/paginatio
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { createSqliteConnection } from '@/src/db/client';
 import { emitEvent } from '@/src/services/events-service';
+import { notifyAgentMessageCreated } from '@/src/services/push-service';
 
 const USER_SENDER_ID = 'user:primary';
 const SYSTEM_SENDER_ID = 'system';
@@ -400,6 +401,14 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
       senderId: serialized.sender_id,
       streamState: serialized.stream_state,
     });
+
+    if (serialized.role === 'agent') {
+      void notifyAgentMessageCreated({
+        chatId: serialized.chat_id,
+        senderId: serialized.sender_id,
+        preview: serialized.content_final,
+      });
+    }
 
     if (normalized.streaming) {
       ensureStreamingTimeoutSweeperStarted();

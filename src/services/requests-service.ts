@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { notFoundError, validationError } from '@/src/api/http';
 import { createSqliteConnection } from '@/src/db/client';
 import { emitEvent } from '@/src/services/events-service';
+import { notifyRequestCreated } from '@/src/services/push-service';
 
 type RequestType = 'choice' | 'text_input' | 'form';
 type RequestStatus = 'pending' | 'resolved' | 'cancelled';
@@ -665,6 +666,11 @@ export function createRequest(chatId: string, input: CreateRequestInput) {
       chatId,
       requestId,
       type: normalized.type,
+      title: normalized.title,
+    });
+
+    void notifyRequestCreated({
+      chatId,
       title: normalized.title,
     });
 

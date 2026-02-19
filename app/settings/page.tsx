@@ -1,22 +1,64 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  fetchPushConfig,
+  getCurrentPushSubscription,
+  getPushPermissionState,
+  isPushSupported,
+  sendPushTestNotification,
+  type PushPermissionState,
+} from '@/src/lib/push-client';
 
 type SettingsResponse = {
   appName: string;
   push?: {
     enabled?: boolean;
     subject?: string;
+    vapidPublicKey?: string;
   };
   security?: {
     instanceSecretEnabled?: boolean;
   };
 };
 
+function permissionLabel(permission: PushPermissionState) {
+  if (permission === 'unsupported') {
+    return 'Not supported in this browser';
+  }
+  if (permission === 'granted') {
+    return 'Granted';
+  }
+  if (permission === 'denied') {
+    return 'Denied';
+  }
+
+  return 'Not requested';
+}
+
 export default function SettingsPage() {
   const [config, setConfig] = useState<SettingsResponse | null>(null);
+  const [permission, setPermission] = useState<PushPermissionState>('unsupported');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<'enable' | 'disable' | 'test' | null>(null);
+
+  const refreshPushState = useCallback(async () => {
+    const currentPermission = getPushPermissionState();
+    setPermission(currentPermission);
+
+    if (!isPushSupported()) {
+      setIsSubscribed(false);
+      return;
+    }
+
+    const subscription = await getCurrentPushSubscription();
+    setIsSubscribed(Boolean(subscription));
+  }, []);
 
   useEffect(() => {
     async function loadConfig() {
@@ -28,6 +70,55 @@ export default function SettingsPage() {
     }
 
     loadConfig().catch(() => undefined);
+    refreshPushState().catch(() => undefined);
+  }, [refreshPushState]);
+
+  const handleEnable = useCallback(async () => {
+    if (!config?.push?.enabled) {
+      setStatusMessage('Push is disabled in server config.');
+      return;
+    }
+
+    try {
+      setBusyAction('enable');
+      setStatusMessage(null);
+      const pushConfig = await fetchPushConfig();
+      await enablePushNotifications(pushConfig.vapidPublicKey);
+      setStatusMessage('Notifications enabled.');
+      await refreshPushState();
+    } catch {
+      setStatusMessage('Unable to enable notifications. Check browser permission settings.');
+      await refreshPushState();
+    } finally {
+      setBusyAction(null);
+    }
+  }, [config?.push?.enabled, refreshPushState]);
+
+  const handleDisable = useCallback(async () => {
+    try {
+      setBusyAction('disable');
+      setStatusMessage(null);
+      await disablePushNotifications();
+      setStatusMessage('Notifications disabled.');
+      await refreshPushState();
+    } catch {
+      setStatusMessage('Unable to disable notifications.');
+    } finally {
+      setBusyAction(null);
+    }
+  }, [refreshPushState]);
+
+  const handleSendTest = useCallback(async () => {
+    try {
+      setBusyAction('test');
+      setStatusMessage(null);
+      await sendPushTestNotification();
+      setStatusMessage('Test notification sent.');
+    } catch {
+      setStatusMessage('Unable to send test notification.');
+    } finally {
+      setBusyAction(null);
+    }
   }, []);
 
   return (
@@ -49,7 +140,50 @@ export default function SettingsPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {config?.push?.enabled ? 'Enabled in config.' : 'Disabled in config.'}
           </p>
+          <p className="mt-1 text-sm text-muted-foreground">Permission: {permissionLabel(permission)}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Subscription: {isSubscribed ? 'Active' : 'Not active'}
+          </p>
           {config?.push?.subject && <p className="mt-1 text-xs text-muted-foreground">Subject: {config.push.subject}</p>}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+              onClick={() => {
+                handleEnable().catch(() => undefined);
+              }}
+              disabled={busyAction !== null || !config?.push?.enabled}
+            >
+              {busyAction === 'enable' ? 'Enabling…' : 'Enable notifications'}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+              onClick={() => {
+                handleDisable().catch(() => undefined);
+              }}
+              disabled={busyAction !== null || !isSubscribed}
+            >
+              {busyAction === 'disable' ? 'Disabling…' : 'Disable notifications'}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+              onClick={() => {
+                handleSendTest().catch(() => undefined);
+              }}
+              disabled={busyAction !== null || !config?.push?.enabled || !isSubscribed}
+            >
+              {busyAction === 'test' ? 'Sending…' : 'Send test notification'}
+            </button>
+          </div>
+
+          {statusMessage && <p className="mt-3 text-xs text-muted-foreground">{statusMessage}</p>}
+
+          <p className="mt-3 text-xs text-muted-foreground">
+            iOS Safari requires installing OpenGram to Home Screen before push permissions can be granted.
+          </p>
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-4">
