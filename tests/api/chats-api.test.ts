@@ -576,6 +576,75 @@ describe('chats API', () => {
     expect(conflictBody.error.code).toBe('CONFLICT');
   });
 
+  it('replays idempotent creates for semantically identical payloads with different key order', async () => {
+    const firstResponse = await chatsPost(
+      new Request('http://localhost/api/v1/chats', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': 'chat-canonical-key',
+        },
+        body: JSON.stringify({
+          agentIds: ['agent-default'],
+          modelId: 'model-default',
+          tags: ['ops'],
+          title: 'canonical',
+        }),
+      }),
+    );
+    const firstBody = await firstResponse.json();
+
+    const replayResponse = await chatsPost(
+      new Request('http://localhost/api/v1/chats', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': 'chat-canonical-key',
+        },
+        body: JSON.stringify({
+          title: 'canonical',
+          tags: ['ops'],
+          modelId: 'model-default',
+          agentIds: ['agent-default'],
+        }),
+      }),
+    );
+    const replayBody = await replayResponse.json();
+
+    expect(firstResponse.status).toBe(201);
+    expect(replayResponse.status).toBe(201);
+    expect(replayBody.id).toBe(firstBody.id);
+  });
+
+  it('returns validation error when Idempotency-Key header is empty', async () => {
+    const response = await chatsPost(
+      new Request('http://localhost/api/v1/chats', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': '   ',
+        },
+        body: JSON.stringify({
+          agentIds: ['agent-default'],
+          modelId: 'model-default',
+          title: 'invalid-key',
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Idempotency-Key cannot be empty.',
+        details: {
+          field: 'Idempotency-Key',
+        },
+      },
+    });
+  });
+
   it('handles concurrent idempotent create without duplicate side effects', async () => {
     const requestFactory = () => new Request('http://localhost/api/v1/chats', {
       method: 'POST',
@@ -770,11 +839,12 @@ describe('chats API', () => {
     }
   });
 
-  it('ignores untrusted forwarded headers for rate limiting', async () => {
+  it('uses instance fallback bucket when forwarded headers are untrusted', async () => {
     process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '1';
     process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
     const created = await createChat({ title: 'untrusted-forwarded-header-target' });
     const chatId = created.json.id as string;
+    resetWriteRateLimitForTests();
 
     const first = await archivePost(
       createJsonRequestWithHeaders(
@@ -796,7 +866,7 @@ describe('chats API', () => {
     );
 
     expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
+    expect(second.status).toBe(429);
   });
 
   it('returns not found envelope for unknown chat', async () => {

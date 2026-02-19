@@ -6,6 +6,7 @@ const RATE_LIMIT_MAX_REQUESTS = 100;
 const RATE_LIMIT_WINDOW_MS = 1_000;
 const RATE_LIMIT_SWEEP_INTERVAL_MS = 10_000;
 const TRUST_PROXY_HEADERS_ENV = 'OPENGRAM_TRUST_PROXY_HEADERS';
+const INSTANCE_FALLBACK_BUCKET_KEY = 'instance-fallback';
 
 type RateLimitBucket = {
   windowStartedAt: number;
@@ -77,6 +78,10 @@ function getClientIp(request: Request) {
   );
 }
 
+function getRateLimitKey(request: Request) {
+  return getClientIp(request) ?? INSTANCE_FALLBACK_BUCKET_KEY;
+}
+
 function resolveRateLimitConfig(): WriteRateLimitConfig {
   const envMax = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX);
   const envWindowMs = Number(process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS);
@@ -118,15 +123,11 @@ export function enforceWriteRateLimit(request: Request) {
   const now = Date.now();
   sweepExpiredBuckets(now, windowMs);
 
-  const ip = getClientIp(request);
-  if (!ip) {
-    return;
-  }
-
-  const existing = writeRateBuckets.get(ip);
+  const key = getRateLimitKey(request);
+  const existing = writeRateBuckets.get(key);
 
   if (!existing || now - existing.windowStartedAt >= windowMs) {
-    writeRateBuckets.set(ip, {
+    writeRateBuckets.set(key, {
       windowStartedAt: now,
       count: 1,
     });
