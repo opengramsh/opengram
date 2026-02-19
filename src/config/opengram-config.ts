@@ -203,6 +203,14 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
     throw new Error("Config validation error: server.idempotencyTtlSeconds must be a positive integer.");
   }
 
+  if (!Array.isArray(config.server.corsOrigins)) {
+    throw new Error("Config validation error: server.corsOrigins must be an array of origins.");
+  }
+
+  if (!config.server.corsOrigins.every((origin) => typeof origin === "string")) {
+    throw new Error("Config validation error: server.corsOrigins must be an array of strings.");
+  }
+
   return config;
 }
 

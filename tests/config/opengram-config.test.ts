@@ -64,4 +64,28 @@ describe("loadOpengramConfig", () => {
       /defaultModelIdForNewChats must match one configured model id/,
     );
   });
+
+  it("rejects non-array server.corsOrigins", () => {
+    const filePath = writeConfigFile({
+      server: {
+        corsOrigins: "https://app.example.com",
+      },
+    });
+
+    expect(() => loadOpengramConfig(filePath)).toThrow(
+      /server.corsOrigins must be an array of origins/,
+    );
+  });
+
+  it("rejects non-string values in server.corsOrigins", () => {
+    const filePath = writeConfigFile({
+      server: {
+        corsOrigins: ["https://app.example.com", 42],
+      },
+    });
+
+    expect(() => loadOpengramConfig(filePath)).toThrow(
+      /server.corsOrigins must be an array of strings/,
+    );
+  });
 });
