@@ -354,6 +354,14 @@ function mediaSortAsc(a: MediaItem, b: MediaItem) {
   return a.created_at.localeCompare(b.created_at);
 }
 
+function requestSortAsc(a: RequestItem, b: RequestItem) {
+  if (a.created_at === b.created_at) {
+    return a.id.localeCompare(b.id);
+  }
+
+  return a.created_at.localeCompare(b.created_at);
+}
+
 function buildInlineMessageMedia(messages: Message[], mediaByMessageId: Map<string, MediaItem[]>, mediaById: Map<string, MediaItem>) {
   const map = new Map<string, MediaItem[]>();
 
@@ -1066,8 +1074,6 @@ export default function ChatPage() {
         return;
       }
 
-      const previousPendingRequests = pendingRequests;
-      const previousPendingCount = chat?.pending_requests_count ?? 0;
       setRequestErrors((current) => ({ ...current, [request.id]: null }));
       setResolvingRequestIds((current) => ({ ...current, [request.id]: true }));
       setPendingRequests((current) => current.filter((item) => item.id !== request.id));
@@ -1106,16 +1112,8 @@ export default function ChatPage() {
           if (current.some((item) => item.id === request.id)) {
             return current;
           }
-          return previousPendingRequests;
+          return [...current, request].sort(requestSortAsc);
         });
-        setChat((current) =>
-          current
-            ? {
-                ...current,
-                pending_requests_count: previousPendingCount,
-              }
-            : current,
-        );
         void refreshPendingRequests().catch(() => undefined);
         setError('Failed to resolve request.');
         setRequestErrors((current) => ({
@@ -1130,7 +1128,7 @@ export default function ChatPage() {
         });
       }
     },
-    [chat?.pending_requests_count, pendingRequests, refreshPendingRequests, resolvingRequestIds, validateRequestResolutionPayload],
+    [refreshPendingRequests, resolvingRequestIds, validateRequestResolutionPayload],
   );
 
   const uploadVoiceNote = useCallback(

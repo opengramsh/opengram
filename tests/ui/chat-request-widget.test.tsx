@@ -38,6 +38,7 @@ describe('chat request widget', () => {
   let fetchMock: FetchMock;
   let requestsPayload: Array<Record<string, unknown>>;
   let resolvePayloads: Array<{ requestId: string; payload: Record<string, unknown> }>;
+  let resolveRequestResponse: (requestId: string, payload: Record<string, unknown>) => Promise<Response>;
 
   beforeEach(() => {
     streamMock.listener = null;
@@ -45,6 +46,8 @@ describe('chat request widget', () => {
     Element.prototype.scrollTo = vi.fn();
     resolvePayloads = [];
     requestsPayload = [];
+    resolveRequestResponse = async (requestId) =>
+      new Response(JSON.stringify({ id: requestId, status: 'resolved' }), { status: 200 });
 
     fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -93,7 +96,7 @@ describe('chat request widget', () => {
         const requestId = url.split('/')[4] ?? 'unknown';
         const payload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
         resolvePayloads.push({ requestId, payload });
-        return new Response(JSON.stringify({ id: requestId, status: 'resolved' }), { status: 200 });
+        return resolveRequestResponse(requestId, payload);
       }
 
       return new Response('not found', { status: 404 });
@@ -272,5 +275,65 @@ describe('chat request widget', () => {
         },
       },
     });
+  });
+
+  it('keeps state consistent when concurrent resolves finish out of order with one failure', async () => {
+    requestsPayload = [
+      {
+        id: 'req-a',
+        chat_id: 'chat-1',
+        type: 'text_input',
+        status: 'pending',
+        title: 'Request A',
+        body: null,
+        config: { placeholder: 'Input A' },
+        created_at: '2026-02-18T20:00:00.000Z',
+      },
+      {
+        id: 'req-b',
+        chat_id: 'chat-1',
+        type: 'text_input',
+        status: 'pending',
+        title: 'Request B',
+        body: null,
+        config: { placeholder: 'Input B' },
+        created_at: '2026-02-18T20:01:00.000Z',
+      },
+    ];
+
+    const pendingResponses = new Map<string, (response: Response) => void>();
+    resolveRequestResponse = (requestId) =>
+      new Promise<Response>((resolve) => {
+        pendingResponses.set(requestId, resolve);
+      });
+
+    const user = userEvent.setup();
+    render(<ChatPage />);
+
+    const inputA = await screen.findByPlaceholderText('Input A');
+    const inputB = await screen.findByPlaceholderText('Input B');
+    await user.type(inputA, 'alpha');
+    await user.type(inputB, 'beta');
+
+    const submitButtons = screen.getAllByRole('button', { name: 'Submit' });
+    await user.click(submitButtons[0] as HTMLElement);
+    await user.click(submitButtons[1] as HTMLElement);
+
+    await waitFor(() => {
+      expect(resolvePayloads).toHaveLength(2);
+    });
+    expect(screen.queryByText('Request A')).toBeNull();
+    expect(screen.queryByText('Request B')).toBeNull();
+
+    requestsPayload = requestsPayload.filter((item) => String(item.id) !== 'req-b');
+    pendingResponses.get('req-b')?.(new Response(JSON.stringify({ id: 'req-b', status: 'resolved' }), { status: 200 }));
+
+    requestsPayload = requestsPayload.filter((item) => String(item.id) === 'req-a');
+    pendingResponses.get('req-a')?.(new Response('failed', { status: 500 }));
+
+    await screen.findByText('Failed to submit. Try again.');
+    await screen.findByText('Request A');
+    expect(screen.queryByText('Request B')).toBeNull();
+    expect(screen.getByText('Pending requests (1)')).toBeTruthy();
   });
 });
