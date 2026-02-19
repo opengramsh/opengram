@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
-import { toErrorResponse, validationError } from '@/src/api/http';
-import { listChatRequests } from '@/src/services/requests-service';
+import { executeWithIdempotency, getIdempotencyKey } from '@/src/api/idempotency';
+import { parseJsonBody, toErrorResponse, validationError } from '@/src/api/http';
+import { enforceWriteGuards } from '@/src/api/write-controls';
+import { createRequest, listChatRequests } from '@/src/services/requests-service';
 
 type RouteContext = {
   params: Promise<{ chatId: string }> | { chatId: string };
@@ -26,6 +28,26 @@ export async function GET(request: Request, context: RouteContext) {
     const status = statusParam as 'pending' | 'resolved' | 'cancelled' | 'all';
     const requests = listChatRequests(chatId, status);
     return NextResponse.json({ data: requests });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
+type CreateRequestBody = {
+  type: unknown;
+  title: unknown;
+  body?: unknown;
+  config: unknown;
+  trace?: unknown;
+};
+
+export async function POST(request: Request, context: RouteContext) {
+  try {
+    enforceWriteGuards(request);
+    const chatId = await resolveChatId(context);
+    const body = await parseJsonBody<CreateRequestBody>(request);
+    const idempotencyKey = getIdempotencyKey(request);
+    return await executeWithIdempotency(idempotencyKey, body, 201, () => createRequest(chatId, body));
   } catch (error) {
     return toErrorResponse(error);
   }
