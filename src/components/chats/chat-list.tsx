@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Facehash } from 'facehash';
 import { Pin } from 'lucide-react';
@@ -161,7 +162,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
   }, []);
 
   const handlePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (event.pointerType === 'mouse' && event.button !== 0) {
         return;
       }
@@ -187,7 +188,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
   );
 
   const handlePointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (pointerIdRef.current !== event.pointerId) {
         return;
       }
@@ -211,7 +212,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
   );
 
   const handlePointerEnd = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (pointerIdRef.current !== event.pointerId) {
         return;
       }
@@ -246,6 +247,31 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
     };
   }, [clearLongPressTimer]);
 
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        if (offsetX < 0) {
+          setOffsetX(0);
+          return;
+        }
+
+        onOpen();
+        return;
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        onAction();
+      }
+    },
+    [offsetX, onAction, onOpen],
+  );
+
   const unread = chat.unread_count > 0;
   const unreadBadge =
     chat.unread_count > 1 ? (
@@ -275,13 +301,15 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
       >
         {actionLabel}
       </button>
-      <div
+      <button
+        type="button"
         className="relative z-10 flex cursor-default items-center gap-3 rounded-2xl border border-border/80 bg-card px-3 py-3 transition-transform duration-150"
         style={{ transform: `translateX(${offsetX}px)` }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
+        onKeyDown={handleKeyDown}
         onContextMenu={(event) => {
           event.preventDefault();
           onLongPress({ x: event.clientX, y: event.clientY });
@@ -315,7 +343,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
             </div>
           </div>
         </div>
-      </div>
+      </button>
     </div>
   );
 }

@@ -156,12 +156,36 @@ describe('hamburger + archived chats UI', () => {
     const { container } = render(<ArchivedPage />);
 
     await screen.findByText('Archived chat');
-    const swipeSurface = container.querySelector('div[style*="translateX"]');
+    const swipeSurface = container.querySelector('[style*="translateX"]');
     expect(swipeSurface).toBeTruthy();
 
     fireEvent.pointerDown(swipeSurface as Element, { pointerId: 1, clientX: 200, clientY: 20, button: 0 });
     fireEvent.pointerMove(swipeSurface as Element, { pointerId: 1, clientX: 60, clientY: 24 });
     fireEvent.pointerUp(swipeSurface as Element, { pointerId: 1, clientX: 60, clientY: 24 });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/chats/chat-archived/unarchive', { method: 'POST' });
+    });
+  });
+
+  it('opens archived chat row with keyboard Enter', async () => {
+    navigationState.pathname = '/archived';
+    render(<ArchivedPage />);
+
+    const chatRowButton = await screen.findByRole('button', { name: /Archived chat/i });
+    chatRowButton.focus();
+    fireEvent.keyDown(chatRowButton, { key: 'Enter' });
+
+    expect(navigationState.push).toHaveBeenCalledWith('/chats/chat-archived');
+  });
+
+  it('unarchives from archived list via keyboard Delete', async () => {
+    navigationState.pathname = '/archived';
+    render(<ArchivedPage />);
+
+    const chatRowButton = await screen.findByRole('button', { name: /Archived chat/i });
+    chatRowButton.focus();
+    fireEvent.keyDown(chatRowButton, { key: 'Delete' });
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/v1/chats/chat-archived/unarchive', { method: 'POST' });
