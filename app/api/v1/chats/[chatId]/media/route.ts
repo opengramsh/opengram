@@ -70,6 +70,30 @@ async function readFileBytesWithLimit(file: File, maxUploadBytes: number) {
   return bytes;
 }
 
+async function enforceBodyByteLimit(request: Request, maxBodyBytes: number) {
+  if (!request.body) {
+    return;
+  }
+
+  const reader = request.body.getReader();
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return;
+    }
+
+    total += value.byteLength;
+    if (total > maxBodyBytes) {
+      throw payloadTooLargeError('multipart body exceeds maxUploadBytes.', {
+        field: 'file',
+        maxBodyBytes,
+      });
+    }
+  }
+}
+
 async function parseMultipartFormData(request: Request, maxBodyBytes: number) {
   const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.includes('multipart/form-data')) {
@@ -84,6 +108,8 @@ async function parseMultipartFormData(request: Request, maxBodyBytes: number) {
       contentLength,
     });
   }
+
+  await enforceBodyByteLimit(request.clone(), maxBodyBytes);
 
   return request.formData();
 }

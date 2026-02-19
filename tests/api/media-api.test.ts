@@ -467,6 +467,37 @@ describe('media API', () => {
     expect(response.status).toBe(413);
   });
 
+  it('rejects oversized multipart bodies without Content-Length headers', async () => {
+    const configPath = join(tempDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        maxUploadBytes: 4,
+        allowedMimeTypes: ['*/*'],
+      }),
+    );
+    process.env.OPENGRAM_CONFIG_PATH = configPath;
+
+    const chat = await createChat();
+    const pad = 'a'.repeat(300_000);
+    const body =
+      `--x\r\nContent-Disposition: form-data; name="pad"\r\n\r\n${pad}\r\n` +
+      '--x\r\nContent-Disposition: form-data; name="file"; filename="tiny.txt"\r\nContent-Type: text/plain\r\n\r\nok\r\n--x--\r\n';
+
+    const response = await mediaPost(
+      new Request(`http://localhost/api/v1/chats/${chat.id}/media`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=x',
+        },
+        body,
+      }),
+      chatContext(chat.id),
+    );
+
+    expect(response.status).toBe(413);
+  });
+
   it('returns 415 when image payload bytes are not a decodable image', async () => {
     const configPath = join(tempDir, 'config.json');
     writeFileSync(
