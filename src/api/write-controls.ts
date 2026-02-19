@@ -5,7 +5,7 @@ import { rateLimitedError, unauthorizedError } from '@/src/api/http';
 const RATE_LIMIT_MAX_REQUESTS = 100;
 const RATE_LIMIT_WINDOW_MS = 1_000;
 const RATE_LIMIT_SWEEP_INTERVAL_MS = 10_000;
-const UNKNOWN_CLIENT_IP = 'unknown';
+const TRUST_PROXY_HEADERS_ENV = 'OPENGRAM_TRUST_PROXY_HEADERS';
 
 type RateLimitBucket = {
   windowStartedAt: number;
@@ -44,12 +44,36 @@ function parseForwardedFor(forwardedFor: string | null): string | null {
   return normalizeIp(first ?? null);
 }
 
+function shouldTrustProxyHeaders() {
+  const raw = process.env[TRUST_PROXY_HEADERS_ENV];
+  if (!raw) {
+    return false;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
+function getPlatformClientIp(request: Request): string | null {
+  const withIp = request as Request & { ip?: string | null };
+  return normalizeIp(withIp.ip ?? null);
+}
+
 function getClientIp(request: Request) {
+  const platformIp = getPlatformClientIp(request);
+  if (platformIp) {
+    return platformIp;
+  }
+
+  if (!shouldTrustProxyHeaders()) {
+    return null;
+  }
+
   return (
     parseForwardedFor(request.headers.get('x-forwarded-for'))
     ?? normalizeIp(request.headers.get('x-real-ip'))
     ?? normalizeIp(request.headers.get('cf-connecting-ip'))
-    ?? UNKNOWN_CLIENT_IP
+    ?? null
   );
 }
 
@@ -95,6 +119,10 @@ export function enforceWriteRateLimit(request: Request) {
   sweepExpiredBuckets(now, windowMs);
 
   const ip = getClientIp(request);
+  if (!ip) {
+    return;
+  }
+
   const existing = writeRateBuckets.get(ip);
 
   if (!existing || now - existing.windowStartedAt >= windowMs) {
@@ -123,10 +151,6 @@ export function applyWriteMiddlewares(
   for (const middleware of middlewares) {
     middleware(request);
   }
-}
-
-export function enforceWriteGuards(request: Request) {
-  applyWriteMiddlewares(request);
 }
 
 export function resetWriteRateLimitForTests() {

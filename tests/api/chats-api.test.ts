@@ -122,6 +122,7 @@ afterEach(() => {
   delete process.env.DATABASE_URL;
   delete process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX;
   delete process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS;
+  delete process.env.OPENGRAM_TRUST_PROXY_HEADERS;
   if (previousConfigPath === undefined) {
     delete process.env.OPENGRAM_CONFIG_PATH;
   } else {
@@ -672,6 +673,7 @@ describe('chats API', () => {
   it('rate limits write endpoints per IP and returns retry-after header', async () => {
     process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '2';
     process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
+    process.env.OPENGRAM_TRUST_PROXY_HEADERS = 'true';
     const created = await createChat({ title: 'rate-limit-target' });
     const chatId = created.json.id as string;
 
@@ -712,6 +714,7 @@ describe('chats API', () => {
   it('resets write rate limit after the configured window elapses', async () => {
     process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '1';
     process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '50';
+    process.env.OPENGRAM_TRUST_PROXY_HEADERS = 'true';
     const created = await createChat({ title: 'window-rollover-target' });
     const chatId = created.json.id as string;
 
@@ -754,6 +757,7 @@ describe('chats API', () => {
   it('does not apply write rate limits to read endpoints', async () => {
     process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '1';
     process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
+    process.env.OPENGRAM_TRUST_PROXY_HEADERS = 'true';
 
     for (let i = 0; i < 5; i += 1) {
       const response = await chatsGet(
@@ -764,6 +768,35 @@ describe('chats API', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('Retry-After')).toBeNull();
     }
+  });
+
+  it('ignores untrusted forwarded headers for rate limiting', async () => {
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX = '1';
+    process.env.OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS = '1000';
+    const created = await createChat({ title: 'untrusted-forwarded-header-target' });
+    const chatId = created.json.id as string;
+
+    const first = await archivePost(
+      createJsonRequestWithHeaders(
+        `http://localhost/api/v1/chats/${chatId}/archive`,
+        'POST',
+        {},
+        { 'x-forwarded-for': '192.0.2.10' },
+      ),
+      routeContext(chatId),
+    );
+    const second = await archivePost(
+      createJsonRequestWithHeaders(
+        `http://localhost/api/v1/chats/${chatId}/archive`,
+        'POST',
+        {},
+        { 'x-forwarded-for': '192.0.2.11' },
+      ),
+      routeContext(chatId),
+    );
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
   });
 
   it('returns not found envelope for unknown chat', async () => {
