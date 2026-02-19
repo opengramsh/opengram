@@ -106,7 +106,7 @@ describe('push API', () => {
   it('subscribes and upserts push subscriptions by endpoint', async () => {
     const firstResponse = await pushSubscribePost(
       createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
-        endpoint: 'https://example.com/sub/1',
+        endpoint: 'https://fcm.googleapis.com/sub/1',
         keys: {
           p256dh: 'p256dh-key',
           auth: 'auth-key',
@@ -117,7 +117,7 @@ describe('push API', () => {
 
     const secondResponse = await pushSubscribePost(
       createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
-        endpoint: 'https://example.com/sub/1',
+        endpoint: 'https://fcm.googleapis.com/sub/1',
         keys: {
           p256dh: 'p256dh-key-updated',
           auth: 'auth-key-updated',
@@ -128,12 +128,12 @@ describe('push API', () => {
 
     const count = db
       .prepare('SELECT COUNT(*) AS count FROM push_subscriptions WHERE endpoint = ?')
-      .get('https://example.com/sub/1') as { count: number };
+      .get('https://fcm.googleapis.com/sub/1') as { count: number };
     expect(count.count).toBe(1);
 
     const row = db
       .prepare('SELECT keys_p256dh, keys_auth FROM push_subscriptions WHERE endpoint = ?')
-      .get('https://example.com/sub/1') as { keys_p256dh: string; keys_auth: string };
+      .get('https://fcm.googleapis.com/sub/1') as { keys_p256dh: string; keys_auth: string };
     expect(row).toEqual({
       keys_p256dh: 'p256dh-key-updated',
       keys_auth: 'auth-key-updated',
@@ -143,7 +143,7 @@ describe('push API', () => {
   it('rejects non-https and private-network subscription endpoints', async () => {
     const insecureResponse = await pushSubscribePost(
       createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
-        endpoint: 'http://example.com/sub/1',
+        endpoint: 'http://fcm.googleapis.com/sub/1',
         keys: {
           p256dh: 'p256dh-key',
           auth: 'auth-key',
@@ -170,11 +170,11 @@ describe('push API', () => {
         'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
         'VALUES (?, ?, ?, ?, ?, ?)',
       ].join(' '),
-    ).run('111111111111111111111', 'https://example.com/sub/remove', 'k1', 'k2', 'agent', Date.now());
+    ).run('111111111111111111111', 'https://fcm.googleapis.com/sub/remove', 'k1', 'k2', 'agent', Date.now());
 
     const response = await pushSubscribeDelete(
       createJsonRequest('http://localhost/api/v1/push/subscribe', 'DELETE', {
-        endpoint: 'https://example.com/sub/remove',
+        endpoint: 'https://fcm.googleapis.com/sub/remove',
       }),
     );
 
@@ -183,7 +183,7 @@ describe('push API', () => {
 
     const count = db
       .prepare('SELECT COUNT(*) AS count FROM push_subscriptions WHERE endpoint = ?')
-      .get('https://example.com/sub/remove') as { count: number };
+      .get('https://fcm.googleapis.com/sub/remove') as { count: number };
     expect(count.count).toBe(0);
   });
 
@@ -195,13 +195,13 @@ describe('push API', () => {
       ].join(' '),
     ).run(
       '111111111111111111111',
-      'https://example.com/sub/live',
+      'https://fcm.googleapis.com/sub/live',
       'k1',
       'a1',
       null,
       Date.now(),
       '222222222222222222222',
-      'https://example.com/sub/gone',
+      'https://fcm.googleapis.com/sub/gone',
       'k2',
       'a2',
       null,
@@ -248,6 +248,6 @@ describe('push API', () => {
     const remaining = db
       .prepare('SELECT endpoint FROM push_subscriptions ORDER BY endpoint ASC')
       .all() as Array<{ endpoint: string }>;
-    expect(remaining).toEqual([{ endpoint: 'https://example.com/sub/live' }]);
+    expect(remaining).toEqual([{ endpoint: 'https://fcm.googleapis.com/sub/live' }]);
   });
 });

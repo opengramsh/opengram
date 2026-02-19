@@ -43,7 +43,22 @@ type WebPushSubscription = {
 
 const MAX_BODY_CHARS = 240;
 const MAX_PAYLOAD_BYTES = 4000;
+const ALLOWED_PUSH_ENDPOINT_HOSTS = [
+  'fcm.googleapis.com',
+  'push.services.mozilla.com',
+  'updates.push.services.mozilla.com',
+  'web.push.apple.com',
+];
 let vapidConfigured = false;
+
+function isAllowedPushEndpointHost(hostname: string) {
+  const normalized = hostname.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return ALLOWED_PUSH_ENDPOINT_HOSTS.includes(normalized);
+}
 
 function isDisallowedHost(hostname: string) {
   const normalized = hostname.trim().toLowerCase();
@@ -130,6 +145,10 @@ function normalizeSubscriptionEndpoint(value: unknown) {
 
   if (isDisallowedHost(parsed.hostname)) {
     throw validationError('endpoint host is not allowed.', { field: 'endpoint' });
+  }
+
+  if (!isAllowedPushEndpointHost(parsed.hostname)) {
+    throw validationError('endpoint host must be a supported Web Push provider.', { field: 'endpoint' });
   }
 
   return parsed.toString();

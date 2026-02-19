@@ -37,7 +37,12 @@ self.addEventListener('notificationclick', (event) => {
     : '/';
 
   event.waitUntil((async () => {
-    const resolvedTarget = new URL(targetUrl, self.location.origin);
+    let resolvedTarget;
+    try {
+      resolvedTarget = new URL(targetUrl, self.location.origin);
+    } catch {
+      resolvedTarget = new URL('/', self.location.origin);
+    }
     const matchedClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
     for (const client of matchedClients) {
