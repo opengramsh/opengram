@@ -1,11 +1,11 @@
 import type Database from 'better-sqlite3';
 import { isIP } from 'node:net';
 import { nanoid } from 'nanoid';
-import webpush from 'web-push';
 
 import { internalError, validationError } from '@/src/api/http';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { getDb } from '@/src/db/client';
+import { sendWebPushNotification } from '@/src/services/push-crypto';
 
 type PushSubscriptionKeys = {
   p256dh: string;
@@ -49,7 +49,6 @@ const ALLOWED_PUSH_ENDPOINT_HOSTS = [
   'updates.push.services.mozilla.com',
   'web.push.apple.com',
 ];
-let vapidConfigured = false;
 
 function isAllowedPushEndpointHost(hostname: string) {
   const normalized = hostname.trim().toLowerCase();
@@ -167,14 +166,13 @@ function requirePushEnabled() {
   return config;
 }
 
-function ensureVapidConfigured() {
+function getVapidDetails() {
   const config = requirePushEnabled();
-  if (vapidConfigured) {
-    return;
-  }
-
-  webpush.setVapidDetails(config.push.subject, config.push.vapidPublicKey, config.push.vapidPrivateKey);
-  vapidConfigured = true;
+  return {
+    subject: config.push.subject,
+    publicKey: config.push.vapidPublicKey,
+    privateKey: config.push.vapidPrivateKey,
+  };
 }
 
 function parseSubscriptionKeys(value: unknown): PushSubscriptionKeys {
@@ -272,8 +270,7 @@ async function sendPayloadToAll(payload: PushNotificationPayload) {
     return { sent: 0, failed: 0, removed: 0 };
   }
 
-  ensureVapidConfigured();
-
+  const vapid = getVapidDetails();
   const encodedPayload = buildPayload(payload);
   const db = getDb();
   const subscriptions = listSubscriptions(db);
@@ -284,7 +281,7 @@ async function sendPayloadToAll(payload: PushNotificationPayload) {
 
   for (const record of subscriptions) {
     try {
-      await webpush.sendNotification(toWebPushSubscription(record), encodedPayload);
+      await sendWebPushNotification(toWebPushSubscription(record), encodedPayload, vapid);
       sent += 1;
     } catch (error) {
       failed += 1;
@@ -451,5 +448,5 @@ export async function notifyRequestCreated(input: {
 }
 
 export function resetPushServiceForTests() {
-  vapidConfigured = false;
+  // No-op: VAPID details are now read fresh from config on each send.
 }

@@ -3,7 +3,7 @@ import { extname, join, posix, resolve, sep } from 'node:path';
 
 import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
-import sharp from 'sharp';
+import type Vips from 'wasm-vips';
 
 import {
   conflictError,
@@ -167,12 +167,26 @@ function ensureChatAndMessage(db: Database.Database, chatId: string, messageId: 
   }
 }
 
-async function createThumbnail(fileBytes: Uint8Array) {
-  return sharp(fileBytes)
-    .rotate()
-    .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 80 })
-    .toBuffer();
+let vipsInstance: typeof Vips | null = null;
+
+async function getVips() {
+  if (vipsInstance) return vipsInstance;
+  const VipsInit = (await import('wasm-vips')).default;
+  vipsInstance = await VipsInit();
+  return vipsInstance;
+}
+
+async function createThumbnail(fileBytes: Uint8Array): Promise<Uint8Array> {
+  const vips = await getVips();
+  const thumb = vips.Image.thumbnailBuffer(fileBytes, 512, {
+    height: 512,
+    size: vips.Size.down,
+  });
+  try {
+    return thumb.webpsaveBuffer({ Q: 80 });
+  } finally {
+    thumb.delete();
+  }
 }
 
 function isInvalidImageContentError(error: unknown) {
@@ -183,9 +197,11 @@ function isInvalidImageContentError(error: unknown) {
   const message = error.message.toLowerCase();
   return (
     message.includes('unsupported image format')
-    || message.includes('input buffer contains')
+    || message.includes('not a known file format')
+    || message.includes('buffer is not in a known format')
     || message.includes('corrupt')
     || message.includes('invalid')
+    || message.includes('unable to load')
   );
 }
 
@@ -218,7 +234,7 @@ export async function createMedia(input: CreateMediaInput) {
   const relativePath = posix.join('uploads', input.chatId, `${mediaId}${extension}`);
   const absolutePath = resolveStoragePath(relativePath);
 
-  let thumbnailBuffer: Buffer | null = null;
+  let thumbnailBuffer: Uint8Array | null = null;
   if (kind === 'image') {
     try {
       thumbnailBuffer = await createThumbnail(input.fileBytes);
