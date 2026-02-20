@@ -29,6 +29,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# runtime data
+/data/
+
 # typescript
 *.tsbuildinfo
 packages/openclaw-plugin/node_modules
