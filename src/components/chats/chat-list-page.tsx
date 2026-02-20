@@ -1,7 +1,5 @@
-'use client';
-
 import type { ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { Facehash } from 'facehash';
 import { Plus } from 'lucide-react';
 
@@ -28,7 +26,7 @@ export function ChatListPage({
   rowActionLabel,
   searchPlaceholder,
 }: ChatListPageProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const {
     agents,
     models,
@@ -155,7 +153,7 @@ export function ChatListPage({
         error={error}
         emptyLabel={emptyLabel}
         rowActionLabel={rowActionLabel}
-        onOpenChat={(chat) => router.push(`/chats/${chat.id}`)}
+        onOpenChat={(chat) => navigate(`/chats/${chat.id}`)}
         onMarkRead={markChatRead}
         onMarkUnread={markChatUnread}
         onTogglePin={togglePin}

@@ -1,7 +1,5 @@
-'use client';
-
 import { useMemo } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useLocation, useNavigate } from 'react-router';
 import { Menu } from 'lucide-react';
 
 import { Button } from '@/src/components/ui/button';
@@ -20,8 +18,8 @@ const MENU_ITEMS = [
 ];
 
 export function HamburgerMenu() {
-  const router = useRouter();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const activeHref = useMemo(
     () => MENU_ITEMS.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.href ?? null,
@@ -37,7 +35,6 @@ export function HamburgerMenu() {
       </SheetTrigger>
       <SheetContent side="left" showCloseButton={false} className="w-72 border-r border-border bg-card p-4" aria-describedby={undefined}>
         <div className="mb-4 flex items-center gap-2 px-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/opengram-logo.png" alt="" width={28} height={28} className="shrink-0" />
           <SheetTitle className="text-base font-semibold text-foreground">OpenGram</SheetTitle>
         </div>
@@ -50,7 +47,7 @@ export function HamburgerMenu() {
                   ? 'bg-primary/15 text-foreground'
                   : 'text-muted-foreground'
               }`}
-              onClick={() => router.push('/')}
+              onClick={() => navigate('/')}
             >
               Inbox
             </Button>
@@ -64,7 +61,7 @@ export function HamburgerMenu() {
                     ? 'bg-primary/15 text-foreground'
                     : 'text-muted-foreground'
                 }`}
-                onClick={() => router.push(item.href)}
+                onClick={() => navigate(item.href)}
               >
                 {item.label}
               </Button>
