@@ -275,4 +275,32 @@ describe('events stream API', () => {
     abort.abort();
     await response.body?.cancel();
   });
+
+  it('does not apply compression to SSE stream responses', async () => {
+    const abort = new AbortController();
+    const response = await app.request(
+      new Request('http://localhost/api/v1/events/stream?ephemeral=true', {
+        signal: abort.signal,
+        headers: {
+          'accept-encoding': 'gzip',
+        },
+      }),
+    );
+
+    emitEvent(
+      'chat.updated',
+      { chatId: 'chat-1', note: 'x'.repeat(5000) },
+      { id: '777777777777777777777', timestampMs: 7000 },
+    );
+
+    const output = await readSseOutput(
+      response,
+      abort,
+      (value) => value.includes('id: 777777777777777777777'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Encoding')).toBeNull();
+    expect(output).toContain('id: 777777777777777777777');
+  });
 });

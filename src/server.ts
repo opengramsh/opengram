@@ -27,9 +27,17 @@ function getCorsOrigins(): string[] {
 }
 
 export const app = new Hono();
+const compressionMiddleware = compress();
 
 // Global middleware
-app.use(compress());
+app.use(async (c, next) => {
+  if (c.req.path === '/api/v1/events/stream') {
+    await next();
+    return;
+  }
+
+  return compressionMiddleware(c, next);
+});
 app.use('/api/*', cors({
   origin: (origin) => {
     const allowed = getCorsOrigins();
