@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"tsx --watch src/server.ts\" \"vite\"",
+    "dev": "concurrently -k \"tsx --watch src/server.ts\" \"vite --host 0.0.0.0 --port 5173\"",
     "dev:server": "tsx --watch src/server.ts",
     "dev:client": "vite",
     "build": "vite build && tsup src/server.ts --format esm --outDir dist/server",
