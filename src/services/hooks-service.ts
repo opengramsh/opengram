@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 
 import type { HookConfig } from '@/src/config/opengram-config';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
-import { createSqliteConnection } from '@/src/db/client';
+import { getDb } from '@/src/db/client';
 import type { EventEnvelope } from '@/src/services/events-service';
 import { subscribeToEvents } from '@/src/services/events-service';
 
@@ -19,15 +19,6 @@ const CONFIG_CACHE_TTL_MS = 5000; // Re-read config at most every 5 seconds
 
 const HOOKS_SUBSCRIBER_GLOBAL_KEY = '__opengramHooksSubscriber';
 const RETENTION_CLEANUP_GLOBAL_KEY = '__opengramRetentionCleanup';
-
-function withDb<T>(callback: (db: Database.Database) => T): T {
-  const db = createSqliteConnection();
-  try {
-    return callback(db);
-  } finally {
-    db.close();
-  }
-}
 
 function computeBackoffMs(attempt: number) {
   return Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, MAX_BACKOFF_MS);
@@ -51,26 +42,25 @@ function buildEnrichedPayload(envelope: EventEnvelope): Record<string, unknown> 
     const messageId = payload.messageId as string | undefined;
     if (chatId && messageId) {
       try {
-        return withDb((db) => {
-          const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as Record<string, unknown> | undefined;
-          const chat = db.prepare('SELECT id, agent_ids, model_id, pending_requests_count FROM chats WHERE id = ?').get(chatId) as Record<string, unknown> | undefined;
+        const db = getDb();
+        const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as Record<string, unknown> | undefined;
+        const chat = db.prepare('SELECT id, agent_ids, model_id, pending_requests_count FROM chats WHERE id = ?').get(chatId) as Record<string, unknown> | undefined;
 
-          if (!message || !chat) {
-            return payload;
-          }
+        if (!message || !chat) {
+          return payload;
+        }
 
-          return {
-            chatId,
-            agentIds: parseJsonArray(chat.agent_ids as string | null),
-            messageId: message.id,
-            senderId: message.sender_id,
-            role: message.role,
-            content: message.content_final ?? message.content_partial,
-            modelId: message.model_id,
-            pendingRequestsCount: chat.pending_requests_count,
-            trace: parseJsonOrNull(message.trace as string | null),
-          };
-        });
+        return {
+          chatId,
+          agentIds: parseJsonArray(chat.agent_ids as string | null),
+          messageId: message.id,
+          senderId: message.sender_id,
+          role: message.role,
+          content: message.content_final ?? message.content_partial,
+          modelId: message.model_id,
+          pendingRequestsCount: chat.pending_requests_count,
+          trace: parseJsonOrNull(message.trace as string | null),
+        };
       } catch {
         return payload;
       }
@@ -82,22 +72,21 @@ function buildEnrichedPayload(envelope: EventEnvelope): Record<string, unknown> 
     const chatId = payload.chatId as string | undefined;
     if (requestId && chatId) {
       try {
-        return withDb((db) => {
-          const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(requestId) as Record<string, unknown> | undefined;
+        const db = getDb();
+        const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(requestId) as Record<string, unknown> | undefined;
 
-          if (!request) {
-            return payload;
-          }
+        if (!request) {
+          return payload;
+        }
 
-          return {
-            chatId,
-            requestId: request.id,
-            type: request.type,
-            status: request.status,
-            resolutionPayload: parseJsonOrNull(request.resolution_payload as string | null),
-            trace: parseJsonOrNull(request.trace as string | null),
-          };
-        });
+        return {
+          chatId,
+          requestId: request.id,
+          type: request.type,
+          status: request.status,
+          resolutionPayload: parseJsonOrNull(request.resolution_payload as string | null),
+          trace: parseJsonOrNull(request.trace as string | null),
+        };
       } catch {
         return payload;
       }
@@ -134,14 +123,13 @@ function logDeliveryAttempt(
   error: string | null,
 ) {
   try {
-    withDb((db) => {
-      db.prepare(
-        [
-          'INSERT INTO webhook_deliveries (id, event_id, target_url, status_code, success, error, attempted_at)',
-          'VALUES (?, ?, ?, ?, ?, ?, ?)',
-        ].join(' '),
-      ).run(nanoid(), eventId, targetUrl, statusCode, success ? 1 : 0, error, Date.now());
-    });
+    const db = getDb();
+    db.prepare(
+      [
+        'INSERT INTO webhook_deliveries (id, event_id, target_url, status_code, success, error, attempted_at)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(nanoid(), eventId, targetUrl, statusCode, success ? 1 : 0, error, Date.now());
   } catch {
     // Best-effort logging — never propagate failures.
   }
@@ -271,11 +259,10 @@ export function startHooksSubscriber() {
 export function runRetentionCleanup() {
   const now = Date.now();
 
-  withDb((db) => {
-    // Webhook deliveries are CASCADE-deleted when their parent event is deleted.
-    db.prepare('DELETE FROM events WHERE created_at < ?').run(now - EVENT_RETENTION_MS);
-    db.prepare('DELETE FROM idempotency_keys WHERE created_at < ?').run(now - IDEMPOTENCY_KEY_RETENTION_MS);
-  });
+  const db = getDb();
+  // Webhook deliveries are CASCADE-deleted when their parent event is deleted.
+  db.prepare('DELETE FROM events WHERE created_at < ?').run(now - EVENT_RETENTION_MS);
+  db.prepare('DELETE FROM idempotency_keys WHERE created_at < ?').run(now - IDEMPOTENCY_KEY_RETENTION_MS);
 }
 
 export function startRetentionCleanupJob() {

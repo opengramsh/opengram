@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 import { conflictError, notFoundError, validationError } from '@/src/api/http';
 import { encodeMessageCursor, parseMessagePagination } from '@/src/api/pagination';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
-import { createSqliteConnection } from '@/src/db/client';
+import { getDb } from '@/src/db/client';
 import { emitEvent } from '@/src/services/events-service';
 import { notifyAgentMessageCreated } from '@/src/services/push-service';
 
@@ -100,15 +100,6 @@ function serializeMessage(record: MessageRecord) {
     model_id: record.model_id,
     trace: parseTrace(record.trace),
   };
-}
-
-function withDb<T>(callback: (db: Database.Database) => T): T {
-  const db = createSqliteConnection();
-  try {
-    return callback(db);
-  } finally {
-    db.close();
-  }
 }
 
 function getMessageMetadata(db: Database.Database, messageId: string): MessageRecord {
@@ -308,159 +299,157 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
   const allowedAgentIds = new Set(loadOpengramConfig().agents.map((agent) => agent.id));
   ensureSenderForRole(normalized.role, normalized.senderId, allowedAgentIds);
 
-  return withDb((db) => {
-    const chat = getChatMessageMetadata(db, chatId);
-    const messageId = nanoid();
-    const now = Date.now();
-    const streamState = normalized.streaming ? 'streaming' : 'complete';
-    const contentFinal = normalized.streaming ? null : normalized.content;
+  const db = getDb();
+  const chat = getChatMessageMetadata(db, chatId);
+  const messageId = nanoid();
+  const now = Date.now();
+  const streamState = normalized.streaming ? 'streaming' : 'complete';
+  const contentFinal = normalized.streaming ? null : normalized.content;
 
-    const tx = db.transaction(() => {
-      let linkedMedia: MediaRecord | null = null;
+  const tx = db.transaction(() => {
+    let linkedMedia: MediaRecord | null = null;
 
-      if (normalized.mediaReference) {
-        linkedMedia = (db
-          .prepare('SELECT id, chat_id, message_id, kind FROM media WHERE id = ? AND chat_id = ?')
-          .get(normalized.mediaReference.mediaId, chat.id) as MediaRecord | undefined) ?? null;
+    if (normalized.mediaReference) {
+      linkedMedia = (db
+        .prepare('SELECT id, chat_id, message_id, kind FROM media WHERE id = ? AND chat_id = ?')
+        .get(normalized.mediaReference.mediaId, chat.id) as MediaRecord | undefined) ?? null;
 
-        if (!linkedMedia) {
-          throw validationError('trace.mediaId does not belong to this chat.', {
-            field: 'trace.mediaId',
-          });
-        }
-
-        if (linkedMedia.message_id && linkedMedia.message_id !== messageId) {
-          throw validationError('trace.mediaId is already linked to another message.', {
-            field: 'trace.mediaId',
-          });
-        }
-
-        if (normalized.mediaReference.declaredKind && normalized.mediaReference.declaredKind !== linkedMedia.kind) {
-          throw validationError('trace.kind does not match linked media kind.', {
-            field: 'trace.kind',
-          });
-        }
+      if (!linkedMedia) {
+        throw validationError('trace.mediaId does not belong to this chat.', {
+          field: 'trace.mediaId',
+        });
       }
 
-      const preview = derivePreview(contentFinal, linkedMedia?.kind ?? null);
-
-      db.prepare(
-        [
-          'INSERT INTO messages (',
-          'id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial,',
-          'stream_state, model_id, trace',
-          ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        ].join(' '),
-      ).run(
-        messageId,
-        chat.id,
-        normalized.role,
-        normalized.senderId,
-        now,
-        now,
-        contentFinal,
-        null,
-        streamState,
-        chat.model_id,
-        normalized.trace ? JSON.stringify(normalized.trace) : null,
-      );
-
-      if (linkedMedia) {
-        db.prepare('UPDATE media SET message_id = ? WHERE id = ?').run(messageId, linkedMedia.id);
+      if (linkedMedia.message_id && linkedMedia.message_id !== messageId) {
+        throw validationError('trace.mediaId is already linked to another message.', {
+          field: 'trace.mediaId',
+        });
       }
 
-      db.prepare(
-        [
-          'UPDATE chats',
-          'SET last_message_preview = ?,',
-          'last_message_role = ?,',
-          'last_message_at = ?,',
-          'unread_count = unread_count + ?,',
-          'updated_at = ?',
-          'WHERE id = ?',
-        ].join(' '),
-      ).run(
-        preview,
-        normalized.role,
-        now,
-        normalized.role === 'user' ? 0 : 1,
-        now,
-        chat.id,
-      );
-    });
-
-    tx();
-
-    const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as MessageRecord;
-    const serialized = serializeMessage(message);
-    emitEvent('message.created', {
-      chatId,
-      messageId: serialized.id,
-      role: serialized.role,
-      senderId: serialized.sender_id,
-      streamState: serialized.stream_state,
-      contentFinal: serialized.content_final,
-      createdAt: serialized.created_at,
-    });
-
-    if (serialized.role === 'agent') {
-      void notifyAgentMessageCreated({
-        chatId: serialized.chat_id,
-        senderId: serialized.sender_id,
-        preview: serialized.content_final,
-      }).catch((error) => {
-        console.error('Failed to send message.created push notification.', error);
-      });
+      if (normalized.mediaReference.declaredKind && normalized.mediaReference.declaredKind !== linkedMedia.kind) {
+        throw validationError('trace.kind does not match linked media kind.', {
+          field: 'trace.kind',
+        });
+      }
     }
 
-    if (normalized.streaming) {
-      ensureStreamingTimeoutSweeperStarted();
+    const preview = derivePreview(contentFinal, linkedMedia?.kind ?? null);
+
+    db.prepare(
+      [
+        'INSERT INTO messages (',
+        'id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial,',
+        'stream_state, model_id, trace',
+        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      messageId,
+      chat.id,
+      normalized.role,
+      normalized.senderId,
+      now,
+      now,
+      contentFinal,
+      null,
+      streamState,
+      chat.model_id,
+      normalized.trace ? JSON.stringify(normalized.trace) : null,
+    );
+
+    if (linkedMedia) {
+      db.prepare('UPDATE media SET message_id = ? WHERE id = ?').run(messageId, linkedMedia.id);
     }
 
-    return serialized;
+    db.prepare(
+      [
+        'UPDATE chats',
+        'SET last_message_preview = ?,',
+        'last_message_role = ?,',
+        'last_message_at = ?,',
+        'unread_count = unread_count + ?,',
+        'updated_at = ?',
+        'WHERE id = ?',
+      ].join(' '),
+    ).run(
+      preview,
+      normalized.role,
+      now,
+      normalized.role === 'user' ? 0 : 1,
+      now,
+      chat.id,
+    );
   });
+
+  tx();
+
+  const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as MessageRecord;
+  const serialized = serializeMessage(message);
+  emitEvent('message.created', {
+    chatId,
+    messageId: serialized.id,
+    role: serialized.role,
+    senderId: serialized.sender_id,
+    streamState: serialized.stream_state,
+    contentFinal: serialized.content_final,
+    createdAt: serialized.created_at,
+  });
+
+  if (serialized.role === 'agent') {
+    void notifyAgentMessageCreated({
+      chatId: serialized.chat_id,
+      senderId: serialized.sender_id,
+      preview: serialized.content_final,
+    }).catch((error) => {
+      console.error('Failed to send message.created push notification.', error);
+    });
+  }
+
+  if (normalized.streaming) {
+    ensureStreamingTimeoutSweeperStarted();
+  }
+
+  return serialized;
 }
 
 export function listMessages(chatId: string, url: URL): ListMessagesResult {
   const { limit, cursor } = parseMessagePagination(url.searchParams);
 
-  return withDb((db) => {
-    getChatMessageMetadata(db, chatId);
+  const db = getDb();
+  getChatMessageMetadata(db, chatId);
 
-    const conditions = ['chat_id = ?'];
-    const values: unknown[] = [chatId];
+  const conditions = ['chat_id = ?'];
+  const values: unknown[] = [chatId];
 
-    if (cursor) {
-      conditions.push('(created_at < ? OR (created_at = ? AND id < ?))');
-      values.push(cursor.createdAt, cursor.createdAt, cursor.id);
-    }
+  if (cursor) {
+    conditions.push('(created_at < ? OR (created_at = ? AND id < ?))');
+    values.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
 
-    const rows = db
-      .prepare(
-        [
-          'SELECT * FROM messages',
-          `WHERE ${conditions.join(' AND ')}`,
-          'ORDER BY created_at DESC, id DESC',
-          'LIMIT ?',
-        ].join(' '),
-      )
-      .all(...values, limit + 1) as MessageRecord[];
+  const rows = db
+    .prepare(
+      [
+        'SELECT * FROM messages',
+        `WHERE ${conditions.join(' AND ')}`,
+        'ORDER BY created_at DESC, id DESC',
+        'LIMIT ?',
+      ].join(' '),
+    )
+    .all(...values, limit + 1) as MessageRecord[];
 
-    const hasMore = rows.length > limit;
-    const slice = hasMore ? rows.slice(0, limit) : rows;
-    const last = slice.at(-1);
+  const hasMore = rows.length > limit;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const last = slice.at(-1);
 
-    return {
-      data: slice.map(serializeMessage),
-      nextCursor: hasMore && last
-        ? encodeMessageCursor({
-            createdAt: last.created_at,
-            id: last.id,
-          })
-        : null,
-      hasMore,
-    };
-  });
+  return {
+    data: slice.map(serializeMessage),
+    nextCursor: hasMore && last
+      ? encodeMessageCursor({
+          createdAt: last.created_at,
+          id: last.id,
+        })
+      : null,
+    hasMore,
+  };
 }
 
 function requireDeltaText(value: unknown) {
@@ -486,43 +475,42 @@ function requireOptionalFinalText(value: unknown) {
 export function appendStreamingChunk(messageId: string, deltaText: unknown) {
   const normalizedDeltaText = requireDeltaText(deltaText);
 
-  return withDb((db) => {
-    const now = Date.now();
-    const tx = db.transaction(() => {
-      const message = getMessageMetadata(db, messageId);
-      const updatedChunk = db.prepare(
-        [
-          'UPDATE messages',
-          "SET content_partial = COALESCE(content_partial, '') || ?, updated_at = ?",
-          'WHERE id = ? AND stream_state = ?',
-        ].join(' '),
-      ).run(normalizedDeltaText, now, messageId, 'streaming');
+  const db = getDb();
+  const now = Date.now();
+  const tx = db.transaction(() => {
+    const message = getMessageMetadata(db, messageId);
+    const updatedChunk = db.prepare(
+      [
+        'UPDATE messages',
+        "SET content_partial = COALESCE(content_partial, '') || ?, updated_at = ?",
+        'WHERE id = ? AND stream_state = ?',
+      ].join(' '),
+    ).run(normalizedDeltaText, now, messageId, 'streaming');
 
-      if (updatedChunk.changes === 0) {
-        throwStreamingStateConflict(db, messageId);
-      }
+    if (updatedChunk.changes === 0) {
+      throwStreamingStateConflict(db, messageId);
+    }
 
-      db.prepare(
-        'UPDATE chats SET updated_at = ? WHERE id = ?',
-      ).run(now, message.chat_id);
+    db.prepare(
+      'UPDATE chats SET updated_at = ? WHERE id = ?',
+    ).run(now, message.chat_id);
 
-      const updated = getMessageMetadata(db, messageId);
-      return { updated, deltaText: normalizedDeltaText };
-    });
-
-    const { updated, deltaText: emittedDeltaText } = tx();
-    const serialized = serializeMessage(updated);
-    emitEvent(
-      'message.streaming.chunk',
-      {
-        chatId: serialized.chat_id,
-        messageId: serialized.id,
-        deltaText: emittedDeltaText,
-      },
-      { ephemeral: true, timestampMs: now },
-    );
-    return serialized;
+    const updated = getMessageMetadata(db, messageId);
+    return { updated, deltaText: normalizedDeltaText };
   });
+
+  const { updated, deltaText: emittedDeltaText } = tx();
+  const serialized = serializeMessage(updated);
+  emitEvent(
+    'message.streaming.chunk',
+    {
+      chatId: serialized.chat_id,
+      messageId: serialized.id,
+      deltaText: emittedDeltaText,
+    },
+    { ephemeral: true, timestampMs: now },
+  );
+  return serialized;
 }
 
 type CompleteStreamingInput = {
@@ -536,74 +524,73 @@ function completeOrCancelStreamingMessage(
 ) {
   const normalizedFinalText = requireOptionalFinalText(input?.finalText);
 
-  return withDb((db) => {
-    const now = Date.now();
-    const tx = db.transaction(() => {
-      if (targetState === 'complete') {
-        const result = normalizedFinalText === undefined
-          ? db.prepare(
-            [
-              'UPDATE messages',
-              "SET content_final = COALESCE(content_partial, ''), content_partial = NULL,",
-              'stream_state = ?, updated_at = ?',
-              'WHERE id = ? AND stream_state = ?',
-            ].join(' '),
-          ).run('complete', now, messageId, 'streaming')
-          : db.prepare(
-            [
-              'UPDATE messages',
-              'SET content_final = ?, content_partial = NULL, stream_state = ?, updated_at = ?',
-              'WHERE id = ? AND stream_state = ?',
-            ].join(' '),
-          ).run(normalizedFinalText, 'complete', now, messageId, 'streaming');
-
-        if (result.changes === 0) {
-          throwStreamingStateConflict(db, messageId);
-        }
-
-        const message = getMessageMetadata(db, messageId);
-        const preview = message.content_final?.trim() ? message.content_final.trim().slice(0, 180) : null;
-
-        db.prepare(
-          [
-            'UPDATE chats',
-            'SET last_message_preview = ?,',
-            'last_message_role = ?,',
-            'last_message_at = ?,',
-            'updated_at = ?',
-            'WHERE id = ?',
-          ].join(' '),
-        ).run(preview, message.role, now, now, message.chat_id);
-      } else {
-        const result = db.prepare(
+  const db = getDb();
+  const now = Date.now();
+  const tx = db.transaction(() => {
+    if (targetState === 'complete') {
+      const result = normalizedFinalText === undefined
+        ? db.prepare(
           [
             'UPDATE messages',
-            'SET stream_state = ?, updated_at = ?',
+            "SET content_final = COALESCE(content_partial, ''), content_partial = NULL,",
+            'stream_state = ?, updated_at = ?',
             'WHERE id = ? AND stream_state = ?',
           ].join(' '),
-        ).run('cancelled', now, messageId, 'streaming');
+        ).run('complete', now, messageId, 'streaming')
+        : db.prepare(
+          [
+            'UPDATE messages',
+            'SET content_final = ?, content_partial = NULL, stream_state = ?, updated_at = ?',
+            'WHERE id = ? AND stream_state = ?',
+          ].join(' '),
+        ).run(normalizedFinalText, 'complete', now, messageId, 'streaming');
 
-        if (result.changes === 0) {
-          throwStreamingStateConflict(db, messageId);
-        }
-
-        const message = getMessageMetadata(db, messageId);
-        db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(now, message.chat_id);
+      if (result.changes === 0) {
+        throwStreamingStateConflict(db, messageId);
       }
 
-      return getMessageMetadata(db, messageId);
-    });
+      const message = getMessageMetadata(db, messageId);
+      const preview = message.content_final?.trim() ? message.content_final.trim().slice(0, 180) : null;
 
-    const updated = tx();
-    const serialized = serializeMessage(updated);
-    emitEvent('message.streaming.complete', {
-      chatId: serialized.chat_id,
-      messageId: serialized.id,
-      streamState: serialized.stream_state,
-      finalText: serialized.content_final,
-    }, { timestampMs: now });
-    return serialized;
+      db.prepare(
+        [
+          'UPDATE chats',
+          'SET last_message_preview = ?,',
+          'last_message_role = ?,',
+          'last_message_at = ?,',
+          'updated_at = ?',
+          'WHERE id = ?',
+        ].join(' '),
+      ).run(preview, message.role, now, now, message.chat_id);
+    } else {
+      const result = db.prepare(
+        [
+          'UPDATE messages',
+          'SET stream_state = ?, updated_at = ?',
+          'WHERE id = ? AND stream_state = ?',
+        ].join(' '),
+      ).run('cancelled', now, messageId, 'streaming');
+
+      if (result.changes === 0) {
+        throwStreamingStateConflict(db, messageId);
+      }
+
+      const message = getMessageMetadata(db, messageId);
+      db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(now, message.chat_id);
+    }
+
+    return getMessageMetadata(db, messageId);
   });
+
+  const updated = tx();
+  const serialized = serializeMessage(updated);
+  emitEvent('message.streaming.complete', {
+    chatId: serialized.chat_id,
+    messageId: serialized.id,
+    streamState: serialized.stream_state,
+    finalText: serialized.content_final,
+  }, { timestampMs: now });
+  return serialized;
 }
 
 export function completeStreamingMessage(messageId: string, input: CompleteStreamingInput = {}) {
@@ -640,39 +627,38 @@ export function sweepStaleStreamingMessages(nowMs = Date.now()): SweepResult {
   const timeoutMs = loadOpengramConfig().server.streamTimeoutSeconds * 1_000;
   const staleBefore = nowMs - timeoutMs;
 
-  return withDb((db) => {
-    const staleIds = db
-      .prepare(
-        [
-          'SELECT id FROM messages',
-          'WHERE stream_state = ? AND updated_at < ?',
-        ].join(' '),
-      )
-      .all('streaming', staleBefore) as { id: string }[];
+  const db = getDb();
+  const staleIds = db
+    .prepare(
+      [
+        'SELECT id FROM messages',
+        'WHERE stream_state = ? AND updated_at < ?',
+      ].join(' '),
+    )
+    .all('streaming', staleBefore) as { id: string }[];
 
-    const cancelled: MessageRecord[] = [];
-    const tx = db.transaction(() => {
-      for (const stale of staleIds) {
-        const updated = autoCancelStreamingMessageIfStale(db, stale.id, nowMs);
-        if (updated) {
-          cancelled.push(updated);
-        }
+  const cancelled: MessageRecord[] = [];
+  const tx = db.transaction(() => {
+    for (const stale of staleIds) {
+      const updated = autoCancelStreamingMessageIfStale(db, stale.id, nowMs);
+      if (updated) {
+        cancelled.push(updated);
       }
-    });
-    tx();
-
-    for (const message of cancelled) {
-      const serialized = serializeMessage(message);
-      emitEvent('message.streaming.complete', {
-        chatId: serialized.chat_id,
-        messageId: serialized.id,
-        streamState: serialized.stream_state,
-        finalText: serialized.content_final,
-      }, { timestampMs: nowMs });
     }
-
-    return { cancelledMessageIds: cancelled.map((message) => message.id) };
   });
+  tx();
+
+  for (const message of cancelled) {
+    const serialized = serializeMessage(message);
+    emitEvent('message.streaming.complete', {
+      chatId: serialized.chat_id,
+      messageId: serialized.id,
+      streamState: serialized.stream_state,
+      finalText: serialized.content_final,
+    }, { timestampMs: nowMs });
+  }
+
+  return { cancelledMessageIds: cancelled.map((message) => message.id) };
 }
 
 export function ensureStreamingTimeoutSweeperStarted() {

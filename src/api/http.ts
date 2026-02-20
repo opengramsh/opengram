@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server';
-
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'UNAUTHORIZED'
@@ -66,7 +64,7 @@ export function internalError(message: string, details?: unknown) {
 }
 
 export function successCollection<T>(data: T[], next: string | null, hasMore: boolean) {
-  return NextResponse.json({
+  return Response.json({
     data,
     cursor: {
       next,
@@ -76,12 +74,12 @@ export function successCollection<T>(data: T[], next: string | null, hasMore: bo
 }
 
 export function successOk() {
-  return NextResponse.json({ ok: true });
+  return Response.json({ ok: true });
 }
 
 export function toErrorResponse(error: unknown) {
   if (error instanceof ApiError) {
-    return NextResponse.json(
+    return Response.json(
       {
         error: {
           code: error.code,
@@ -96,7 +94,7 @@ export function toErrorResponse(error: unknown) {
     );
   }
 
-  return NextResponse.json(
+  return Response.json(
     {
       error: {
         code: 'INTERNAL_ERROR',

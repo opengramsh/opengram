@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 
 import { notFoundError, validationError } from '@/src/api/http';
-import { createSqliteConnection } from '@/src/db/client';
+import { getDb } from '@/src/db/client';
 import { emitEvent } from '@/src/services/events-service';
 import { notifyRequestCreated } from '@/src/services/push-service';
 
@@ -77,15 +77,6 @@ type UpdateRequestInput = {
   config?: unknown;
   trace?: unknown;
 };
-
-function withDb<T>(callback: (db: Database.Database) => T): T {
-  const db = createSqliteConnection();
-  try {
-    return callback(db);
-  } finally {
-    db.close();
-  }
-}
 
 function parseJsonObject(value: string | null): Record<string, unknown> | null {
   if (value === null) {
@@ -637,180 +628,175 @@ function parseResolvedBy(value: unknown): ResolvedBy | undefined {
 }
 
 export function createRequest(chatId: string, input: CreateRequestInput) {
-  return withDb((db) => {
-    ensureChatExists(db, chatId);
-    const normalized = normalizeCreateRequestInput(input);
-    const now = Date.now();
-    const requestId = nanoid();
+  const db = getDb();
+  ensureChatExists(db, chatId);
+  const normalized = normalizeCreateRequestInput(input);
+  const now = Date.now();
+  const requestId = nanoid();
 
-    db.prepare(
-      [
-        'INSERT INTO requests (id, chat_id, type, status, title, body, config, created_at, trace)',
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ].join(' '),
-    ).run(
-      requestId,
-      chatId,
-      normalized.type,
-      'pending',
-      normalized.title,
-      normalized.body,
-      JSON.stringify(normalized.config),
-      now,
-      normalized.trace === null ? null : JSON.stringify(normalized.trace),
-    );
+  db.prepare(
+    [
+      'INSERT INTO requests (id, chat_id, type, status, title, body, config, created_at, trace)',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ].join(' '),
+  ).run(
+    requestId,
+    chatId,
+    normalized.type,
+    'pending',
+    normalized.title,
+    normalized.body,
+    JSON.stringify(normalized.config),
+    now,
+    normalized.trace === null ? null : JSON.stringify(normalized.trace),
+  );
 
-    incrementChatPendingCount(db, chatId);
+  incrementChatPendingCount(db, chatId);
 
-    emitEvent('request.created', {
-      chatId,
-      requestId,
-      type: normalized.type,
-      title: normalized.title,
-    });
-
-    void notifyRequestCreated({
-      chatId,
-      title: normalized.title,
-    }).catch((error) => {
-      console.error('Failed to send request.created push notification.', error);
-    });
-
-    const created = getRequestRecord(db, requestId);
-    return serializeRequest(created);
+  emitEvent('request.created', {
+    chatId,
+    requestId,
+    type: normalized.type,
+    title: normalized.title,
   });
+
+  void notifyRequestCreated({
+    chatId,
+    title: normalized.title,
+  }).catch((error) => {
+    console.error('Failed to send request.created push notification.', error);
+  });
+
+  const created = getRequestRecord(db, requestId);
+  return serializeRequest(created);
 }
 
 export function updateRequest(requestId: string, input: UpdateRequestInput) {
-  return withDb((db) => {
-    const current = getRequestRecord(db, requestId);
-    const updates: string[] = [];
-    const values: unknown[] = [];
+  const db = getDb();
+  const current = getRequestRecord(db, requestId);
+  const updates: string[] = [];
+  const values: unknown[] = [];
 
-    if (Object.keys(input).length === 0) {
-      throw validationError('At least one updatable field is required.');
+  if (Object.keys(input).length === 0) {
+    throw validationError('At least one updatable field is required.');
+  }
+
+  const allowedKeys = new Set(['title', 'body', 'config', 'trace']);
+  for (const key of Object.keys(input)) {
+    if (!allowedKeys.has(key)) {
+      throw validationError('Only title, body, config, and trace can be updated.', {
+        field: key,
+      });
     }
+  }
 
-    const allowedKeys = new Set(['title', 'body', 'config', 'trace']);
-    for (const key of Object.keys(input)) {
-      if (!allowedKeys.has(key)) {
-        throw validationError('Only title, body, config, and trace can be updated.', {
-          field: key,
-        });
-      }
-    }
+  if (Object.hasOwn(input, 'title')) {
+    const title = requiredTrimmedString(input.title, 'title');
+    updates.push('title = ?');
+    values.push(title);
+  }
 
-    if (Object.hasOwn(input, 'title')) {
-      const title = requiredTrimmedString(input.title, 'title');
-      updates.push('title = ?');
-      values.push(title);
-    }
+  if (Object.hasOwn(input, 'body')) {
+    const body = nullableString(input.body, 'body');
+    updates.push('body = ?');
+    values.push(body ?? null);
+  }
 
-    if (Object.hasOwn(input, 'body')) {
-      const body = nullableString(input.body, 'body');
-      updates.push('body = ?');
-      values.push(body ?? null);
-    }
+  if (Object.hasOwn(input, 'config')) {
+    const config = normalizeConfig(current.type, input.config);
+    updates.push('config = ?');
+    values.push(JSON.stringify(config));
+  }
 
-    if (Object.hasOwn(input, 'config')) {
-      const config = normalizeConfig(current.type, input.config);
-      updates.push('config = ?');
-      values.push(JSON.stringify(config));
-    }
+  if (Object.hasOwn(input, 'trace')) {
+    const trace = normalizeTrace(input.trace);
+    updates.push('trace = ?');
+    values.push(trace === null ? null : JSON.stringify(trace));
+  }
 
-    if (Object.hasOwn(input, 'trace')) {
-      const trace = normalizeTrace(input.trace);
-      updates.push('trace = ?');
-      values.push(trace === null ? null : JSON.stringify(trace));
-    }
+  if (updates.length === 0) {
+    throw validationError('At least one updatable field is required.');
+  }
 
-    if (updates.length === 0) {
-      throw validationError('At least one updatable field is required.');
-    }
-
-    db.prepare(`UPDATE requests SET ${updates.join(', ')} WHERE id = ?`).run(...values, requestId);
-    const updated = getRequestRecord(db, requestId);
-    return serializeRequest(updated);
-  });
+  db.prepare(`UPDATE requests SET ${updates.join(', ')} WHERE id = ?`).run(...values, requestId);
+  const updated = getRequestRecord(db, requestId);
+  return serializeRequest(updated);
 }
 
 export function cancelRequest(requestId: string) {
-  return withDb((db) => {
-    const current = getRequestRecord(db, requestId);
-    if (current.status !== 'pending') {
-      throw validationError('Only pending requests can be cancelled.', { requestId, status: current.status });
-    }
+  const db = getDb();
+  const current = getRequestRecord(db, requestId);
+  if (current.status !== 'pending') {
+    throw validationError('Only pending requests can be cancelled.', { requestId, status: current.status });
+  }
 
-    db.prepare('UPDATE requests SET status = ? WHERE id = ?').run('cancelled', requestId);
-    decrementChatPendingCount(db, current.chat_id);
-    const updated = getRequestRecord(db, requestId);
-    const serialized = serializeRequest(updated);
+  db.prepare('UPDATE requests SET status = ? WHERE id = ?').run('cancelled', requestId);
+  decrementChatPendingCount(db, current.chat_id);
+  const updated = getRequestRecord(db, requestId);
+  const serialized = serializeRequest(updated);
 
-    emitEvent('request.cancelled', {
-      chatId: serialized.chat_id,
-      requestId: serialized.id,
-      type: serialized.type,
-      status: serialized.status,
-      resolution_payload: serialized.resolution_payload,
-      trace: serialized.trace,
-    });
-
-    return serialized;
+  emitEvent('request.cancelled', {
+    chatId: serialized.chat_id,
+    requestId: serialized.id,
+    type: serialized.type,
+    status: serialized.status,
+    resolution_payload: serialized.resolution_payload,
+    trace: serialized.trace,
   });
+
+  return serialized;
 }
 
 export function listChatRequests(chatId: string, status: RequestStatus | 'all' = 'pending') {
-  return withDb((db) => {
-    ensureChatExists(db, chatId);
+  const db = getDb();
+  ensureChatExists(db, chatId);
 
-    const rows = (
-      status === 'all'
-        ? db
-            .prepare('SELECT * FROM requests WHERE chat_id = ? ORDER BY created_at ASC, id ASC')
-            .all(chatId)
-        : db
-            .prepare('SELECT * FROM requests WHERE chat_id = ? AND status = ? ORDER BY created_at ASC, id ASC')
-            .all(chatId, status)
-    ) as RequestRecord[];
+  const rows = (
+    status === 'all'
+      ? db
+          .prepare('SELECT * FROM requests WHERE chat_id = ? ORDER BY created_at ASC, id ASC')
+          .all(chatId)
+      : db
+          .prepare('SELECT * FROM requests WHERE chat_id = ? AND status = ? ORDER BY created_at ASC, id ASC')
+          .all(chatId, status)
+  ) as RequestRecord[];
 
-    return rows.map(serializeRequest);
-  });
+  return rows.map(serializeRequest);
 }
 
 export function resolveRequest(requestId: string, payload: unknown) {
-  return withDb((db) => {
-    const current = getRequestRecord(db, requestId);
-    if (current.status !== 'pending') {
-      throw validationError('Only pending requests can be resolved.', { requestId, status: current.status });
-    }
+  const db = getDb();
+  const current = getRequestRecord(db, requestId);
+  if (current.status !== 'pending') {
+    throw validationError('Only pending requests can be resolved.', { requestId, status: current.status });
+  }
 
-    const config = parseJsonObject(current.config) ?? {};
-    const resolutionPayload = normalizeResolutionPayload(current.type, payload, config);
-    const now = Date.now();
+  const config = parseJsonObject(current.config) ?? {};
+  const resolutionPayload = normalizeResolutionPayload(current.type, payload, config);
+  const now = Date.now();
 
-    const resolvedBy = parseResolvedBy((payload as { resolvedBy?: unknown }).resolvedBy) ?? 'user';
+  const resolvedBy = parseResolvedBy((payload as { resolvedBy?: unknown }).resolvedBy) ?? 'user';
 
-    db.prepare(
-      [
-        'UPDATE requests',
-        'SET status = ?, resolved_at = ?, resolved_by = ?, resolution_payload = ?',
-        'WHERE id = ?',
-      ].join(' '),
-    ).run('resolved', now, resolvedBy, JSON.stringify(resolutionPayload), requestId);
+  db.prepare(
+    [
+      'UPDATE requests',
+      'SET status = ?, resolved_at = ?, resolved_by = ?, resolution_payload = ?',
+      'WHERE id = ?',
+    ].join(' '),
+  ).run('resolved', now, resolvedBy, JSON.stringify(resolutionPayload), requestId);
 
-    decrementChatPendingCount(db, current.chat_id);
-    const updated = getRequestRecord(db, requestId);
-    const serialized = serializeRequest(updated);
+  decrementChatPendingCount(db, current.chat_id);
+  const updated = getRequestRecord(db, requestId);
+  const serialized = serializeRequest(updated);
 
-    emitEvent('request.resolved', {
-      chatId: serialized.chat_id,
-      requestId: serialized.id,
-      type: serialized.type,
-      status: serialized.status,
-      resolution_payload: serialized.resolution_payload,
-      trace: serialized.trace,
-    });
-
-    return serialized;
+  emitEvent('request.resolved', {
+    chatId: serialized.chat_id,
+    requestId: serialized.id,
+    type: serialized.type,
+    status: serialized.status,
+    resolution_payload: serialized.resolution_payload,
+    trace: serialized.trace,
   });
+
+  return serialized;
 }
