@@ -2,17 +2,21 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 
-import Home from '@/app/page';
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  usePathname: () => '/',
-}));
+import Home from '@/src/client/pages/home';
 
 vi.mock('facehash', () => ({
   Facehash: ({ name }: { name: string }) => <div data-testid={`facehash-${name}`} />,
 }));
+
+function renderHome() {
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <Home />
+    </MemoryRouter>,
+  );
+}
 
 describe('inbox pending badge', () => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -77,7 +81,7 @@ describe('inbox pending badge', () => {
   });
 
   it('shows pending request count in header and row badge', async () => {
-    render(<Home />);
+    renderHome();
 
     expect(await screen.findByText('3 pending requests')).toBeTruthy();
     expect(await screen.findByLabelText('3 pending requests')).toBeTruthy();

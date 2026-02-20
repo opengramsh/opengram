@@ -1,30 +1,30 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router';
 
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 
-const navigationState = vi.hoisted(() => ({
-  pathname: '/',
-  push: vi.fn(),
-}));
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+}
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: navigationState.push }),
-  usePathname: () => navigationState.pathname,
-}));
+function renderMenu(path = '/') {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <HamburgerMenu />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+}
 
 describe('hamburger menu accessibility', () => {
-  beforeEach(() => {
-    navigationState.pathname = '/';
-    navigationState.push.mockReset();
-  });
-
   it('renders drawer with modal dialog semantics when opened', async () => {
     const user = userEvent.setup();
-    render(<HamburgerMenu />);
+    renderMenu('/');
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
 
@@ -34,7 +34,7 @@ describe('hamburger menu accessibility', () => {
 
   it('contains all expected menu items when opened', async () => {
     const user = userEvent.setup();
-    render(<HamburgerMenu />);
+    renderMenu('/');
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     await screen.findByRole('dialog');
@@ -46,7 +46,7 @@ describe('hamburger menu accessibility', () => {
 
   it('closes when Escape key is pressed', async () => {
     const user = userEvent.setup();
-    render(<HamburgerMenu />);
+    renderMenu('/');
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     await screen.findByRole('dialog');
@@ -60,13 +60,15 @@ describe('hamburger menu accessibility', () => {
 
   it('navigates when a menu item is clicked', async () => {
     const user = userEvent.setup();
-    render(<HamburgerMenu />);
+    renderMenu('/');
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     await screen.findByRole('dialog');
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
 
-    expect(navigationState.push).toHaveBeenCalledWith('/settings');
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/settings');
+    });
   });
 });

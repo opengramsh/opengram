@@ -36,7 +36,6 @@
     "wasm-vips": "^0.0.16"
   },
   "overrides": {
-    "ajv": "^8.18.0",
     "esbuild": "^0.25.0",
     "minimatch": "^10.2.1"
   },
@@ -51,7 +50,7 @@
     "@vitejs/plugin-react": "^5.1.4",
     "@vitest/coverage-v8": "^4.0.18",
     "concurrently": "^9.2.1",
-    "eslint": "^10.0.0",
+    "eslint": "^9.39.0",
     "eslint-config-next": "^16.0.1",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4",

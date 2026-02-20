@@ -1,4 +1,3 @@
-'use client';
 
 import { useCallback, useEffect, useState, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
