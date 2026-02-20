@@ -1,5 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
-
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
 import { formatBytes } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaFilter, MediaItem } from '@/app/chats/[chatId]/_lib/types';

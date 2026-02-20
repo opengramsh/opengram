@@ -1,4 +1,3 @@
-import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 
 import { validationError } from '@/src/api/http';

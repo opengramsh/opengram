@@ -193,7 +193,7 @@ describe('requests API', () => {
       },
       body: JSON.stringify(requestPayload),
     });
-    const firstBody = await firstResponse.json();
+    await firstResponse.json();
 
     const secondResponse = await app.request('/api/v1/chats/' + secondChat.id + '/requests', {
       method: 'POST',

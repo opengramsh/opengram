@@ -1,4 +1,3 @@
-import type Database from 'better-sqlite3';
 import { createHmac } from 'node:crypto';
 import { nanoid } from 'nanoid';
 

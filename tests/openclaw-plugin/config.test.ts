@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(() => {
   delete process.env.OPENGRAM_INSTANCE_SECRET;

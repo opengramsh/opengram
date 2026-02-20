@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import { type RefObject } from 'react';
 
 import { formatBytes, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';

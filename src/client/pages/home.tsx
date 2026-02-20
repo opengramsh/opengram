@@ -33,6 +33,7 @@ export default function HomePage() {
   const { setChats, loadChats, refreshChats, matchesActiveFilters } = chatList;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPendingSummary().catch(() => setPendingRequestsTotal(0));
   }, [loadPendingSummary]);
 
