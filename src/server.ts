@@ -88,7 +88,13 @@ app.use('/assets/*', serveStatic({
 app.use('/*', serveStatic({ root: './dist/client' }));
 
 // SPA fallback: serve index.html for client-side routes
-app.get('/*', serveStatic({ path: './dist/client/index.html' }));
+const spaFallback = serveStatic({ path: './dist/client/index.html' });
+app.get('/*', async (c, next) => {
+  if (c.req.path === '/api' || c.req.path.startsWith('/api/')) {
+    return c.notFound();
+  }
+  return spaFallback(c, next);
+});
 
 // Start background jobs (replaces instrumentation-node.ts)
 function startBackgroundJobs() {

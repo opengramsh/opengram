@@ -98,4 +98,13 @@ describe("API CORS middleware", () => {
     });
     expect(r2.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
+
+  it("returns API 404 for unknown API GET routes instead of SPA HTML", async () => {
+    const response = await app.request("/api/v1/does-not-exist", {
+      method: "GET",
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).not.toContain("text/html");
+  });
 });
