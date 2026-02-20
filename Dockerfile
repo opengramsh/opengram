@@ -7,6 +7,9 @@ FROM deps AS builder
 COPY . .
 RUN npm run build
 
+FROM deps AS prod-deps
+RUN npm prune --omit=dev
+
 FROM node:20-bookworm-slim AS runner
 WORKDIR /opt/opengram/web
 ENV NODE_ENV=production \
@@ -27,6 +30,7 @@ COPY --from=builder /app/dist/client/ /opt/opengram/web/dist/client/
 COPY --from=builder /app/migrations/ /opt/opengram/web/migrations/
 COPY --from=builder /app/deploy/docker/ /opt/opengram/web/deploy/docker/
 COPY --from=builder /app/config/opengram.config.json /opt/opengram/config/opengram.config.json
+COPY --from=prod-deps /app/node_modules/ /opt/opengram/web/node_modules/
 
 RUN chmod +x /opt/opengram/web/deploy/docker/entrypoint.sh \
   && chown -R opengram:opengram /opt/opengram

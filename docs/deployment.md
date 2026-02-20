@@ -133,7 +133,7 @@ The image includes:
 - `VOLUME /opt/opengram/data` for SQLite DB and uploads
 - Container health check on `GET /api/v1/health`
 
-On each container boot, `deploy/docker/entrypoint.sh` runs `deploy/docker/run-migrations.js` first. It applies any pending SQL files from `migrations/` (tracked in `__opengram_migrations`) and then starts `node server.js`.
+On each container boot, `deploy/docker/entrypoint.sh` runs `deploy/docker/run-migrations.js` first. It applies any pending SQL files from `migrations/` (tracked in `__opengram_migrations`) and then starts `node dist/server/server.mjs`.
 
 ## Optional Reverse Proxy (Non-Tailscale)
 

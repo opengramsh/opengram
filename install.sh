@@ -93,10 +93,13 @@ build_application() {
 
 deploy_standalone() {
   log "Deploying Hono+Vite build output to ${WEB_DIR}..."
-  mkdir -p "${WEB_DIR}/dist"
+  mkdir -p "${WEB_DIR}/dist" "${WEB_DIR}/node_modules"
   rsync -a --delete dist/server/ "${WEB_DIR}/dist/server/"
   rsync -a --delete dist/client/ "${WEB_DIR}/dist/client/"
   rsync -a --delete migrations/ "${WEB_DIR}/migrations/"
+  rsync -a --delete node_modules/ "${WEB_DIR}/node_modules/"
+  install -m 0644 package.json "${WEB_DIR}/package.json"
+  install -m 0644 package-lock.json "${WEB_DIR}/package-lock.json"
 
   chown -R "${APP_USER}:${APP_GROUP}" "${WEB_DIR}"
 }

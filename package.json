@@ -7,11 +7,14 @@
     "dev:server": "tsx --watch src/server.ts",
     "dev:client": "vite",
     "build": "vite build && tsup src/server.ts --format esm --outDir dist/server",
-    "start": "node dist/server/server.js",
+    "start": "node dist/server/server.mjs",
     "db:migrate": "node deploy/docker/run-migrations.js",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "next:dev": "next dev",
+    "next:build": "next build",
+    "next:start": "next start"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
@@ -22,6 +25,7 @@
     "hono": "^4.12.0",
     "lucide-react": "^0.575.0",
     "nanoid": "^5.1.6",
+    "next": "^16.0.1",
     "radix-ui": "^1.4.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -48,6 +52,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "concurrently": "^9.2.1",
     "eslint": "^10.0.0",
+    "eslint-config-next": "^16.0.1",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4",
     "tsup": "^8.5.1",
