@@ -1,6 +1,7 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 import { PushBootstrap } from '@/src/components/push/push-bootstrap';
+import { Toaster } from '@/src/components/ui/sonner';
 
 import './globals.css';
 
@@ -8,7 +9,6 @@ export const metadata: Metadata = {
   title: 'OpenGram',
   description: 'OpenGram local development environment',
   manifest: '/manifest.json',
-  themeColor: '#121214',
   appleWebApp: {
     capable: true,
     title: 'OpenGram',
@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   icons: {
     apple: '/icons/apple-touch-icon.png',
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#121214',
 };
 
 export default function RootLayout({
@@ -29,6 +33,7 @@ export default function RootLayout({
       <body className="antialiased">
         <PushBootstrap />
         {children}
+        <Toaster />
       </body>
     </html>
   );

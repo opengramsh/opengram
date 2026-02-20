@@ -126,7 +126,7 @@ export function resolveInboxSwipeEnd(offsetX: number, isDragging: boolean): Inbo
     };
   }
 
-  if (offsetX <= -112) {
+  if (offsetX <= -170) {
     return { nextOffset: 0, shouldArchive: true };
   }
 

@@ -100,7 +100,7 @@ function createByteLimitedMultipartRequest(request: Request, maxBodyBytes: numbe
   return new Request(request, {
     body: limitedBody,
     duplex: 'half',
-  } satisfies StreamingRequestInit);
+  } as RequestInit & { duplex: string });
 }
 
 async function parseMultipartFormData(request: Request, maxBodyBytes: number) {

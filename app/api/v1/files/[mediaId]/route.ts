@@ -95,7 +95,7 @@ function contentDisposition(contentType: string, filename: string) {
   return `${mode}; filename="${quotedFileName(filename)}"`;
 }
 
-function toWebReadableStream(stream: NodeJS.ReadableStream) {
+function toWebReadableStream(stream: Readable) {
   return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
 }
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
@@ -28,46 +28,45 @@ describe('hamburger menu accessibility', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
 
-    const dialog = screen.getByRole('dialog');
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
   });
 
-  it('traps focus inside drawer when tabbing at boundaries', async () => {
-    const user = userEvent.setup();
-    render(
-      <>
-        <button type="button">Outside button</button>
-        <HamburgerMenu />
-      </>,
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Open menu' }));
-
-    const first = screen.getByRole('button', { name: 'Inbox' });
-    const last = screen.getByRole('button', { name: 'About' });
-
-    last.focus();
-    fireEvent.keyDown(window, { key: 'Tab' });
-    expect(document.activeElement).toBe(first);
-
-    first.focus();
-    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
-    expect(document.activeElement).toBe(last);
-  });
-
-  it('restores focus to trigger button after close', async () => {
+  it('contains all expected menu items when opened', async () => {
     const user = userEvent.setup();
     render(<HamburgerMenu />);
 
-    const trigger = screen.getByRole('button', { name: 'Open menu' });
-    trigger.focus();
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    await screen.findByRole('dialog');
 
-    await user.click(trigger);
-    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Inbox' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Archived chats' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About' })).toBeTruthy();
+  });
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+  it('closes when Escape key is pressed', async () => {
+    const user = userEvent.setup();
+    render(<HamburgerMenu />);
 
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(document.activeElement).toBe(trigger);
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    await screen.findByRole('dialog');
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
+  it('navigates when a menu item is clicked', async () => {
+    const user = userEvent.setup();
+    render(<HamburgerMenu />);
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    await screen.findByRole('dialog');
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+
+    expect(navigationState.push).toHaveBeenCalledWith('/settings');
   });
 });

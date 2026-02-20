@@ -19,7 +19,7 @@ function quotedFileName(name: string) {
   return name.replace(/["\\]/g, '_');
 }
 
-function toWebReadableStream(stream: NodeJS.ReadableStream) {
+function toWebReadableStream(stream: Readable) {
   return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
 }
 

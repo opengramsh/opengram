@@ -215,6 +215,34 @@ describe('chat screen event subscriptions', () => {
     await screen.findByText('still here');
   });
 
+  it('patches non-streaming message into state without full refetch', async () => {
+    render(<ChatPage />);
+
+    await screen.findByText('Chat 1');
+    await waitFor(() => {
+      expect(streamMock.listener).toBeTruthy();
+    });
+
+    const fetchCountBefore = fetchMock.mock.calls.length;
+
+    await emitEvent('message.created', {
+      chatId: 'chat-1',
+      messageId: 'msg-inline',
+      role: 'user',
+      senderId: 'user:primary',
+      streamState: 'none',
+      contentFinal: 'Inlined message',
+      createdAt: '2026-02-18T20:42:00.000Z',
+    });
+
+    await screen.findByText('Inlined message');
+
+    const messagesFetches = fetchMock.mock.calls
+      .slice(fetchCountBefore)
+      .filter(([url]: [string]) => url.includes('/messages'));
+    expect(messagesFetches).toHaveLength(0);
+  });
+
   it('refreshes pending requests on request lifecycle events', async () => {
     render(<ChatPage />);
 

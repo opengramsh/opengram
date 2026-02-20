@@ -33,12 +33,13 @@ export function PushBootstrap() {
 
         window.localStorage.setItem(PROMPT_STORAGE_KEY, '1');
         await enablePushNotifications(config.vapidPublicKey);
-      } catch {
+      } catch (err) {
         // Notification setup is optional and should never block app startup.
+        console.error('[push-bootstrap] setup failed:', err);
       }
     }
 
-    setupPush().catch(() => undefined);
+    setupPush().catch((err) => console.error('[push-bootstrap] unexpected error:', err));
 
     return () => {
       cancelled = true;

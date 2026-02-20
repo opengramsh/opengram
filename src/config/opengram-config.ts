@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 export type OpengramConfig = {
@@ -256,12 +256,40 @@ function syncCorsOriginsEnv(corsOrigins: string[]) {
   process.env.OPENGRAM_CORS_ORIGINS = corsOrigins.join(',');
 }
 
+type ConfigCache = {
+  resolvedPath: string;
+  mtimeMs: number | null;
+  config: OpengramConfig;
+};
+
+let configCache: ConfigCache | null = null;
+
 export function loadOpengramConfig(configPath?: string): OpengramConfig {
   const resolvedPath = resolveConfigPath(configPath);
+
+  if (configCache && configCache.resolvedPath === resolvedPath) {
+    if (configCache.mtimeMs === null) {
+      // Cached "no file" result — re-check existence
+      if (!existsSync(resolvedPath)) {
+        return configCache.config;
+      }
+    } else {
+      try {
+        const stat = statSync(resolvedPath);
+        if (stat.mtimeMs === configCache.mtimeMs) {
+          return configCache.config;
+        }
+      } catch {
+        // File was removed since last cache — fall through to re-read
+      }
+    }
+  }
+
   const hasFile = existsSync(resolvedPath);
   if (!hasFile) {
     const config = validateConfig(structuredClone(defaultConfig));
     syncCorsOriginsEnv(config.server.corsOrigins);
+    configCache = { resolvedPath, mtimeMs: null, config };
     return config;
   }
 
@@ -275,7 +303,20 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
   const merged = mergeConfig(structuredClone(defaultConfig), parsed);
   const config = validateConfig(merged);
   syncCorsOriginsEnv(config.server.corsOrigins);
+
+  let mtimeMs: number | null = null;
+  try {
+    mtimeMs = statSync(resolvedPath).mtimeMs;
+  } catch {
+    // Unlikely race — file removed between read and stat; still cache it
+  }
+
+  configCache = { resolvedPath, mtimeMs, config };
   return config;
+}
+
+export function resetConfigCacheForTests() {
+  configCache = null;
 }
 
 export const OPEN_GRAM_DEFAULT_CONFIG = defaultConfig;

@@ -310,6 +310,24 @@ describe('messages API', () => {
     expect(page2.cursor.next).toBeNull();
   });
 
+  it('accepts limit=200 for message listing', async () => {
+    const createdChat = await createChat();
+    const chatId = createdChat.json.id as string;
+
+    const response = await messagesGet(
+      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages?limit=200`, 'GET'),
+      routeContext(chatId),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toEqual([]);
+    expect(body.cursor).toEqual({
+      next: null,
+      hasMore: false,
+    });
+  });
+
   it('returns not found for unknown chat', async () => {
     const response = await messagesGet(
       createJsonRequest('http://localhost/api/v1/chats/missing/messages', 'GET'),

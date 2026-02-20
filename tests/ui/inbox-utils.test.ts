@@ -90,7 +90,7 @@ describe('inbox utils', () => {
   });
 
   it('auto-archives on full swipe threshold', () => {
-    expect(resolveInboxSwipeEnd(-112, true)).toEqual({
+    expect(resolveInboxSwipeEnd(-170, true)).toEqual({
       nextOffset: 0,
       shouldArchive: true,
     });

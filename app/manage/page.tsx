@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
+import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
 
 type ConfigViewerResponse = {
   appName: string;
@@ -42,7 +43,7 @@ export default function ManagePage() {
   }, []);
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-3xl bg-background pb-10">
+    <div className="min-h-screen w-full bg-background pb-10">
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-md">
         <div className="grid grid-cols-[36px_1fr_36px] items-center">
           <HamburgerMenu />
@@ -60,61 +61,77 @@ export default function ManagePage() {
 
         {config && (
           <>
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold text-foreground">General</h2>
-              <dl className="mt-3 grid gap-2 text-xs text-muted-foreground">
-                <div className="flex justify-between gap-2">
-                  <dt>App name</dt>
-                  <dd className="text-foreground">{config.appName}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt>Default model for new chats</dt>
-                  <dd className="text-foreground">{config.defaultModelIdForNewChats}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt>Default custom state</dt>
-                  <dd className="text-foreground">{config.defaultCustomState}</dd>
-                </div>
-              </dl>
-            </section>
+            <Card>
+              <CardHeader className="p-0">
+                <CardTitle className="text-sm">General</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <dl className="grid gap-2 text-xs text-muted-foreground">
+                  <div className="flex justify-between gap-2">
+                    <dt>Default model for new chats</dt>
+                    <dd className="text-foreground">{config.defaultModelIdForNewChats}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Default custom state</dt>
+                    <dd className="text-foreground">{config.defaultCustomState}</dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
 
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold text-foreground">Agents ({config.agents.length})</h2>
-              <ul className="mt-3 space-y-2 text-xs">
-                {config.agents.map((agent) => (
-                  <li key={agent.id} className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
-                    <p className="font-medium text-foreground">{agent.name}</p>
-                    <p className="text-muted-foreground">{agent.id}</p>
-                    <p className="mt-1 text-muted-foreground">{agent.description}</p>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <Card>
+              <CardHeader className="p-0">
+                <CardTitle className="text-sm">Agents ({config.agents.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ul className="space-y-2 text-xs">
+                  {config.agents.map((agent) => (
+                    <li key={agent.id} className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                      <p className="font-medium text-foreground">{agent.name}</p>
+                      <p className="text-muted-foreground">{agent.id}</p>
+                      <p className="mt-1 text-muted-foreground">{agent.description}</p>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
 
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold text-foreground">Models ({config.models.length})</h2>
-              <ul className="mt-3 space-y-2 text-xs">
-                {config.models.map((model) => (
-                  <li key={model.id} className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
-                    <p className="font-medium text-foreground">{model.name}</p>
-                    <p className="text-muted-foreground">{model.id}</p>
-                    <p className="mt-1 text-muted-foreground">{model.description}</p>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <Card>
+              <CardHeader className="p-0">
+                <CardTitle className="text-sm">Models ({config.models.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ul className="space-y-2 text-xs">
+                  {config.models.map((model) => (
+                    <li key={model.id} className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                      <p className="font-medium text-foreground">{model.name}</p>
+                      <p className="text-muted-foreground">{model.id}</p>
+                      <p className="mt-1 text-muted-foreground">{model.description}</p>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
 
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold text-foreground">States</h2>
-              <p className="mt-2 text-xs text-muted-foreground">{config.customStates.join(' | ')}</p>
-            </section>
+            <Card>
+              <CardHeader className="p-0">
+                <CardTitle className="text-sm">States</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <p className="text-xs text-muted-foreground">{config.customStates.join(' | ')}</p>
+              </CardContent>
+            </Card>
 
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold text-foreground">Raw config payload</h2>
-              <pre className="mt-2 max-h-96 overflow-auto rounded-xl border border-border/70 bg-background/70 p-3 text-[11px] text-muted-foreground">
-                {JSON.stringify(config, null, 2)}
-              </pre>
-            </section>
+            <Card>
+              <CardHeader className="p-0">
+                <CardTitle className="text-sm">Raw config payload</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <pre className="max-h-96 overflow-auto rounded-xl border border-border/70 bg-background/70 p-3 text-[11px] text-muted-foreground">
+                  {JSON.stringify(config, null, 2)}
+                </pre>
+              </CardContent>
+            </Card>
           </>
         )}
       </main>

@@ -2,6 +2,7 @@ import { validationError } from '@/src/api/http';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+const MAX_MESSAGE_LIMIT = 200;
 
 export type ChatListCursor = {
   pinned: number;
@@ -119,8 +120,8 @@ export function parseMessagePagination(params: URLSearchParams): ParsedMessagePa
   const rawLimit = params.get('limit');
   const limit = rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit);
 
-  if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_LIMIT) {
-    throw validationError('limit must be an integer between 1 and 100.', { field: 'limit' });
+  if (!Number.isInteger(limit) || limit <= 0 || limit > MAX_MESSAGE_LIMIT) {
+    throw validationError('limit must be an integer between 1 and 200.', { field: 'limit' });
   }
 
   const rawCursor = params.get('cursor');

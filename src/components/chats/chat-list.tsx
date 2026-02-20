@@ -8,6 +8,8 @@ import { Pin } from 'lucide-react';
 
 import { formatInboxTimestamp, resolveInboxSwipeEnd, shouldStartInboxSwipeDrag } from '@/src/lib/inbox';
 import type { Agent, Chat } from '@/src/components/chats/types';
+import { Badge } from '@/src/components/ui/badge';
+import { Button } from '@/src/components/ui/button';
 
 type ContextMenuState = {
   chatId: string;
@@ -95,9 +97,9 @@ export function ChatList({
           }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+          <Button
+            variant="ghost"
+            className="w-full justify-start px-3 py-2 text-sm"
             onClick={() => {
               setContextMenu(null);
               if (chatForMenu.unread_count > 0) {
@@ -108,27 +110,27 @@ export function ChatList({
             }}
           >
             {chatForMenu.unread_count > 0 ? 'Mark as read' : 'Mark as unread'}
-          </button>
-          <button
-            type="button"
-            className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start px-3 py-2 text-sm"
             onClick={() => {
               setContextMenu(null);
               void onTogglePin(chatForMenu);
             }}
           >
             {chatForMenu.pinned ? 'Unpin' : 'Pin'}
-          </button>
-          <button
-            type="button"
-            className="w-full rounded-xl px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start px-3 py-2 text-sm"
             onClick={() => {
               setContextMenu(null);
               void onToggleArchive(chatForMenu);
             }}
           >
             {chatForMenu.is_archived ? 'Unarchive' : 'Archive'}
-          </button>
+          </Button>
         </div>
       )}
     </>
@@ -205,7 +207,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
         clearLongPressTimer();
       }
 
-      const next = Math.max(-132, Math.min(0, dragBaseOffsetRef.current + deltaX));
+      const next = Math.max(-200, Math.min(0, dragBaseOffsetRef.current + deltaX));
       setOffsetX(next);
     },
     [clearLongPressTimer, isDragging],
@@ -275,25 +277,26 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
   const unread = chat.unread_count > 0;
   const unreadBadge =
     chat.unread_count > 1 ? (
-      <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+      <Badge className="text-[10px]">
         {chat.unread_count}
-      </span>
+      </Badge>
     ) : chat.unread_count === 1 ? (
       <span className="h-2.5 w-2.5 rounded-full bg-primary" />
     ) : null;
   const pendingBadge = chat.pending_requests_count > 0
     ? (
-      <span
+      <Badge
+        variant="amber"
         aria-label={`${chat.pending_requests_count} pending requests`}
-        className="rounded-full border border-amber-200/60 bg-amber-400/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100"
+        className="text-[10px]"
       >
         {chat.pending_requests_count}
-      </span>
+      </Badge>
     )
     : null;
 
   return (
-    <div className="relative mx-2 mb-2 overflow-hidden rounded-2xl">
+    <div className="relative mb-2 overflow-hidden rounded-2xl">
       <button
         type="button"
         className="absolute inset-y-1 right-1 z-0 rounded-xl bg-red-500/90 px-4 text-xs font-semibold text-white"
@@ -303,7 +306,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
       </button>
       <button
         type="button"
-        className="relative z-10 flex cursor-default items-center gap-3 rounded-2xl border border-border/80 bg-card px-3 py-3 transition-transform duration-150"
+        className="relative z-10 flex w-full cursor-default items-center gap-3 rounded-2xl border border-border/80 bg-card px-3 py-3 text-left transition-transform duration-150"
         style={{ transform: `translateX(${offsetX}px)` }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -326,7 +329,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
               >
                 {chat.title}
               </p>
-              <p className="truncate text-xs text-muted-foreground">{agentName}</p>
+              <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">{agentName}</p>
             </div>
             <div className="flex flex-col items-end gap-1 pt-0.5">
               <p className="text-[11px] text-muted-foreground">{formatInboxTimestamp(chat.last_message_at)}</p>
@@ -334,7 +337,7 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
             </div>
           </div>
           <div className="mt-1 flex items-center justify-between gap-2">
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-xs font-normal text-muted-foreground/70">
               {chat.last_message_preview?.trim() || 'No messages yet'}
             </p>
             <div className="flex items-center gap-1.5">

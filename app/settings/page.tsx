@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
+import { Button } from '@/src/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
 import {
   disablePushNotifications,
   enablePushNotifications,
@@ -123,7 +125,7 @@ export default function SettingsPage() {
   }, []);
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-3xl bg-background pb-10">
+    <div className="min-h-screen w-full bg-background pb-10">
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-md">
         <div className="grid grid-cols-[36px_1fr_36px] items-center">
           <HamburgerMenu />
@@ -136,77 +138,80 @@ export default function SettingsPage() {
       </header>
 
       <main className="space-y-4 px-4 py-4">
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground">Push notifications</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {config?.push?.enabled ? 'Enabled in config.' : 'Disabled in config.'}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">Permission: {permissionLabel(permission)}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Subscription: {isSubscribed ? 'Active' : 'Not active'}
-          </p>
-          {config?.push?.subject && <p className="mt-1 text-xs text-muted-foreground">Subject: {config.push.subject}</p>}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
-              onClick={() => {
-                handleEnable().catch(() => undefined);
-              }}
-              disabled={busyAction !== null || !config?.push?.enabled}
-            >
-              {busyAction === 'enable' ? 'Enabling…' : 'Enable notifications'}
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
-              onClick={() => {
-                handleDisable().catch(() => undefined);
-              }}
-              disabled={busyAction !== null || !isSubscribed}
-            >
-              {busyAction === 'disable' ? 'Disabling…' : 'Disable notifications'}
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
-              onClick={() => {
-                handleSendTest().catch(() => undefined);
-              }}
-              disabled={busyAction !== null || !config?.push?.enabled || !isSubscribed}
-            >
-              {busyAction === 'test' ? 'Sending…' : 'Send test notification'}
-            </button>
-          </div>
-
-          {statusMessage && <p className="mt-3 text-xs text-muted-foreground">{statusMessage}</p>}
-
-          <p className="mt-3 text-xs text-muted-foreground">
-            iOS Safari requires installing OpenGram to Home Screen before push permissions can be granted.
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground">Write security</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {config?.security?.instanceSecretEnabled
-              ? 'Instance secret enforcement is enabled.'
-              : 'Instance secret enforcement is disabled.'}
-          </p>
-          {config?.security?.instanceSecretEnabled && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {config.security.readEndpointsRequireInstanceSecret
-                ? 'Read endpoints also require the instance secret.'
-                : 'Read endpoints do not require the instance secret.'}
+        <Card>
+          <CardHeader className="p-0">
+            <CardTitle className="text-sm">Push notifications</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 p-0">
+            <p className="text-sm text-muted-foreground">
+              {config?.push?.enabled ? 'Enabled in config.' : 'Disabled in config.'}
             </p>
-          )}
-        </section>
+            <p className="text-sm text-muted-foreground">Permission: {permissionLabel(permission)}</p>
+            <p className="text-sm text-muted-foreground">
+              Subscription: {isSubscribed ? 'Active' : 'Not active'}
+            </p>
+            {config?.push?.subject && <p className="text-xs text-muted-foreground">Subject: {config.push.subject}</p>}
 
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground">App info</h2>
-          <p className="mt-2 text-sm text-muted-foreground">App name: {config?.appName ?? 'OpenGram'}</p>
-        </section>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleEnable().catch(() => undefined);
+                }}
+                disabled={busyAction !== null || !config?.push?.enabled}
+              >
+                {busyAction === 'enable' ? 'Enabling...' : 'Enable notifications'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleDisable().catch(() => undefined);
+                }}
+                disabled={busyAction !== null || !isSubscribed}
+              >
+                {busyAction === 'disable' ? 'Disabling...' : 'Disable notifications'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSendTest().catch(() => undefined);
+                }}
+                disabled={busyAction !== null || !config?.push?.enabled || !isSubscribed}
+              >
+                {busyAction === 'test' ? 'Sending...' : 'Send test notification'}
+              </Button>
+            </div>
+
+            {statusMessage && <p className="text-xs text-muted-foreground">{statusMessage}</p>}
+
+            <p className="text-xs text-muted-foreground">
+              iOS Safari requires installing OpenGram to Home Screen before push permissions can be granted.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="p-0">
+            <CardTitle className="text-sm">Write security</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 p-0">
+            <p className="text-sm text-muted-foreground">
+              {config?.security?.instanceSecretEnabled
+                ? 'Instance secret enforcement is enabled.'
+                : 'Instance secret enforcement is disabled.'}
+            </p>
+            {config?.security?.instanceSecretEnabled && (
+              <p className="text-sm text-muted-foreground">
+                {config.security.readEndpointsRequireInstanceSecret
+                  ? 'Read endpoints also require the instance secret.'
+                  : 'Read endpoints do not require the instance secret.'}
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

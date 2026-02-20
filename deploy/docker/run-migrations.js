@@ -17,6 +17,67 @@ function getMigrationEntries(journalPath) {
     .sort((a, b) => a.idx - b.idx);
 }
 
+function tableExists(db, tableName) {
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+  return Boolean(row);
+}
+
+function getDrizzleCreatedAtColumn(db) {
+  const columns = db.prepare("PRAGMA table_info(__drizzle_migrations)").all();
+  const knownColumn = columns.find(
+    (column) => column.name === "created_at" || column.name === "createdAt",
+  );
+  return knownColumn ? knownColumn.name : null;
+}
+
+function getAppliedTags(db, entries) {
+  const appliedTags = new Set();
+
+  const opengramRows = db.prepare("SELECT tag FROM __opengram_migrations").all();
+  for (const row of opengramRows) {
+    if (typeof row.tag === "string") {
+      appliedTags.add(row.tag);
+    }
+  }
+
+  if (!tableExists(db, "__drizzle_migrations")) {
+    return appliedTags;
+  }
+
+  const drizzleCreatedAtColumn = getDrizzleCreatedAtColumn(db);
+  if (!drizzleCreatedAtColumn) {
+    console.log(
+      "[opengram-docker] __drizzle_migrations exists but has no created_at column; skipping drizzle reconciliation.",
+    );
+    return appliedTags;
+  }
+
+  const drizzleRows = db
+    .prepare(`SELECT "${drizzleCreatedAtColumn}" AS created_at FROM __drizzle_migrations`)
+    .all();
+  const tagByWhen = new Map(entries.map((entry) => [Number(entry.when), entry.tag]));
+  for (const row of drizzleRows) {
+    const numericCreatedAt = Number(row.created_at);
+    if (!Number.isFinite(numericCreatedAt)) {
+      continue;
+    }
+
+    const tag = tagByWhen.get(numericCreatedAt);
+    if (tag) {
+      appliedTags.add(tag);
+      continue;
+    }
+
+    console.log(
+      `[opengram-docker] Could not reconcile __drizzle_migrations created_at=${numericCreatedAt} to a journal entry.`,
+    );
+  }
+
+  return appliedTags;
+}
+
 function main() {
   const dbPath = process.env.DATABASE_URL || DEFAULT_DB_PATH;
   const migrationsDir = process.env.OPENGRAM_MIGRATIONS_DIR || DEFAULT_MIGRATIONS_DIR;
@@ -33,18 +94,6 @@ function main() {
   db.pragma("foreign_keys = ON");
   db.pragma("journal_mode = WAL");
 
-  const drizzleMigrationsTable = db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'",
-    )
-    .get();
-
-  if (drizzleMigrationsTable) {
-    console.log("[opengram-docker] Found __drizzle_migrations table; skipping startup migrations.");
-    db.close();
-    return;
-  }
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS __opengram_migrations (
       tag TEXT PRIMARY KEY,
@@ -53,12 +102,9 @@ function main() {
   `);
 
   const entries = getMigrationEntries(journalPath);
+  const appliedTags = getAppliedTags(db, entries);
   for (const entry of entries) {
-    const alreadyApplied = db
-      .prepare("SELECT 1 FROM __opengram_migrations WHERE tag = ?")
-      .get(entry.tag);
-
-    if (alreadyApplied) {
+    if (appliedTags.has(entry.tag)) {
       continue;
     }
 
@@ -77,6 +123,7 @@ function main() {
     });
 
     applyMigration();
+    appliedTags.add(entry.tag);
     console.log(`[opengram-docker] Applied migration ${entry.tag}`);
   }
 

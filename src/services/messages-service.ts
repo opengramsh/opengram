@@ -319,10 +319,9 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
       let linkedMedia: MediaRecord | null = null;
 
       if (normalized.mediaReference) {
-        linkedMedia = db
+        linkedMedia = (db
           .prepare('SELECT id, chat_id, message_id, kind FROM media WHERE id = ? AND chat_id = ?')
-          .get(normalized.mediaReference.mediaId, chat.id) as MediaRecord | undefined;
-        linkedMedia = linkedMedia ?? null;
+          .get(normalized.mediaReference.mediaId, chat.id) as MediaRecord | undefined) ?? null;
 
         if (!linkedMedia) {
           throw validationError('trace.mediaId does not belong to this chat.', {
@@ -400,6 +399,8 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
       role: serialized.role,
       senderId: serialized.sender_id,
       streamState: serialized.stream_state,
+      contentFinal: serialized.content_final,
+      createdAt: serialized.created_at,
     });
 
     if (serialized.role === 'agent') {

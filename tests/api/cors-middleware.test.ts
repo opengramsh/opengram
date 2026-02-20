@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { handleApiCors } from "@/src/api/cors";
+import { proxy } from "@/proxy";
 
 let previousCorsOrigins: string | undefined;
 
@@ -29,11 +29,11 @@ afterEach(() => {
   }
 });
 
-describe("API CORS middleware", () => {
+describe("API CORS proxy", () => {
   it("responds to preflight for allowed origins", () => {
     setCorsOrigins(["https://app.example.com"]);
 
-    const response = handleApiCors(
+    const response = proxy(
       createRequest("http://localhost/api/v1/chats", "OPTIONS", {
         Origin: "https://app.example.com",
         "Access-Control-Request-Method": "POST",
@@ -52,7 +52,7 @@ describe("API CORS middleware", () => {
   it("adds CORS headers for non-OPTIONS requests from allowed origins", () => {
     setCorsOrigins(["https://app.example.com"]);
 
-    const response = handleApiCors(
+    const response = proxy(
       createRequest("http://localhost/api/v1/chats", "GET", {
         Origin: "https://app.example.com",
       }),
@@ -66,7 +66,7 @@ describe("API CORS middleware", () => {
   it("does not emit CORS headers when origin is not allowed", () => {
     setCorsOrigins(["https://allowed.example.com"]);
 
-    const response = handleApiCors(
+    const response = proxy(
       createRequest("http://localhost/api/v1/chats", "GET", {
         Origin: "https://app.example.com",
       }),
@@ -78,7 +78,7 @@ describe("API CORS middleware", () => {
   it("defaults to same-origin behavior when corsOrigins is empty", () => {
     setCorsOrigins([]);
 
-    const response = handleApiCors(
+    const response = proxy(
       createRequest("http://localhost/api/v1/chats", "OPTIONS", {
         Origin: "https://app.example.com",
       }),
@@ -93,14 +93,14 @@ describe("API CORS middleware", () => {
   it("supports multiple allowed origins", () => {
     setCorsOrigins(["https://one.example.com", "https://two.example.com"]);
 
-    const r1 = handleApiCors(
+    const r1 = proxy(
       createRequest("http://localhost/api/v1/chats", "GET", {
         Origin: "https://two.example.com",
       }),
     );
     expect(r1.headers.get("Access-Control-Allow-Origin")).toBe("https://two.example.com");
 
-    const r2 = handleApiCors(
+    const r2 = proxy(
       createRequest("http://localhost/api/v1/chats", "GET", {
         Origin: "https://other.example.com",
       }),
@@ -111,7 +111,7 @@ describe("API CORS middleware", () => {
   it("uses default allowed headers when no request headers specified", () => {
     setCorsOrigins(["https://app.example.com"]);
 
-    const response = handleApiCors(
+    const response = proxy(
       createRequest("http://localhost/api/v1/chats", "OPTIONS", {
         Origin: "https://app.example.com",
         "Access-Control-Request-Method": "POST",

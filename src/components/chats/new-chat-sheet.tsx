@@ -1,9 +1,17 @@
 'use client';
 
-import { useEffect, useId, useRef } from 'react';
 import { Facehash } from 'facehash';
 
 import type { Agent, Model } from '@/src/components/chats/types';
+import { Button } from '@/src/components/ui/button';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerTitle,
+} from '@/src/components/ui/drawer';
+import { Label } from '@/src/components/ui/label';
+import { Textarea } from '@/src/components/ui/textarea';
 
 type NewChatSheetProps = {
   open: boolean;
@@ -22,9 +30,6 @@ type NewChatSheetProps = {
   onSubmit: () => void;
 };
 
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export function NewChatSheet({
   open,
   agents,
@@ -41,95 +46,22 @@ export function NewChatSheet({
   onChangeFirstMessage,
   onSubmit,
 }: NewChatSheetProps) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
-  const firstAgentButtonRef = useRef<HTMLButtonElement | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    previouslyFocusedElementRef.current = document.activeElement as HTMLElement | null;
-    firstAgentButtonRef.current?.focus();
-    if (!firstAgentButtonRef.current) {
-      dialogRef.current?.focus();
-    }
-
-    function onEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onClose();
-        return;
-      }
-
-      if (event.key !== 'Tab' || !dialogRef.current) {
-        return;
-      }
-
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialogRef.current.focus();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const activeElement = document.activeElement as HTMLElement | null;
-
-      if (event.shiftKey && (activeElement === first || activeElement === dialogRef.current)) {
-        event.preventDefault();
-        last.focus();
-        return;
-      }
-
-      if (!event.shiftKey && activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener('keydown', onEscape);
-    return () => {
-      window.removeEventListener('keydown', onEscape);
-      previouslyFocusedElementRef.current?.focus();
-    };
-  }, [onClose, open]);
-
-  if (!open) {
-    return null;
-  }
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        tabIndex={-1}
-        className="liquid-glass absolute inset-x-0 bottom-0 rounded-t-3xl border-x border-t border-border p-4"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h2 id={titleId} className="text-sm font-semibold text-foreground">
-          New Chat
-        </h2>
-        <p id={descriptionId} className="mt-1 text-xs text-muted-foreground">
+    <Drawer open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-4 pt-3">
+        <DrawerTitle className="text-sm">New Chat</DrawerTitle>
+        <DrawerDescription className="text-xs text-muted-foreground">
           Choose an agent and model, then send your first message.
-        </p>
+        </DrawerDescription>
         <div className="mt-4 space-y-3">
           <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Agent</p>
+            <Label className="mb-1 text-xs text-muted-foreground">Agent</Label>
             <div className="space-y-2">
-              {agents.map((agent, index) => {
+              {agents.map((agent) => {
                 const selected = selectedAgentId === agent.id;
                 return (
                   <button
                     key={agent.id}
-                    ref={index === 0 ? firstAgentButtonRef : null}
                     type="button"
                     className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
                       selected ? 'border-primary/70 bg-primary/10' : 'border-border bg-card hover:border-primary/40'
@@ -146,8 +78,8 @@ export function NewChatSheet({
               })}
             </div>
           </div>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">Model</span>
+          <div>
+            <Label className="mb-1 text-xs text-muted-foreground">Model</Label>
             <select
               className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70"
               value={selectedModelId}
@@ -159,38 +91,37 @@ export function NewChatSheet({
                 </option>
               ))}
             </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">First message</span>
-            <textarea
+          </div>
+          <div>
+            <Label className="mb-1 text-xs text-muted-foreground">First message</Label>
+            <Textarea
               rows={3}
               value={firstMessage}
               onChange={(event) => onChangeFirstMessage(event.target.value)}
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/70"
+              className="min-h-0"
               placeholder="Start with a message..."
             />
-          </label>
+          </div>
           {error && <p className="text-xs text-red-300">{error}</p>}
           <div className="flex gap-2">
-            <button
-              type="button"
-              className="h-10 flex-1 rounded-xl border border-border bg-card text-sm font-medium text-foreground"
+            <Button
+              variant="outline"
+              className="h-10 flex-1"
               onClick={onClose}
               disabled={isSubmitting}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              className="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60"
+            </Button>
+            <Button
+              className="h-10 flex-1 font-semibold"
               onClick={onSubmit}
               disabled={isSubmitting || !canSubmit}
             >
               {isSubmitting ? 'Sending...' : 'Send'}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 }

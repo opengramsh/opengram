@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 
+import { ensureSqliteReady } from './migrations';
 import { schema } from './schema';
 
 function getDefaultDbPath() {
@@ -8,6 +9,8 @@ function getDefaultDbPath() {
 }
 
 export function createSqliteConnection(dbPath: string = getDefaultDbPath()) {
+  ensureSqliteReady(dbPath);
+
   const sqlite = new Database(dbPath);
 
   // Required baseline pragmas for predictable SQLite behavior in production.

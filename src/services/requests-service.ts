@@ -212,12 +212,12 @@ function normalizeChoiceConfig(config: unknown): ChoiceRequestConfig {
   const maxSelectionsRaw = objectConfig.maxSelections;
   const minSelectionsRaw = objectConfig.minSelections;
 
-  const maxSelections = maxSelectionsRaw === undefined ? 1 : maxSelectionsRaw;
+  const maxSelections = (maxSelectionsRaw == null ? 1 : maxSelectionsRaw) as number;
   if (!Number.isInteger(maxSelections) || maxSelections < 1) {
     throw validationError('config.maxSelections must be an integer >= 1.', { field: 'config.maxSelections' });
   }
 
-  const minSelections = minSelectionsRaw === undefined ? 0 : minSelectionsRaw;
+  const minSelections = (minSelectionsRaw == null ? 0 : minSelectionsRaw) as number;
   if (!Number.isInteger(minSelections) || minSelections < 0) {
     throw validationError('config.minSelections must be an integer >= 0.', { field: 'config.minSelections' });
   }
@@ -244,21 +244,21 @@ function normalizeTextInputConfig(config: unknown): TextInputRequestConfig {
     const patternRaw = validationObject.pattern;
 
     const normalized: TextValidationConfig = {};
-    if (minLengthRaw !== undefined) {
-      if (!Number.isInteger(minLengthRaw) || minLengthRaw < 0) {
+    if (minLengthRaw != null) {
+      if (!Number.isInteger(minLengthRaw) || (minLengthRaw as number) < 0) {
         throw validationError('config.validation.minLength must be an integer >= 0.', {
           field: 'config.validation.minLength',
         });
       }
-      normalized.minLength = minLengthRaw;
+      normalized.minLength = minLengthRaw as number;
     }
-    if (maxLengthRaw !== undefined) {
-      if (!Number.isInteger(maxLengthRaw) || maxLengthRaw < 1) {
+    if (maxLengthRaw != null) {
+      if (!Number.isInteger(maxLengthRaw) || (maxLengthRaw as number) < 1) {
         throw validationError('config.validation.maxLength must be an integer >= 1.', {
           field: 'config.validation.maxLength',
         });
       }
-      normalized.maxLength = maxLengthRaw;
+      normalized.maxLength = maxLengthRaw as number;
     }
     if (normalized.minLength !== undefined && normalized.maxLength !== undefined && normalized.minLength > normalized.maxLength) {
       throw validationError('config.validation.minLength cannot exceed maxLength.', {
