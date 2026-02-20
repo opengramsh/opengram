@@ -178,13 +178,17 @@ async function getVips() {
 
 async function createThumbnail(fileBytes: Uint8Array): Promise<Uint8Array> {
   const vips = await getVips();
-  const thumb = vips.Image.thumbnailBuffer(fileBytes, 512, {
+  const image = vips.Image.newFromBuffer(fileBytes);
+  const rotated = image.autorot();
+  const thumb = rotated.thumbnailImage(512, {
     height: 512,
     size: vips.Size.down,
   });
   try {
-    return thumb.webpsaveBuffer({ Q: 80 });
+    return thumb.writeToBuffer('.webp', { Q: 80 });
   } finally {
+    image.delete();
+    rotated.delete();
     thumb.delete();
   }
 }
