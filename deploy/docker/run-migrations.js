@@ -24,13 +24,35 @@ function listMigrationFiles(migrationsDir) {
     .sort();
 }
 
-function getAppliedNames(db, migrationFiles) {
+function resolveMigrationTrackingColumn(db) {
+  const columns = db.prepare("PRAGMA table_info(__opengram_migrations)").all();
+  const columnNames = new Set(columns.map((column) => column.name));
+  if (columnNames.has("name")) {
+    return "name";
+  }
+
+  if (columnNames.has("tag")) {
+    return "tag";
+  }
+
+  if (columnNames.has("hash")) {
+    return "hash";
+  }
+
+  return null;
+}
+
+function getAppliedNames(db, migrationFiles, trackingColumn) {
   const appliedNames = new Set();
 
-  const trackedRows = db.prepare("SELECT name FROM __opengram_migrations").all();
-  for (const row of trackedRows) {
-    if (typeof row.name === "string") {
-      appliedNames.add(row.name);
+  if (trackingColumn) {
+    const trackedRows = db
+      .prepare(`SELECT "${trackingColumn}" AS name FROM __opengram_migrations`)
+      .all();
+    for (const row of trackedRows) {
+      if (typeof row.name === "string") {
+        appliedNames.add(row.name);
+      }
     }
   }
 
@@ -63,6 +85,10 @@ function getAppliedNames(db, migrationFiles) {
     }
   }
 
+  if (migrationFiles[0] && tableExists(db, "chats")) {
+    appliedNames.add(migrationFiles[0]);
+  }
+
   return appliedNames;
 }
 
@@ -89,7 +115,12 @@ function main() {
     )
   `);
 
-  const appliedNames = getAppliedNames(db, migrationFiles);
+  const trackingColumn = resolveMigrationTrackingColumn(db);
+  if (!trackingColumn) {
+    throw new Error("Unable to resolve migration tracking column for __opengram_migrations");
+  }
+
+  const appliedNames = getAppliedNames(db, migrationFiles, trackingColumn);
   for (const fileName of migrationFiles) {
     if (appliedNames.has(fileName)) {
       continue;
@@ -99,7 +130,7 @@ function main() {
     const migrationSql = fs.readFileSync(migrationPath, "utf8");
     const applyMigration = db.transaction(() => {
       db.exec(migrationSql);
-      db.prepare("INSERT INTO __opengram_migrations (name, applied_at) VALUES (?, ?)").run(
+      db.prepare(`INSERT INTO __opengram_migrations ("${trackingColumn}", applied_at) VALUES (?, ?)`).run(
         fileName,
         Date.now(),
       );

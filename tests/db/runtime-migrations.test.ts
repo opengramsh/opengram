@@ -68,4 +68,33 @@ describe('runtime sqlite bootstrap', () => {
       '0002_messages_stream_sweep_index.sql',
     ]);
   });
+
+  it('supports legacy __opengram_migrations tag column', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'opengram-runtime-migrations-legacy-tags-'));
+    const dbPath = join(tempDir, 'opengram.db');
+
+    const seeded = new Database(dbPath);
+    seeded.exec(initialMigrationSql);
+    seeded.exec(`
+      CREATE TABLE __opengram_migrations (
+        tag TEXT PRIMARY KEY,
+        applied_at INTEGER NOT NULL
+      )
+    `);
+    seeded
+      .prepare('INSERT INTO __opengram_migrations (tag, applied_at) VALUES (?, ?)')
+      .run('0001_messages_fts_trigger_upgrade.sql', Date.now());
+    seeded.close();
+
+    process.env.DATABASE_URL = dbPath;
+    const db = getDb();
+    const rows = db
+      .prepare('SELECT tag FROM __opengram_migrations ORDER BY tag ASC')
+      .all() as Array<{ tag: string }>;
+
+    expect(rows.map((row) => row.tag)).toEqual([
+      '0001_messages_fts_trigger_upgrade.sql',
+      '0002_messages_stream_sweep_index.sql',
+    ]);
+  });
 });
