@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { emitEvent, resetEventSubscribersForTests, subscribeToEvents } from '@/src/services/events-service';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 

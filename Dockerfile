@@ -1,9 +1,5 @@
 FROM node:20-bookworm AS deps
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -14,7 +10,6 @@ RUN npm run build
 FROM node:20-bookworm-slim AS runner
 WORKDIR /opt/opengram/web
 ENV NODE_ENV=production \
-  NEXT_TELEMETRY_DISABLED=1 \
   HOSTNAME=0.0.0.0 \
   PORT=3000 \
   DATABASE_URL=/opt/opengram/data/opengram.db \
@@ -27,10 +22,9 @@ RUN apt-get update \
   && useradd --system --uid 10001 --gid opengram --home /opt/opengram/web --shell /usr/sbin/nologin opengram \
   && mkdir -p /opt/opengram/data/uploads /opt/opengram/config
 
-COPY --from=builder /app/.next/standalone/ /opt/opengram/web/
-COPY --from=builder /app/.next/static/ /opt/opengram/web/.next/static/
-COPY --from=builder /app/public/ /opt/opengram/web/public/
-COPY --from=builder /app/drizzle/ /opt/opengram/web/drizzle/
+COPY --from=builder /app/dist/server/ /opt/opengram/web/dist/server/
+COPY --from=builder /app/dist/client/ /opt/opengram/web/dist/client/
+COPY --from=builder /app/migrations/ /opt/opengram/web/migrations/
 COPY --from=builder /app/deploy/docker/ /opt/opengram/web/deploy/docker/
 COPY --from=builder /app/config/opengram.config.json /opt/opengram/config/opengram.config.json
 

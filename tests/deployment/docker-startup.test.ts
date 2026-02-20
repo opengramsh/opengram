@@ -8,8 +8,7 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..", "..");
 const migrationScript = join(repoRoot, "deploy", "docker", "run-migrations.js");
-const migrationsDir = join(repoRoot, "drizzle");
-const journalPath = join(migrationsDir, "meta", "_journal.json");
+const migrationsDir = join(repoRoot, "migrations");
 
 function runStartupMigrations(dbPath: string) {
   execFileSync("node", [migrationScript], {
@@ -20,14 +19,6 @@ function runStartupMigrations(dbPath: string) {
       OPENGRAM_MIGRATIONS_DIR: migrationsDir,
     },
   });
-}
-
-function readJournalEntries() {
-  const raw = readFileSync(journalPath, "utf8");
-  const parsed = JSON.parse(raw) as {
-    entries: Array<{ idx: number; tag: string; when: number }>;
-  };
-  return parsed.entries.slice().sort((left, right) => left.idx - right.idx);
 }
 
 describe("docker startup migrations", () => {
@@ -56,10 +47,9 @@ describe("docker startup migrations", () => {
   it("applies pending migrations when __drizzle_migrations already exists", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "opengram-docker-upgrade-"));
     const dbPath = join(tempDir, "opengram.db");
-    const journalEntries = readJournalEntries();
 
     const db = new Database(dbPath);
-    db.exec(readFileSync(join(migrationsDir, `${journalEntries[0].tag}.sql`), "utf8"));
+    db.exec(readFileSync(join(migrationsDir, "0000_initial.sql"), "utf8"));
     db.exec(`
       CREATE TABLE __drizzle_migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -68,18 +58,21 @@ describe("docker startup migrations", () => {
       )
     `);
     db.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)").run(
-      journalEntries[0].tag,
-      journalEntries[0].when,
+      "0000_initial",
+      Date.now(),
     );
     db.close();
 
     runStartupMigrations(dbPath);
 
     const migratedDb = new Database(dbPath, { readonly: true });
-    const appliedTags = migratedDb
-      .prepare("SELECT tag FROM __opengram_migrations ORDER BY tag ASC")
-      .all() as Array<{ tag: string }>;
-    expect(appliedTags.map((row) => row.tag)).toEqual(journalEntries.slice(1).map((row) => row.tag));
+    const appliedNames = migratedDb
+      .prepare("SELECT name FROM __opengram_migrations ORDER BY name ASC")
+      .all() as Array<{ name: string }>;
+    expect(appliedNames.map((row) => row.name)).toEqual([
+      "0001_messages_fts_trigger_upgrade.sql",
+      "0002_messages_stream_sweep_index.sql",
+    ]);
 
     const upgradedIndex = migratedDb
       .prepare(

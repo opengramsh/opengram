@@ -26,7 +26,7 @@ require_root() {
 }
 
 require_project_root() {
-  if [[ ! -f "package.json" || ! -f "next.config.ts" ]]; then
+  if [[ ! -f "package.json" || ! -f "vite.config.ts" ]]; then
     echo "Run install.sh from the OpenGram repository root." >&2
     exit 1
   fi
@@ -61,7 +61,7 @@ ensure_build_tools() {
   fi
 
   apt-get update
-  apt-get install -y build-essential python3 rsync
+  apt-get install -y rsync
 }
 
 ensure_service_user() {
@@ -92,13 +92,11 @@ build_application() {
 }
 
 deploy_standalone() {
-  log "Deploying Next.js standalone output to ${WEB_DIR}..."
-  rsync -a --delete .next/standalone/ "${WEB_DIR}/"
-  mkdir -p "${WEB_DIR}/.next"
-  rsync -a --delete .next/static/ "${WEB_DIR}/.next/static/"
-  if [[ -d "public" ]]; then
-    rsync -a --delete public/ "${WEB_DIR}/public/"
-  fi
+  log "Deploying Hono+Vite build output to ${WEB_DIR}..."
+  mkdir -p "${WEB_DIR}/dist"
+  rsync -a --delete dist/server/ "${WEB_DIR}/dist/server/"
+  rsync -a --delete dist/client/ "${WEB_DIR}/dist/client/"
+  rsync -a --delete migrations/ "${WEB_DIR}/migrations/"
 
   chown -R "${APP_USER}:${APP_GROUP}" "${WEB_DIR}"
 }

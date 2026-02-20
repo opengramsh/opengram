@@ -26,7 +26,7 @@ describe("deployment artifacts", () => {
     const unit = readFileSync("deploy/systemd/opengram-web.service", "utf8");
 
     expect(unit).toContain("WorkingDirectory=/opt/opengram/web");
-    expect(unit).toContain("ExecStart=/usr/bin/env node /opt/opengram/web/server.js");
+    expect(unit).toContain("ExecStart=/usr/bin/env node /opt/opengram/web/dist/server/server.js");
     expect(unit).toContain("Environment=DATABASE_URL=/opt/opengram/data/opengram.db");
   });
 
@@ -34,7 +34,8 @@ describe("deployment artifacts", () => {
     expect(existsSync("Dockerfile")).toBe(true);
     const dockerfile = readFileSync("Dockerfile", "utf8");
 
-    expect(dockerfile).toContain(".next/standalone/");
+    expect(dockerfile).toContain("dist/server/");
+    expect(dockerfile).toContain("dist/client/");
     expect(dockerfile).toContain("COPY --from=builder /app/deploy/docker/");
     expect(dockerfile).toContain("entrypoint.sh");
     expect(dockerfile).toContain('VOLUME ["/opt/opengram/data"]');

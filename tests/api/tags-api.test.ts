@@ -5,41 +5,26 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GET as tagSuggestionsGet } from '@/app/api/v1/tags/suggestions/route';
-import { PATCH as chatPatch } from '@/app/api/v1/chats/[chatId]/route';
-import { POST as chatsPost } from '@/app/api/v1/chats/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 
-type ChatContext = {
-  params: Promise<{ chatId: string }>;
-};
-
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 
-function chatContext(chatId: string): ChatContext {
-  return { params: Promise.resolve({ chatId }) };
-}
-
-function createJsonRequest(url: string, method: string, body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
-
 async function createChat(tags: string[]) {
-  const response = await chatsPost(
-    createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+  const response = await app.request('/api/v1/chats', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
       title: 'tags-chat',
       agentIds: ['agent-default'],
       modelId: 'model-default',
       tags,
     }),
-  );
+  });
 
   const body = await response.json();
   return { response, body };
@@ -52,10 +37,12 @@ beforeEach(() => {
   process.env.DATABASE_URL = dbPath;
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
   resetWriteRateLimitForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   resetWriteRateLimitForTests();
@@ -65,7 +52,7 @@ describe('tags suggestions API', () => {
   it('returns empty suggestions when query is blank', async () => {
     await createChat(['alpha']);
 
-    const response = await tagSuggestionsGet(new Request('http://localhost/api/v1/tags/suggestions?q='));
+    const response = await app.request('/api/v1/tags/suggestions?q=');
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -81,18 +68,17 @@ describe('tags suggestions API', () => {
 
     const secondChatId = second.body.id as string;
 
-    const patchResponse = await chatPatch(
-      createJsonRequest(`http://localhost/api/v1/chats/${secondChatId}`, 'PATCH', {
+    const patchResponse = await app.request('/api/v1/chats/' + secondChatId, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         tags: ['alpha', 'alpine', '  alpha  ', ''],
       }),
-      chatContext(secondChatId),
-    );
+    });
 
     expect(patchResponse.status).toBe(200);
 
-    const response = await tagSuggestionsGet(
-      new Request('http://localhost/api/v1/tags/suggestions?q=al&limit=2'),
-    );
+    const response = await app.request('/api/v1/tags/suggestions?q=al&limit=2');
     const body = await response.json();
 
     expect(response.status).toBe(200);

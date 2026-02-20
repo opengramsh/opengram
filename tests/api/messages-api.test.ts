@@ -5,52 +5,27 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GET as chatGet } from '@/app/api/v1/chats/[chatId]/route';
-import { GET as messagesGet, POST as messagesPost } from '@/app/api/v1/chats/[chatId]/messages/route';
-import { POST as messageCancelPost } from '@/app/api/v1/messages/[messageId]/cancel/route';
-import { POST as messageChunksPost } from '@/app/api/v1/messages/[messageId]/chunks/route';
-import { POST as messageCompletePost } from '@/app/api/v1/messages/[messageId]/complete/route';
-import { POST as chatsPost } from '@/app/api/v1/chats/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 import { resetEventSubscribersForTests, subscribeToEvents } from '@/src/services/events-service';
 import { resetStreamingTimeoutSweeperForTests, sweepStaleStreamingMessages } from '@/src/services/messages-service';
 
-type Context = {
-  params: Promise<{ chatId: string }>;
-};
-type MessageContext = {
-  params: Promise<{ messageId: string }>;
-};
-
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 
-function routeContext(chatId: string): Context {
-  return { params: Promise.resolve({ chatId }) };
-}
-
-function messageRouteContext(messageId: string): MessageContext {
-  return { params: Promise.resolve({ messageId }) };
-}
-
-function createJsonRequest(url: string, method: string, body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
-
 async function createChat() {
-  const response = await chatsPost(
-    createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+  const response = await app.request('/api/v1/chats', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
       title: 'messages-chat',
       agentIds: ['agent-default'],
       modelId: 'model-default',
     }),
-  );
+  });
 
   const json = await response.json();
   return { response, json };
@@ -63,12 +38,14 @@ beforeEach(() => {
   process.env.DATABASE_URL = dbPath;
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
   resetWriteRateLimitForTests();
   resetEventSubscribersForTests();
   resetStreamingTimeoutSweeperForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   resetWriteRateLimitForTests();
@@ -81,16 +58,17 @@ describe('messages API', () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
 
-    const response = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         content: 'hello from the model snapshot path',
         modelId: 'ignored-by-snapshot',
         trace: { backend: 'test' },
       }),
-      routeContext(chatId),
-    );
+    });
     const body = await response.json();
 
     expect(response.status).toBe(201);
@@ -99,10 +77,9 @@ describe('messages API', () => {
     expect(body.content_final).toBe('hello from the model snapshot path');
     expect(body.trace).toEqual({ backend: 'test' });
 
-    const chatResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'GET'),
-      routeContext(chatId),
-    );
+    const chatResponse = await app.request('/api/v1/chats/' + chatId, {
+      method: 'GET',
+    });
     const chat = await chatResponse.json();
 
     expect(chat.last_message_preview).toBe('hello from the model snapshot path');
@@ -132,14 +109,15 @@ describe('messages API', () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
 
-    const response = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         streaming: true,
       }),
-      routeContext(chatId),
-    );
+    });
 
     const body = await response.json();
 
@@ -180,24 +158,24 @@ describe('messages API', () => {
       now,
     );
 
-    const response = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'user',
         senderId: 'user:primary',
         trace: { mediaId: 'VMEDIA000000000000001', kind: 'audio' },
       }),
-      routeContext(chatId),
-    );
+    });
     const body = await response.json();
 
     expect(response.status).toBe(201);
     expect(body.content_final).toBeNull();
     expect(body.trace).toEqual({ mediaId: 'VMEDIA000000000000001', kind: 'audio' });
 
-    const chatResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'GET'),
-      routeContext(chatId),
-    );
+    const chatResponse = await app.request('/api/v1/chats/' + chatId, {
+      method: 'GET',
+    });
     const chat = await chatResponse.json();
     expect(chat.last_message_preview).toBe('Voice note');
     expect(chat.last_message_role).toBe('user');
@@ -212,14 +190,15 @@ describe('messages API', () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
 
-    const response = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-missing',
         content: 'bad sender',
       }),
-      routeContext(chatId),
-    );
+    });
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
@@ -237,14 +216,15 @@ describe('messages API', () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
 
-    const response = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'user',
         senderId: 'user:primary',
         streaming: true,
       }),
-      routeContext(chatId),
-    );
+    });
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
@@ -281,10 +261,9 @@ describe('messages API', () => {
       ].join(' '),
     ).run('333333333333333333333', chatId, 'agent', 'agent-default', 2000, 2000, 'm3', 'complete', 'model-default');
 
-    const page1Response = await messagesGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages?limit=2`, 'GET'),
-      routeContext(chatId),
-    );
+    const page1Response = await app.request('/api/v1/chats/' + chatId + '/messages?limit=2', {
+      method: 'GET',
+    });
     const page1 = await page1Response.json();
 
     expect(page1Response.status).toBe(200);
@@ -294,12 +273,11 @@ describe('messages API', () => {
     expect(page1.cursor.hasMore).toBe(true);
     expect(page1.cursor.next).toBeTypeOf('string');
 
-    const page2Response = await messagesGet(
-      createJsonRequest(
-        `http://localhost/api/v1/chats/${chatId}/messages?limit=2&cursor=${encodeURIComponent(page1.cursor.next)}`,
-        'GET',
-      ),
-      routeContext(chatId),
+    const page2Response = await app.request(
+      '/api/v1/chats/' + chatId + '/messages?limit=2&cursor=' + encodeURIComponent(page1.cursor.next),
+      {
+        method: 'GET',
+      },
     );
     const page2 = await page2Response.json();
 
@@ -314,10 +292,9 @@ describe('messages API', () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
 
-    const response = await messagesGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages?limit=200`, 'GET'),
-      routeContext(chatId),
-    );
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages?limit=200', {
+      method: 'GET',
+    });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -329,10 +306,9 @@ describe('messages API', () => {
   });
 
   it('returns not found for unknown chat', async () => {
-    const response = await messagesGet(
-      createJsonRequest('http://localhost/api/v1/chats/missing/messages', 'GET'),
-      routeContext('missing'),
-    );
+    const response = await app.request('/api/v1/chats/missing/messages', {
+      method: 'GET',
+    });
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({
@@ -349,14 +325,15 @@ describe('messages API', () => {
   it('appends streaming chunks, bumps chat updated_at, and emits ephemeral chunk events', async () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
-    const started = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const started = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         streaming: true,
       }),
-      routeContext(chatId),
-    );
+    });
     const startedMessage = await started.json();
     const messageId = startedMessage.id as string;
 
@@ -376,18 +353,20 @@ describe('messages API', () => {
       });
     });
 
-    const firstChunk = await messageChunksPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+    const firstChunk = await app.request('/api/v1/messages/' + messageId + '/chunks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         deltaText: 'hello ',
       }),
-      messageRouteContext(messageId),
-    );
-    const secondChunk = await messageChunksPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+    });
+    const secondChunk = await app.request('/api/v1/messages/' + messageId + '/chunks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         deltaText: 'world',
       }),
-      messageRouteContext(messageId),
-    );
+    });
     unsubscribe();
 
     expect(firstChunk.status).toBe(200);
@@ -422,32 +401,34 @@ describe('messages API', () => {
   it('completes a streaming message, updates chat timestamps, and indexes final text', async () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
-    const started = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const started = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         streaming: true,
       }),
-      routeContext(chatId),
-    );
+    });
     const startedMessage = await started.json();
     const messageId = startedMessage.id as string;
 
-    await messageChunksPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+    await app.request('/api/v1/messages/' + messageId + '/chunks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         deltaText: 'partial completion',
       }),
-      messageRouteContext(messageId),
-    );
+    });
 
     const beforeChat = db
       .prepare('SELECT updated_at, last_message_at FROM chats WHERE id = ?')
       .get(chatId) as { updated_at: number; last_message_at: number | null };
 
-    const response = await messageCompletePost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/complete`, 'POST'),
-      messageRouteContext(messageId),
-    );
+    const response = await app.request('/api/v1/messages/' + messageId + '/complete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -484,32 +465,34 @@ describe('messages API', () => {
   it('cancels a streaming message and emits completion event with cancelled state', async () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
-    const started = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const started = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         streaming: true,
       }),
-      routeContext(chatId),
-    );
+    });
     const startedMessage = await started.json();
     const messageId = startedMessage.id as string;
 
-    await messageChunksPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+    await app.request('/api/v1/messages/' + messageId + '/chunks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         deltaText: 'cancel me',
       }),
-      messageRouteContext(messageId),
-    );
+    });
 
     const beforeChat = db
       .prepare('SELECT updated_at, last_message_at FROM chats WHERE id = ?')
       .get(chatId) as { updated_at: number; last_message_at: number | null };
 
-    const response = await messageCancelPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/cancel`, 'POST'),
-      messageRouteContext(messageId),
-    );
+    const response = await app.request('/api/v1/messages/' + messageId + '/cancel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -540,36 +523,39 @@ describe('messages API', () => {
   it('rejects chunk and finalize writes after stream state has transitioned', async () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
-    const started = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const started = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         streaming: true,
       }),
-      routeContext(chatId),
-    );
+    });
     const startedMessage = await started.json();
     const messageId = startedMessage.id as string;
 
-    await messageChunksPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+    await app.request('/api/v1/messages/' + messageId + '/chunks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         deltaText: 'locked',
       }),
-      messageRouteContext(messageId),
-    );
+    });
 
-    const completeResponse = await messageCompletePost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/complete`, 'POST'),
-      messageRouteContext(messageId),
-    );
+    const completeResponse = await app.request('/api/v1/messages/' + messageId + '/complete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
     expect(completeResponse.status).toBe(200);
 
-    const lateChunk = await messageChunksPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+    const lateChunk = await app.request('/api/v1/messages/' + messageId + '/chunks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         deltaText: ' should-not-append',
       }),
-      messageRouteContext(messageId),
-    );
+    });
     expect(lateChunk.status).toBe(409);
     await expect(lateChunk.json()).resolves.toEqual({
       error: {
@@ -582,10 +568,10 @@ describe('messages API', () => {
       },
     });
 
-    const lateCancel = await messageCancelPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/cancel`, 'POST'),
-      messageRouteContext(messageId),
-    );
+    const lateCancel = await app.request('/api/v1/messages/' + messageId + '/cancel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
     expect(lateCancel.status).toBe(409);
 
     const message = db
@@ -601,23 +587,25 @@ describe('messages API', () => {
   it('rejects stream lifecycle operations when message is not in streaming state', async () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
-    const created = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const created = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         content: 'already complete',
       }),
-      routeContext(chatId),
-    );
+    });
     const createdMessage = await created.json();
     const messageId = createdMessage.id as string;
 
-    const chunkResponse = await messageChunksPost(
-      createJsonRequest(`http://localhost/api/v1/messages/${messageId}/chunks`, 'POST', {
+    const chunkResponse = await app.request('/api/v1/messages/' + messageId + '/chunks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         deltaText: 'late chunk',
       }),
-      messageRouteContext(messageId),
-    );
+    });
 
     expect(chunkResponse.status).toBe(409);
     await expect(chunkResponse.json()).resolves.toEqual({
@@ -635,14 +623,15 @@ describe('messages API', () => {
   it('auto-cancels stale streaming messages and emits completion events', async () => {
     const createdChat = await createChat();
     const chatId = createdChat.json.id as string;
-    const started = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages`, 'POST', {
+    const started = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         streaming: true,
       }),
-      routeContext(chatId),
-    );
+    });
     const startedMessage = await started.json();
     const messageId = startedMessage.id as string;
 

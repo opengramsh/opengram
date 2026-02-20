@@ -5,55 +5,17 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GET as configGet } from '@/app/api/v1/config/route';
-import { GET as healthGet } from '@/app/api/v1/health/route';
-import { GET as chatGet, PATCH as chatPatch } from '@/app/api/v1/chats/[chatId]/route';
-import { POST as archivePost } from '@/app/api/v1/chats/[chatId]/archive/route';
-import { POST as markReadPost } from '@/app/api/v1/chats/[chatId]/mark-read/route';
-import { POST as markUnreadPost } from '@/app/api/v1/chats/[chatId]/mark-unread/route';
-import { GET as messagesGet } from '@/app/api/v1/chats/[chatId]/messages/route';
-import { POST as unarchivePost } from '@/app/api/v1/chats/[chatId]/unarchive/route';
-import { GET as pendingSummaryGet } from '@/app/api/v1/chats/pending-summary/route';
-import { GET as chatsGet, POST as chatsPost } from '@/app/api/v1/chats/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
-type Context = {
-  params: Promise<{ chatId: string }>;
-};
+const jsonHeaders = { 'content-type': 'application/json' };
 
 let db: Database.Database;
 let previousConfigPath: string | undefined;
-
-function routeContext(chatId: string): Context {
-  return { params: Promise.resolve({ chatId }) };
-}
-
-function createJsonRequest(url: string, method: string, body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
-
-function createJsonRequestWithHeaders(
-  url: string,
-  method: string,
-  body: unknown | undefined,
-  headers: Record<string, string>,
-) {
-  return new Request(url, {
-    method,
-    headers: {
-      'content-type': 'application/json',
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => {
@@ -94,13 +56,15 @@ function setConfigOverrides(overrides: { security?: Record<string, unknown>; ser
 }
 
 async function createChat(body: Record<string, unknown> = {}) {
-  const response = await chatsPost(
-    createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+  const response = await app.request('/api/v1/chats', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({
       agentIds: ['agent-default'],
       modelId: 'model-default',
       ...body,
     }),
-  );
+  });
 
   const json = await response.json();
   return { response, json };
@@ -114,10 +78,12 @@ beforeEach(() => {
   previousConfigPath = process.env.OPENGRAM_CONFIG_PATH;
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
   resetWriteRateLimitForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   delete process.env.OPENGRAM_WRITE_RATE_LIMIT_MAX;
@@ -149,9 +115,9 @@ describe('chats API', () => {
     const created = await createChat({ firstMessage });
     const chatId = created.json.id as string;
 
-    const messagesResponse = await messagesGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages?limit=10`, 'GET'),
-      routeContext(chatId),
+    const messagesResponse = await app.request(
+      `/api/v1/chats/${chatId}/messages?limit=10`,
+      { method: 'GET' },
     );
     const messagesBody = await messagesResponse.json();
 
@@ -166,9 +132,9 @@ describe('chats API', () => {
     const created = await createChat({ firstMessage: '   hello from api client   ' });
     const chatId = created.json.id as string;
 
-    const messagesResponse = await messagesGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/messages?limit=10`, 'GET'),
-      routeContext(chatId),
+    const messagesResponse = await app.request(
+      `/api/v1/chats/${chatId}/messages?limit=10`,
+      { method: 'GET' },
     );
     const messagesBody = await messagesResponse.json();
 
@@ -178,12 +144,14 @@ describe('chats API', () => {
   });
 
   it('returns validation error envelope for invalid create payload', async () => {
-    const response = await chatsPost(
-      createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+    const response = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
         agentIds: ['agent-default'],
         modelId: 'missing-model',
       }),
-    );
+    });
     const json = await response.json();
 
     expect(response.status).toBe(400);
@@ -201,9 +169,7 @@ describe('chats API', () => {
     await createChat({ title: 'chat-2' });
     await createChat({ title: 'chat-3' });
 
-    const page1Response = await chatsGet(
-      createJsonRequest('http://localhost/api/v1/chats?limit=2', 'GET'),
-    );
+    const page1Response = await app.request('/api/v1/chats?limit=2', { method: 'GET' });
     const page1 = await page1Response.json();
 
     expect(page1Response.status).toBe(200);
@@ -211,11 +177,9 @@ describe('chats API', () => {
     expect(page1.cursor.hasMore).toBe(true);
     expect(page1.cursor.next).toBeTypeOf('string');
 
-    const page2Response = await chatsGet(
-      createJsonRequest(
-        `http://localhost/api/v1/chats?limit=2&cursor=${encodeURIComponent(page1.cursor.next)}`,
-        'GET',
-      ),
+    const page2Response = await app.request(
+      `/api/v1/chats?limit=2&cursor=${encodeURIComponent(page1.cursor.next)}`,
+      { method: 'GET' },
     );
     const page2 = await page2Response.json();
 
@@ -245,31 +209,20 @@ describe('chats API', () => {
       ].join(' '),
     ).run('123456789012345678904', secondChatId, 'agent', 'agent-default', now - 1_000, now - 1_000, 'newer', 'complete');
 
-    await markUnreadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${firstChatId}/mark-unread`, 'POST'),
-      routeContext(firstChatId),
-    );
-    await markUnreadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${secondChatId}/mark-unread`, 'POST'),
-      routeContext(secondChatId),
-    );
+    await app.request(`/api/v1/chats/${firstChatId}/mark-unread`, { method: 'POST' });
+    await app.request(`/api/v1/chats/${secondChatId}/mark-unread`, { method: 'POST' });
 
-    await markReadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${firstChatId}/mark-read`, 'POST'),
-      routeContext(firstChatId),
-    );
+    await app.request(`/api/v1/chats/${firstChatId}/mark-read`, { method: 'POST' });
 
-    const listResponse = await chatsGet(createJsonRequest('http://localhost/api/v1/chats?limit=2', 'GET'));
+    const listResponse = await app.request('/api/v1/chats?limit=2', { method: 'GET' });
     const listBody = await listResponse.json();
     expect(listBody.data.map((chat: { id: string }) => chat.id)).toEqual([secondChatId, firstChatId]);
 
-    const page1Response = await chatsGet(createJsonRequest('http://localhost/api/v1/chats?limit=1', 'GET'));
+    const page1Response = await app.request('/api/v1/chats?limit=1', { method: 'GET' });
     const page1 = await page1Response.json();
-    const page2Response = await chatsGet(
-      createJsonRequest(
-        `http://localhost/api/v1/chats?limit=1&cursor=${encodeURIComponent(page1.cursor.next)}`,
-        'GET',
-      ),
+    const page2Response = await app.request(
+      `/api/v1/chats?limit=1&cursor=${encodeURIComponent(page1.cursor.next)}`,
+      { method: 'GET' },
     );
     const page2 = await page2Response.json();
 
@@ -281,23 +234,21 @@ describe('chats API', () => {
     const created = await createChat({ title: 'before', tags: ['alpha'] });
     const chatId = created.json.id as string;
 
-    const getResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'GET'),
-      routeContext(chatId),
-    );
+    const getResponse = await app.request(`/api/v1/chats/${chatId}`, { method: 'GET' });
     const getBody = await getResponse.json();
 
     expect(getResponse.status).toBe(200);
     expect(getBody.title).toBe('before');
 
-    const patchResponse = await chatPatch(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'PATCH', {
+    const patchResponse = await app.request(`/api/v1/chats/${chatId}`, {
+      method: 'PATCH',
+      headers: jsonHeaders,
+      body: JSON.stringify({
         title: 'after',
         tags: ['beta'],
         pinned: true,
       }),
-      routeContext(chatId),
-    );
+    });
     const patched = await patchResponse.json();
 
     expect(patchResponse.status).toBe(200);
@@ -313,28 +264,17 @@ describe('chats API', () => {
     });
     const chatId = created.json.id as string;
 
-    await chatPatch(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'PATCH', {
+    await app.request(`/api/v1/chats/${chatId}`, {
+      method: 'PATCH',
+      headers: jsonHeaders,
+      body: JSON.stringify({
         title: 'lifecycle-updated',
       }),
-      routeContext(chatId),
-    );
-    await archivePost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/archive`, 'POST'),
-      routeContext(chatId),
-    );
-    await unarchivePost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/unarchive`, 'POST'),
-      routeContext(chatId),
-    );
-    await markUnreadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/mark-unread`, 'POST'),
-      routeContext(chatId),
-    );
-    await markReadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/mark-read`, 'POST'),
-      routeContext(chatId),
-    );
+    });
+    await app.request(`/api/v1/chats/${chatId}/archive`, { method: 'POST' });
+    await app.request(`/api/v1/chats/${chatId}/unarchive`, { method: 'POST' });
+    await app.request(`/api/v1/chats/${chatId}/mark-unread`, { method: 'POST' });
+    await app.request(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' });
 
     const rows = db
       .prepare('SELECT type, payload FROM events ORDER BY rowid ASC')
@@ -374,34 +314,19 @@ describe('chats API', () => {
       ].join(' '),
     ).run('123456789012345678902', chatId, 'text_input', 'pending', 'Need input', '{}', now);
 
-    const archiveResponse = await archivePost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/archive`, 'POST'),
-      routeContext(chatId),
-    );
+    const archiveResponse = await app.request(`/api/v1/chats/${chatId}/archive`, { method: 'POST' });
     expect(await archiveResponse.json()).toEqual({ ok: true });
 
-    const unarchiveResponse = await unarchivePost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/unarchive`, 'POST'),
-      routeContext(chatId),
-    );
+    const unarchiveResponse = await app.request(`/api/v1/chats/${chatId}/unarchive`, { method: 'POST' });
     expect(await unarchiveResponse.json()).toEqual({ ok: true });
 
-    const unreadResponse = await markUnreadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/mark-unread`, 'POST'),
-      routeContext(chatId),
-    );
+    const unreadResponse = await app.request(`/api/v1/chats/${chatId}/mark-unread`, { method: 'POST' });
     expect(await unreadResponse.json()).toEqual({ ok: true });
 
-    const readResponse = await markReadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/mark-read`, 'POST'),
-      routeContext(chatId),
-    );
+    const readResponse = await app.request(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' });
     expect(await readResponse.json()).toEqual({ ok: true });
 
-    const getResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'GET'),
-      routeContext(chatId),
-    );
+    const getResponse = await app.request(`/api/v1/chats/${chatId}`, { method: 'GET' });
     const body = await getResponse.json();
 
     expect(body.is_archived).toBe(false);
@@ -457,12 +382,13 @@ describe('chats API', () => {
       now,
     );
 
-    const patchResponse = await chatPatch(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'PATCH', {
+    const patchResponse = await app.request(`/api/v1/chats/${chatId}`, {
+      method: 'PATCH',
+      headers: jsonHeaders,
+      body: JSON.stringify({
         title: 'voice-preview-updated',
       }),
-      routeContext(chatId),
-    );
+    });
     const patched = await patchResponse.json();
 
     expect(patchResponse.status).toBe(200);
@@ -482,22 +408,20 @@ describe('chats API', () => {
       ].join(' '),
     ).run('123456789012345678905', chatId, 'system', 'system', now, now, 'system note', 'complete');
 
-    await markUnreadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}/mark-unread`, 'POST'),
-      routeContext(chatId),
-    );
+    await app.request(`/api/v1/chats/${chatId}/mark-unread`, { method: 'POST' });
 
-    const getResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chatId}`, 'GET'),
-      routeContext(chatId),
-    );
+    const getResponse = await app.request(`/api/v1/chats/${chatId}`, { method: 'GET' });
     const body = await getResponse.json();
 
     expect(body.unread_count).toBe(1);
   });
 
   it('rejects non-object JSON bodies', async () => {
-    const response = await chatsPost(createJsonRequest('http://localhost/api/v1/chats', 'POST', null));
+    const response = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify(null),
+    });
     const body = await response.json();
 
     expect(response.status).toBe(400);
@@ -506,13 +430,15 @@ describe('chats API', () => {
   });
 
   it('rejects non-string firstMessage values', async () => {
-    const response = await chatsPost(
-      createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+    const response = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
         agentIds: ['agent-default'],
         modelId: 'model-default',
         firstMessage: 123,
       }),
-    );
+    });
     const body = await response.json();
 
     expect(response.status).toBe(400);
@@ -521,55 +447,49 @@ describe('chats API', () => {
   });
 
   it('replays idempotent creates and rejects key reuse with different payloads', async () => {
-    const firstResponse = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'chat-create-key',
-        },
-        body: JSON.stringify({
-          agentIds: ['agent-default'],
-          modelId: 'model-default',
-          title: 'same',
-        }),
+    const firstResponse = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        'idempotency-key': 'chat-create-key',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+        title: 'same',
       }),
-    );
+    });
     const firstBody = await firstResponse.json();
 
-    const replayResponse = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'chat-create-key',
-        },
-        body: JSON.stringify({
-          agentIds: ['agent-default'],
-          modelId: 'model-default',
-          title: 'same',
-        }),
+    const replayResponse = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        'idempotency-key': 'chat-create-key',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+        title: 'same',
       }),
-    );
+    });
     const replayBody = await replayResponse.json();
 
     expect(replayResponse.status).toBe(201);
     expect(replayBody.id).toBe(firstBody.id);
 
-    const conflictResponse = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'chat-create-key',
-        },
-        body: JSON.stringify({
-          agentIds: ['agent-default'],
-          modelId: 'model-default',
-          title: 'different',
-        }),
+    const conflictResponse = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        'idempotency-key': 'chat-create-key',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+        title: 'different',
       }),
-    );
+    });
     const conflictBody = await conflictResponse.json();
 
     expect(conflictResponse.status).toBe(409);
@@ -577,38 +497,34 @@ describe('chats API', () => {
   });
 
   it('replays idempotent creates for semantically identical payloads with different key order', async () => {
-    const firstResponse = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'chat-canonical-key',
-        },
-        body: JSON.stringify({
-          agentIds: ['agent-default'],
-          modelId: 'model-default',
-          tags: ['ops'],
-          title: 'canonical',
-        }),
+    const firstResponse = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        'idempotency-key': 'chat-canonical-key',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+        tags: ['ops'],
+        title: 'canonical',
       }),
-    );
+    });
     const firstBody = await firstResponse.json();
 
-    const replayResponse = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'chat-canonical-key',
-        },
-        body: JSON.stringify({
-          title: 'canonical',
-          tags: ['ops'],
-          modelId: 'model-default',
-          agentIds: ['agent-default'],
-        }),
+    const replayResponse = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        'idempotency-key': 'chat-canonical-key',
+      },
+      body: JSON.stringify({
+        title: 'canonical',
+        tags: ['ops'],
+        modelId: 'model-default',
+        agentIds: ['agent-default'],
       }),
-    );
+    });
     const replayBody = await replayResponse.json();
 
     expect(firstResponse.status).toBe(201);
@@ -617,20 +533,18 @@ describe('chats API', () => {
   });
 
   it('returns validation error when Idempotency-Key header is empty', async () => {
-    const response = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': '   ',
-        },
-        body: JSON.stringify({
-          agentIds: ['agent-default'],
-          modelId: 'model-default',
-          title: 'invalid-key',
-        }),
+    const response = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        'idempotency-key': '   ',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+        title: 'invalid-key',
       }),
-    );
+    });
     const body = await response.json();
 
     expect(response.status).toBe(400);
@@ -646,10 +560,10 @@ describe('chats API', () => {
   });
 
   it('handles concurrent idempotent create without duplicate side effects', async () => {
-    const requestFactory = () => new Request('http://localhost/api/v1/chats', {
+    const requestInit = {
       method: 'POST',
       headers: {
-        'content-type': 'application/json',
+        ...jsonHeaders,
         'idempotency-key': 'chat-create-concurrent',
       },
       body: JSON.stringify({
@@ -657,9 +571,12 @@ describe('chats API', () => {
         modelId: 'model-default',
         title: 'same',
       }),
-    });
+    };
 
-    const [responseA, responseB] = await Promise.all([chatsPost(requestFactory()), chatsPost(requestFactory())]);
+    const [responseA, responseB] = await Promise.all([
+      app.request('/api/v1/chats', requestInit),
+      app.request('/api/v1/chats', requestInit),
+    ]);
     const bodyA = await responseA.json();
     const bodyB = await responseB.json();
 
@@ -688,20 +605,18 @@ describe('chats API', () => {
       'INSERT INTO idempotency_keys (key, response, status_code, created_at) VALUES (?, ?, ?, ?)',
     ).run('ttl-key', staleResponse, 201, Date.now() - 10_000);
 
-    const response = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'ttl-key',
-        },
-        body: JSON.stringify({
-          agentIds: ['agent-default'],
-          modelId: 'model-default',
-          title: 'fresh',
-        }),
+    const response = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        'idempotency-key': 'ttl-key',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
+        title: 'fresh',
       }),
-    );
+    });
     const body = await response.json();
 
     expect(response.status).toBe(201);
@@ -711,30 +626,30 @@ describe('chats API', () => {
   it('enforces write bearer auth when instance secret is enabled', async () => {
     setInstanceSecretConfig('s3cret');
 
-    const unauthorized = await chatsPost(
-      createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+    const unauthorized = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
         agentIds: ['agent-default'],
         modelId: 'model-default',
       }),
-    );
+    });
     const unauthorizedBody = await unauthorized.json();
 
     expect(unauthorized.status).toBe(401);
     expect(unauthorizedBody.error.code).toBe('UNAUTHORIZED');
 
-    const authorized = await chatsPost(
-      new Request('http://localhost/api/v1/chats', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: 'Bearer s3cret',
-        },
-        body: JSON.stringify({
-          agentIds: ['agent-default'],
-          modelId: 'model-default',
-        }),
+    const authorized = await app.request('/api/v1/chats', {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        authorization: 'Bearer s3cret',
+      },
+      body: JSON.stringify({
+        agentIds: ['agent-default'],
+        modelId: 'model-default',
       }),
-    );
+    });
 
     expect(authorized.status).toBe(201);
   });
@@ -742,9 +657,7 @@ describe('chats API', () => {
   it('does not enforce read bearer auth when read toggle is disabled', async () => {
     setInstanceSecretConfig('s3cret');
 
-    const response = await chatsGet(
-      createJsonRequest('http://localhost/api/v1/chats?limit=5', 'GET'),
-    );
+    const response = await app.request('/api/v1/chats?limit=5', { method: 'GET' });
     expect(response.status).toBe(200);
   });
 
@@ -757,9 +670,7 @@ describe('chats API', () => {
       },
     });
 
-    const unauthorized = await chatsGet(
-      createJsonRequest('http://localhost/api/v1/chats?limit=5', 'GET'),
-    );
+    const unauthorized = await app.request('/api/v1/chats?limit=5', { method: 'GET' });
     expect(unauthorized.status).toBe(401);
     await expect(unauthorized.json()).resolves.toEqual({
       error: {
@@ -769,18 +680,22 @@ describe('chats API', () => {
       },
     });
 
-    const invalidSecret = await chatsGet(
-      createJsonRequestWithHeaders('http://localhost/api/v1/chats?limit=5', 'GET', undefined, {
+    const invalidSecret = await app.request('/api/v1/chats?limit=5', {
+      method: 'GET',
+      headers: {
+        ...jsonHeaders,
         authorization: 'Bearer not-the-secret',
-      }),
-    );
+      },
+    });
     expect(invalidSecret.status).toBe(401);
 
-    const authorized = await chatsGet(
-      createJsonRequestWithHeaders('http://localhost/api/v1/chats?limit=5', 'GET', undefined, {
+    const authorized = await app.request('/api/v1/chats?limit=5', {
+      method: 'GET',
+      headers: {
+        ...jsonHeaders,
         authorization: 'Bearer s3cret',
-      }),
-    );
+      },
+    });
     expect(authorized.status).toBe(200);
   });
 
@@ -793,9 +708,7 @@ describe('chats API', () => {
       },
     });
 
-    const response = await chatsGet(
-      createJsonRequest('http://localhost/api/v1/chats?limit=5', 'GET'),
-    );
+    const response = await app.request('/api/v1/chats?limit=5', { method: 'GET' });
     expect(response.status).toBe(200);
   });
 
@@ -808,15 +721,10 @@ describe('chats API', () => {
 
     let rateLimitedResponse: Response | null = null;
     for (let i = 0; i < 3; i += 1) {
-      const response = await archivePost(
-        createJsonRequestWithHeaders(
-          `http://localhost/api/v1/chats/${chatId}/archive`,
-          'POST',
-          {},
-          { 'x-forwarded-for': '192.168.0.1' },
-        ),
-        routeContext(chatId),
-      );
+      const response = await app.request(`/api/v1/chats/${chatId}/archive`, {
+        method: 'POST',
+        headers: { 'x-forwarded-for': '192.168.0.1' },
+      });
       if (response.status === 429) {
         rateLimitedResponse = response;
         break;
@@ -828,15 +736,10 @@ describe('chats API', () => {
     const body = await rateLimitedResponse!.json();
     expect(body.error.code).toBe('RATE_LIMITED');
 
-    const differentIpResponse = await archivePost(
-      createJsonRequestWithHeaders(
-        `http://localhost/api/v1/chats/${chatId}/archive`,
-        'POST',
-        {},
-        { 'x-forwarded-for': '192.168.0.2' },
-      ),
-      routeContext(chatId),
-    );
+    const differentIpResponse = await app.request(`/api/v1/chats/${chatId}/archive`, {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.168.0.2' },
+    });
     expect(differentIpResponse.status).toBe(200);
   });
 
@@ -847,39 +750,24 @@ describe('chats API', () => {
     const created = await createChat({ title: 'window-rollover-target' });
     const chatId = created.json.id as string;
 
-    const first = await archivePost(
-      createJsonRequestWithHeaders(
-        `http://localhost/api/v1/chats/${chatId}/archive`,
-        'POST',
-        {},
-        { 'x-forwarded-for': '198.51.100.10' },
-      ),
-      routeContext(chatId),
-    );
+    const first = await app.request(`/api/v1/chats/${chatId}/archive`, {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '198.51.100.10' },
+    });
     expect(first.status).toBe(200);
 
-    const limited = await archivePost(
-      createJsonRequestWithHeaders(
-        `http://localhost/api/v1/chats/${chatId}/archive`,
-        'POST',
-        {},
-        { 'x-forwarded-for': '198.51.100.10' },
-      ),
-      routeContext(chatId),
-    );
+    const limited = await app.request(`/api/v1/chats/${chatId}/archive`, {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '198.51.100.10' },
+    });
     expect(limited.status).toBe(429);
 
     await sleep(80);
 
-    const afterWindow = await archivePost(
-      createJsonRequestWithHeaders(
-        `http://localhost/api/v1/chats/${chatId}/archive`,
-        'POST',
-        {},
-        { 'x-forwarded-for': '198.51.100.10' },
-      ),
-      routeContext(chatId),
-    );
+    const afterWindow = await app.request(`/api/v1/chats/${chatId}/archive`, {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '198.51.100.10' },
+    });
     expect(afterWindow.status).toBe(200);
   });
 
@@ -889,11 +777,10 @@ describe('chats API', () => {
     process.env.OPENGRAM_TRUST_PROXY_HEADERS = 'true';
 
     for (let i = 0; i < 5; i += 1) {
-      const response = await chatsGet(
-        createJsonRequestWithHeaders('http://localhost/api/v1/chats?limit=2', 'GET', undefined, {
-          'x-forwarded-for': '203.0.113.25',
-        }),
-      );
+      const response = await app.request('/api/v1/chats?limit=2', {
+        method: 'GET',
+        headers: { 'x-forwarded-for': '203.0.113.25' },
+      });
       expect(response.status).toBe(200);
       expect(response.headers.get('Retry-After')).toBeNull();
     }
@@ -908,15 +795,10 @@ describe('chats API', () => {
 
     let rateLimited = false;
     for (let i = 0; i < 3; i += 1) {
-      const response = await archivePost(
-        createJsonRequestWithHeaders(
-          `http://localhost/api/v1/chats/${chatId}/archive`,
-          'POST',
-          {},
-          { 'x-forwarded-for': '203.0.113.99' },
-        ),
-        routeContext(chatId),
-      );
+      const response = await app.request(`/api/v1/chats/${chatId}/archive`, {
+        method: 'POST',
+        headers: { 'x-forwarded-for': '203.0.113.99' },
+      });
       if (response.status === 429) {
         rateLimited = true;
         break;
@@ -933,34 +815,21 @@ describe('chats API', () => {
     const chatId = created.json.id as string;
     resetWriteRateLimitForTests();
 
-    const first = await archivePost(
-      createJsonRequestWithHeaders(
-        `http://localhost/api/v1/chats/${chatId}/archive`,
-        'POST',
-        {},
-        { 'x-forwarded-for': '192.0.2.10' },
-      ),
-      routeContext(chatId),
-    );
-    const second = await archivePost(
-      createJsonRequestWithHeaders(
-        `http://localhost/api/v1/chats/${chatId}/archive`,
-        'POST',
-        {},
-        { 'x-forwarded-for': '192.0.2.11' },
-      ),
-      routeContext(chatId),
-    );
+    const first = await app.request(`/api/v1/chats/${chatId}/archive`, {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.10' },
+    });
+    const second = await app.request(`/api/v1/chats/${chatId}/archive`, {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.11' },
+    });
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(429);
   });
 
   it('returns not found envelope for unknown chat', async () => {
-    const response = await chatGet(
-      createJsonRequest('http://localhost/api/v1/chats/missing', 'GET'),
-      routeContext('missing'),
-    );
+    const response = await app.request('/api/v1/chats/missing', { method: 'GET' });
     const body = await response.json();
 
     expect(response.status).toBe(404);
@@ -987,28 +856,21 @@ describe('chats API', () => {
       ].join(' '),
     ).run('123456789012345678911', secondChatId, 'text_input', 'pending', 'Need archive decision', '{}', now);
 
-    await markUnreadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${firstChatId}/mark-unread`, 'POST'),
-      routeContext(firstChatId),
-    );
-    await markUnreadPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${secondChatId}/mark-unread`, 'POST'),
-      routeContext(secondChatId),
-    );
-    await archivePost(
-      createJsonRequest(`http://localhost/api/v1/chats/${secondChatId}/archive`, 'POST'),
-      routeContext(secondChatId),
-    );
+    await app.request(`/api/v1/chats/${firstChatId}/mark-unread`, { method: 'POST' });
+    await app.request(`/api/v1/chats/${secondChatId}/mark-unread`, { method: 'POST' });
+    await app.request(`/api/v1/chats/${secondChatId}/archive`, { method: 'POST' });
 
-    const inboxSummaryResponse = await pendingSummaryGet(
-      createJsonRequest('http://localhost/api/v1/chats/pending-summary?archived=false', 'GET'),
+    const inboxSummaryResponse = await app.request(
+      '/api/v1/chats/pending-summary?archived=false',
+      { method: 'GET' },
     );
     const inboxSummaryBody = await inboxSummaryResponse.json();
     expect(inboxSummaryResponse.status).toBe(200);
     expect(inboxSummaryBody.pending_requests_total).toBe(1);
 
-    const allSummaryResponse = await pendingSummaryGet(
-      createJsonRequest('http://localhost/api/v1/chats/pending-summary', 'GET'),
+    const allSummaryResponse = await app.request(
+      '/api/v1/chats/pending-summary',
+      { method: 'GET' },
     );
     const allSummaryBody = await allSummaryResponse.json();
     expect(allSummaryBody.pending_requests_total).toBe(2);
@@ -1017,7 +879,7 @@ describe('chats API', () => {
 
 describe('system endpoints', () => {
   it('returns health payload', async () => {
-    const response = await healthGet(new Request('http://localhost/api/v1/health'));
+    const response = await app.request('/api/v1/health');
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -1027,7 +889,7 @@ describe('system endpoints', () => {
   });
 
   it('returns safe config without secrets', async () => {
-    const response = await configGet(new Request('http://localhost/api/v1/config'));
+    const response = await app.request('/api/v1/config');
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -1048,17 +910,15 @@ describe('system endpoints', () => {
       },
     });
 
-    const publicHealth = await healthGet(new Request('http://localhost/api/v1/health'));
+    const publicHealth = await app.request('/api/v1/health');
     expect(publicHealth.status).toBe(200);
 
-    const unauthorizedConfig = await configGet(new Request('http://localhost/api/v1/config'));
+    const unauthorizedConfig = await app.request('/api/v1/config');
     expect(unauthorizedConfig.status).toBe(401);
 
-    const authorizedConfig = await configGet(
-      new Request('http://localhost/api/v1/config', {
-        headers: { authorization: 'Bearer system-secret' },
-      }),
-    );
+    const authorizedConfig = await app.request('/api/v1/config', {
+      headers: { authorization: 'Bearer system-secret' },
+    });
     expect(authorizedConfig.status).toBe(200);
   });
 });

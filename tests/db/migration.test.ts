@@ -6,13 +6,13 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..", "..");
-const initialMigrationSql = readFileSync(join(repoRoot, "drizzle", "0000_initial.sql"), "utf8");
+const initialMigrationSql = readFileSync(join(repoRoot, "migrations", "0000_initial.sql"), "utf8");
 const ftsTriggerUpgradeSql = readFileSync(
-  join(repoRoot, "drizzle", "0001_messages_fts_trigger_upgrade.sql"),
+  join(repoRoot, "migrations", "0001_messages_fts_trigger_upgrade.sql"),
   "utf8",
 );
 const streamSweepIndexSql = readFileSync(
-  join(repoRoot, "drizzle", "0002_messages_stream_sweep_index.sql"),
+  join(repoRoot, "migrations", "0002_messages_stream_sweep_index.sql"),
   "utf8",
 );
 

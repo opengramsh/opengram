@@ -5,51 +5,25 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GET as chatGet } from '@/app/api/v1/chats/[chatId]/route';
-import { GET as chatRequestsGet, POST as chatRequestsPost } from '@/app/api/v1/chats/[chatId]/requests/route';
-import { POST as chatsPost } from '@/app/api/v1/chats/route';
-import { POST as cancelRequestPost } from '@/app/api/v1/requests/[requestId]/cancel/route';
-import { PATCH as requestPatch } from '@/app/api/v1/requests/[requestId]/route';
-import { POST as resolveRequestPost } from '@/app/api/v1/requests/[requestId]/resolve/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 
-type ChatContext = {
-  params: Promise<{ chatId: string }>;
-};
-
-type RequestContext = {
-  params: Promise<{ requestId: string }>;
-};
-
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 
-function chatContext(chatId: string): ChatContext {
-  return { params: Promise.resolve({ chatId }) };
-}
-
-function requestContext(requestId: string): RequestContext {
-  return { params: Promise.resolve({ requestId }) };
-}
-
-function createJsonRequest(url: string, method: string, body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
-
 async function createChat(title = 'requests-chat') {
-  const response = await chatsPost(
-    createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+  const response = await app.request('/api/v1/chats', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
       title,
       agentIds: ['agent-default'],
       modelId: 'model-default',
     }),
-  );
+  });
   return response.json() as Promise<{ id: string }>;
 }
 
@@ -60,10 +34,12 @@ beforeEach(() => {
   process.env.DATABASE_URL = dbPath;
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
   resetWriteRateLimitForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   resetWriteRateLimitForTests();
@@ -81,10 +57,7 @@ describe('requests API', () => {
       ].join(' '),
     ).run('111111111111111111111', chat.id, 'choice', 'pending', 'Approve?', 'Pick one', JSON.stringify({ options: [{ id: 'yes', label: 'Yes' }] }), now);
 
-    const response = await chatRequestsGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/requests?status=pending`, 'GET'),
-      chatContext(chat.id),
-    );
+    const response = await app.request('/api/v1/chats/' + chat.id + '/requests?status=pending');
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -114,40 +87,31 @@ describe('requests API', () => {
       },
     };
 
-    const firstCreateResponse = await chatRequestsPost(
-      new Request(`http://localhost/api/v1/chats/${chat.id}/requests`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'req-create-key',
-        },
-        body: JSON.stringify(requestPayload),
-      }),
-      chatContext(chat.id),
-    );
+    const firstCreateResponse = await app.request('/api/v1/chats/' + chat.id + '/requests', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'req-create-key',
+      },
+      body: JSON.stringify(requestPayload),
+    });
     const firstCreate = await firstCreateResponse.json();
 
-    const replayResponse = await chatRequestsPost(
-      new Request(`http://localhost/api/v1/chats/${chat.id}/requests`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'req-create-key',
-        },
-        body: JSON.stringify(requestPayload),
-      }),
-      chatContext(chat.id),
-    );
+    const replayResponse = await app.request('/api/v1/chats/' + chat.id + '/requests', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'req-create-key',
+      },
+      body: JSON.stringify(requestPayload),
+    });
     const replay = await replayResponse.json();
 
     expect(firstCreateResponse.status).toBe(201);
     expect(replayResponse.status).toBe(201);
     expect(replay.id).toBe(firstCreate.id);
 
-    const chatAfterResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}`, 'GET'),
-      chatContext(chat.id),
-    );
+    const chatAfterResponse = await app.request('/api/v1/chats/' + chat.id);
     const chatAfter = await chatAfterResponse.json();
 
     expect(chatAfter.pending_requests_count).toBe(1);
@@ -171,39 +135,32 @@ describe('requests API', () => {
 
   it('returns conflict when idempotency key is reused with different create payload', async () => {
     const chat = await createChat();
-    const url = `http://localhost/api/v1/chats/${chat.id}/requests`;
 
-    await chatRequestsPost(
-      new Request(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'req-conflict-key',
-        },
-        body: JSON.stringify({
-          type: 'text_input',
-          title: 'Provide details',
-          config: { placeholder: 'details' },
-        }),
+    await app.request('/api/v1/chats/' + chat.id + '/requests', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'req-conflict-key',
+      },
+      body: JSON.stringify({
+        type: 'text_input',
+        title: 'Provide details',
+        config: { placeholder: 'details' },
       }),
-      chatContext(chat.id),
-    );
+    });
 
-    const response = await chatRequestsPost(
-      new Request(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'req-conflict-key',
-        },
-        body: JSON.stringify({
-          type: 'text_input',
-          title: 'Different payload',
-          config: { placeholder: 'different' },
-        }),
+    const response = await app.request('/api/v1/chats/' + chat.id + '/requests', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'req-conflict-key',
+      },
+      body: JSON.stringify({
+        type: 'text_input',
+        title: 'Different payload',
+        config: { placeholder: 'different' },
       }),
-      chatContext(chat.id),
-    );
+    });
     const body = await response.json();
 
     expect(response.status).toBe(409);
@@ -228,30 +185,24 @@ describe('requests API', () => {
       config: { placeholder: 'details' },
     };
 
-    const firstResponse = await chatRequestsPost(
-      new Request(`http://localhost/api/v1/chats/${firstChat.id}/requests`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'req-scope-key',
-        },
-        body: JSON.stringify(requestPayload),
-      }),
-      chatContext(firstChat.id),
-    );
+    const firstResponse = await app.request('/api/v1/chats/' + firstChat.id + '/requests', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'req-scope-key',
+      },
+      body: JSON.stringify(requestPayload),
+    });
     const firstBody = await firstResponse.json();
 
-    const secondResponse = await chatRequestsPost(
-      new Request(`http://localhost/api/v1/chats/${secondChat.id}/requests`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': 'req-scope-key',
-        },
-        body: JSON.stringify(requestPayload),
-      }),
-      chatContext(secondChat.id),
-    );
+    const secondResponse = await app.request('/api/v1/chats/' + secondChat.id + '/requests', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'req-scope-key',
+      },
+      body: JSON.stringify(requestPayload),
+    });
     const secondBody = await secondResponse.json();
 
     expect(firstResponse.status).toBe(201);
@@ -298,16 +249,19 @@ describe('requests API', () => {
       now,
     );
 
-    const invalidPatch = await requestPatch(
-      createJsonRequest('http://localhost/api/v1/requests/333333333333333333333', 'PATCH', {
+    const invalidPatch = await app.request('/api/v1/requests/333333333333333333333', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         config: { options: [] },
       }),
-      requestContext('333333333333333333333'),
-    );
+    });
     expect(invalidPatch.status).toBe(400);
 
-    const patchResponse = await requestPatch(
-      createJsonRequest('http://localhost/api/v1/requests/333333333333333333333', 'PATCH', {
+    const patchResponse = await app.request('/api/v1/requests/333333333333333333333', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         title: 'New title',
         body: null,
         config: {
@@ -320,8 +274,7 @@ describe('requests API', () => {
         },
         trace: { backend: 'worker-a' },
       }),
-      requestContext('333333333333333333333'),
-    );
+    });
     const patched = await patchResponse.json();
 
     expect(patchResponse.status).toBe(200);
@@ -363,19 +316,21 @@ describe('requests API', () => {
       now,
     );
 
-    const invalidResolveResponse = await resolveRequestPost(
-      createJsonRequest('http://localhost/api/v1/requests/222222222222222222222/resolve', 'POST', { text: 'ok' }),
-      requestContext('222222222222222222222'),
-    );
+    const invalidResolveResponse = await app.request('/api/v1/requests/222222222222222222222/resolve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'ok' }),
+    });
     expect(invalidResolveResponse.status).toBe(400);
 
-    const resolveResponse = await resolveRequestPost(
-      createJsonRequest('http://localhost/api/v1/requests/222222222222222222222/resolve', 'POST', {
+    const resolveResponse = await app.request('/api/v1/requests/222222222222222222222/resolve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         text: 'all set',
         resolvedBy: 'backend',
       }),
-      requestContext('222222222222222222222'),
-    );
+    });
     const resolveBody = await resolveResponse.json();
 
     expect(resolveResponse.status).toBe(200);
@@ -383,10 +338,7 @@ describe('requests API', () => {
     expect(resolveBody.resolution_payload).toEqual({ text: 'all set' });
     expect(resolveBody.resolved_by).toBe('backend');
 
-    const chatAfterResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}`, 'GET'),
-      chatContext(chat.id),
-    );
+    const chatAfterResponse = await app.request('/api/v1/chats/' + chat.id);
     const chatAfter = await chatAfterResponse.json();
 
     expect(chatAfter.pending_requests_count).toBe(0);
@@ -424,19 +376,17 @@ describe('requests API', () => {
       now,
     );
 
-    const resolveResponse = await resolveRequestPost(
-      createJsonRequest('http://localhost/api/v1/requests/777777777777777777777/resolve', 'POST', {
+    const resolveResponse = await app.request('/api/v1/requests/777777777777777777777/resolve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         text: 'all set',
       }),
-      requestContext('777777777777777777777'),
-    );
+    });
 
     expect(resolveResponse.status).toBe(200);
 
-    const chatAfterResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}`, 'GET'),
-      chatContext(chat.id),
-    );
+    const chatAfterResponse = await app.request('/api/v1/chats/' + chat.id);
     const chatAfter = await chatAfterResponse.json();
 
     expect(chatAfter.pending_requests_count).toBe(0);
@@ -469,12 +419,13 @@ describe('requests API', () => {
       now,
     );
 
-    const response = await resolveRequestPost(
-      createJsonRequest('http://localhost/api/v1/requests/666666666666666666666/resolve', 'POST', {
+    const response = await app.request('/api/v1/requests/666666666666666666666/resolve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         selectedOptionIds: ['approve', 'approve'],
       }),
-      requestContext('666666666666666666666'),
-    );
+    });
     const body = await response.json();
 
     expect(response.status).toBe(400);
@@ -503,19 +454,16 @@ describe('requests API', () => {
       fields: [{ name: 'title', type: 'text', required: true }],
     }), now);
 
-    const response = await cancelRequestPost(
-      createJsonRequest('http://localhost/api/v1/requests/444444444444444444444/cancel', 'POST'),
-      requestContext('444444444444444444444'),
-    );
+    const response = await app.request('/api/v1/requests/444444444444444444444/cancel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.status).toBe('cancelled');
 
-    const chatAfterResponse = await chatGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}`, 'GET'),
-      chatContext(chat.id),
-    );
+    const chatAfterResponse = await app.request('/api/v1/chats/' + chat.id);
     const chatAfter = await chatAfterResponse.json();
     expect(chatAfter.pending_requests_count).toBe(0);
 
@@ -554,10 +502,10 @@ describe('requests API', () => {
       JSON.stringify({ selectedOptionIds: ['yes'] }),
     );
 
-    const response = await cancelRequestPost(
-      createJsonRequest('http://localhost/api/v1/requests/555555555555555555555/cancel', 'POST'),
-      requestContext('555555555555555555555'),
-    );
+    const response = await app.request('/api/v1/requests/555555555555555555555/cancel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
     const body = await response.json();
 
     expect(response.status).toBe(400);
@@ -574,10 +522,7 @@ describe('requests API', () => {
   });
 
   it('returns not found when listing requests for an unknown chat', async () => {
-    const response = await chatRequestsGet(
-      createJsonRequest('http://localhost/api/v1/chats/missing-chat/requests?status=pending', 'GET'),
-      chatContext('missing-chat'),
-    );
+    const response = await app.request('/api/v1/chats/missing-chat/requests?status=pending');
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({

@@ -5,16 +5,13 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GET as searchGet } from '@/app/api/v1/search/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
-
-function createRequest(url: string) {
-  return new Request(url, { method: 'GET' });
-}
 
 beforeEach(() => {
   const tempDir = mkdtempSync(join(tmpdir(), 'opengram-search-api-'));
@@ -23,9 +20,11 @@ beforeEach(() => {
   process.env.DATABASE_URL = dbPath;
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
 });
@@ -52,7 +51,7 @@ describe('search API', () => {
       ].join(' '),
     ).run('333333333333333333333', 'Alpha newest', 'model-default', now - 1_000, now - 1_000, now - 1_000);
 
-    const page1Response = await searchGet(createRequest('http://localhost/api/v1/search?q=alpha&limit=2'));
+    const page1Response = await app.request('/api/v1/search?q=alpha&limit=2');
     const page1 = await page1Response.json();
 
     expect(page1Response.status).toBe(200);
@@ -63,10 +62,8 @@ describe('search API', () => {
     expect(page1.cursor.hasMore).toBe(true);
     expect(page1.cursor.next).toBeTypeOf('string');
 
-    const page2Response = await searchGet(
-      createRequest(
-        `http://localhost/api/v1/search?q=alpha&limit=2&cursor=${encodeURIComponent(page1.cursor.next)}`,
-      ),
+    const page2Response = await app.request(
+      `/api/v1/search?q=alpha&limit=2&cursor=${encodeURIComponent(page1.cursor.next)}`,
     );
     const page2 = await page2Response.json();
 
@@ -105,9 +102,7 @@ describe('search API', () => {
       ].join(' '),
     ).run('666666666666666666666', chatId, 'agent', 'agent-default', now + 1, now + 1, 'no match here', 'complete');
 
-    const response = await searchGet(
-      createRequest('http://localhost/api/v1/search?q=planet&scope=messages&limit=10'),
-    );
+    const response = await app.request('/api/v1/search?q=planet&scope=messages&limit=10');
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -169,9 +164,7 @@ describe('search API', () => {
       'complete',
     );
 
-    const page1Response = await searchGet(
-      createRequest('http://localhost/api/v1/search?q=alpha&scope=all&limit=2'),
-    );
+    const page1Response = await app.request('/api/v1/search?q=alpha&scope=all&limit=2');
     const page1 = await page1Response.json();
 
     expect(page1Response.status).toBe(200);
@@ -182,10 +175,8 @@ describe('search API', () => {
     expect(page1.chats).toEqual([]);
     expect(page1.cursor.hasMore).toBe(true);
 
-    const page2Response = await searchGet(
-      createRequest(
-        `http://localhost/api/v1/search?q=alpha&scope=all&limit=2&cursor=${encodeURIComponent(page1.cursor.next)}`,
-      ),
+    const page2Response = await app.request(
+      `/api/v1/search?q=alpha&scope=all&limit=2&cursor=${encodeURIComponent(page1.cursor.next)}`,
     );
     const page2 = await page2Response.json();
 
@@ -214,9 +205,7 @@ describe('search API', () => {
       ].join(' '),
     ).run(messageId, chatId, 'agent', 'agent-default', now, now, null, 'streaming');
 
-    const beforeResponse = await searchGet(
-      createRequest('http://localhost/api/v1/search?q=complete&scope=messages'),
-    );
+    const beforeResponse = await app.request('/api/v1/search?q=complete&scope=messages');
     const beforeBody = await beforeResponse.json();
     expect(beforeBody.messages).toEqual([]);
 
@@ -226,9 +215,7 @@ describe('search API', () => {
       messageId,
     );
 
-    const afterResponse = await searchGet(
-      createRequest('http://localhost/api/v1/search?q=complete&scope=messages'),
-    );
+    const afterResponse = await app.request('/api/v1/search?q=complete&scope=messages');
     const afterBody = await afterResponse.json();
 
     expect(afterResponse.status).toBe(200);
@@ -237,7 +224,7 @@ describe('search API', () => {
   });
 
   it('returns validation errors for missing q and invalid scope', async () => {
-    const missingQuery = await searchGet(createRequest('http://localhost/api/v1/search?scope=titles'));
+    const missingQuery = await app.request('/api/v1/search?scope=titles');
     expect(missingQuery.status).toBe(400);
     await expect(missingQuery.json()).resolves.toEqual({
       error: {
@@ -247,7 +234,7 @@ describe('search API', () => {
       },
     });
 
-    const invalidScope = await searchGet(createRequest('http://localhost/api/v1/search?q=hello&scope=bad'));
+    const invalidScope = await app.request('/api/v1/search?q=hello&scope=bad');
     expect(invalidScope.status).toBe(400);
     await expect(invalidScope.json()).resolves.toEqual({
       error: {
@@ -279,9 +266,7 @@ describe('search API', () => {
       'complete',
     );
 
-    const response = await searchGet(
-      createRequest('http://localhost/api/v1/search?q=foo%20AND&scope=messages'),
-    );
+    const response = await app.request('/api/v1/search?q=foo%20AND&scope=messages');
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
@@ -296,9 +281,7 @@ describe('search API', () => {
   it('returns internal error for non-FTS query failures', async () => {
     db.exec('DROP TABLE messages_fts');
 
-    const response = await searchGet(
-      createRequest('http://localhost/api/v1/search?q=planet&scope=messages'),
-    );
+    const response = await app.request('/api/v1/search?q=planet&scope=messages');
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({

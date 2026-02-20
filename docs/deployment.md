@@ -24,9 +24,9 @@ sudo ./install.sh
 `install.sh` does the following:
 
 1. Installs Node.js 20.x (if missing or too old)
-2. Builds Next.js standalone output
+2. Builds Hono + Vite output
 3. Creates `/opt/opengram/web`, `/opt/opengram/data`, `/opt/opengram/config`
-4. Runs Drizzle migrations for `/opt/opengram/data/opengram.db`
+4. Runs SQL migrations for `/opt/opengram/data/opengram.db`
 5. Installs `opengram-web.service`
 6. Creates `/opt/opengram/config/opengram.env` (if missing)
 7. Generates default `/opt/opengram/config/opengram.config.json` (if missing)
@@ -127,13 +127,13 @@ docker run -d \
 
 The image includes:
 
-- Next.js standalone server
+- Hono server bundle + Vite static assets
 - `better-sqlite3` native addon support
 - Container startup migrations before server launch
 - `VOLUME /opt/opengram/data` for SQLite DB and uploads
 - Container health check on `GET /api/v1/health`
 
-On each container boot, `deploy/docker/entrypoint.sh` runs `deploy/docker/run-migrations.js` first. It applies any pending SQL files from `drizzle/` (tracked in `__opengram_migrations`) and then starts `node server.js`.
+On each container boot, `deploy/docker/entrypoint.sh` runs `deploy/docker/run-migrations.js` first. It applies any pending SQL files from `migrations/` (tracked in `__opengram_migrations`) and then starts `node server.js`.
 
 ## Optional Reverse Proxy (Non-Tailscale)
 

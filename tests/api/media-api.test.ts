@@ -3,30 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-vi.mock('facehash/next', () => ({
-  toFacehashHandler: () => ({
-    GET: async () => new Response(new Uint8Array([1, 2, 3]), {
-      status: 200,
-      headers: { 'Content-Type': 'image/png' },
-    }),
-  }),
-}));
-
-import { GET as avatarGet } from '@/app/api/avatar/route';
-import { GET as mediaGet, POST as mediaPost } from '@/app/api/v1/chats/[chatId]/media/route';
-import { POST as chatsPost } from '@/app/api/v1/chats/route';
-import { GET as fileGet } from '@/app/api/v1/files/[mediaId]/route';
-import { GET as thumbnailGet } from '@/app/api/v1/files/[mediaId]/thumbnail/route';
-import { DELETE as mediaByIdDelete, GET as mediaByIdGet } from '@/app/api/v1/media/[mediaId]/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 
-type ChatContext = { params: Promise<{ chatId: string }> };
-type MediaContext = { params: Promise<{ mediaId: string }> };
-
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 const ONE_PIXEL_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
 const FILE_RESPONSE_CSP = "default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
@@ -35,30 +19,16 @@ let db: Database.Database;
 let tempDir: string;
 let previousConfigPath: string | undefined;
 
-function chatContext(chatId: string): ChatContext {
-  return { params: Promise.resolve({ chatId }) };
-}
-
-function mediaContext(mediaId: string): MediaContext {
-  return { params: Promise.resolve({ mediaId }) };
-}
-
-function createJsonRequest(url: string, method: string, body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
-
 async function createChat() {
-  const chatResponse = await chatsPost(
-    createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+  const chatResponse = await app.request('/api/v1/chats', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
       title: 'media-chat',
       agentIds: ['agent-default'],
       modelId: 'model-default',
     }),
-  );
+  });
   return chatResponse.json() as Promise<{ id: string }>;
 }
 
@@ -69,15 +39,16 @@ async function uploadBase64Media(
   bytes: Buffer,
   extra: { kind?: 'image' | 'audio' | 'file'; messageId?: string } = {},
 ) {
-  return mediaPost(
-    createJsonRequest(`http://localhost/api/v1/chats/${chatId}/media`, 'POST', {
+  return app.request('/api/v1/chats/' + chatId + '/media', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
       fileName,
       contentType,
       base64Data: bytes.toString('base64'),
       ...extra,
     }),
-    chatContext(chatId),
-  );
+  });
 }
 
 beforeEach(() => {
@@ -90,10 +61,12 @@ beforeEach(() => {
 
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
   resetWriteRateLimitForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   delete process.env.OPENGRAM_DATA_ROOT;
@@ -114,30 +87,24 @@ describe('media API', () => {
     const form = new FormData();
     form.set('file', new File([Buffer.from(ONE_PIXEL_PNG_BASE64, 'base64')], 'avatar.png', { type: 'image/png' }));
 
-    const uploadResponse = await mediaPost(
-      new Request(`http://localhost/api/v1/chats/${chat.id}/media`, { method: 'POST', body: form }),
-      chatContext(chat.id),
-    );
+    const uploadResponse = await app.request('/api/v1/chats/' + chat.id + '/media', {
+      method: 'POST',
+      body: form,
+    });
     const uploaded = await uploadResponse.json();
 
     expect(uploadResponse.status).toBe(201);
     expect(uploaded.kind).toBe('image');
     expect(uploaded.thumbnail_path).toContain('/thumbnails/');
 
-    const metadataResponse = await mediaByIdGet(
-      createJsonRequest(`http://localhost/api/v1/media/${uploaded.id}`, 'GET'),
-      mediaContext(uploaded.id),
-    );
+    const metadataResponse = await app.request('/api/v1/media/' + uploaded.id);
     const metadata = await metadataResponse.json();
 
     expect(metadataResponse.status).toBe(200);
     expect(metadata.id).toBe(uploaded.id);
     expect(metadata.thumbnail_path).toBe(uploaded.thumbnail_path);
 
-    const thumbnailResponse = await thumbnailGet(
-      createJsonRequest(`http://localhost/api/v1/files/${uploaded.id}/thumbnail`, 'GET'),
-      mediaContext(uploaded.id),
-    );
+    const thumbnailResponse = await app.request('/api/v1/files/' + uploaded.id + '/thumbnail');
 
     expect(thumbnailResponse.status).toBe(200);
     expect(thumbnailResponse.headers.get('content-type')).toBe('image/webp');
@@ -153,10 +120,7 @@ describe('media API', () => {
     await uploadBase64Media(chat.id, 'b.txt', 'text/plain', Buffer.from('note-1'));
     await uploadBase64Media(chat.id, 'c.webm', 'audio/webm', Buffer.from('audio-2'));
 
-    const page1Response = await mediaGet(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/media?kind=audio&limit=1`, 'GET'),
-      chatContext(chat.id),
-    );
+    const page1Response = await app.request('/api/v1/chats/' + chat.id + '/media?kind=audio&limit=1');
     const page1 = await page1Response.json();
 
     expect(page1Response.status).toBe(200);
@@ -164,12 +128,8 @@ describe('media API', () => {
     expect(page1.data[0].kind).toBe('audio');
     expect(page1.cursor.hasMore).toBe(true);
 
-    const page2Response = await mediaGet(
-      createJsonRequest(
-        `http://localhost/api/v1/chats/${chat.id}/media?kind=audio&limit=1&cursor=${encodeURIComponent(page1.cursor.next)}`,
-        'GET',
-      ),
-      chatContext(chat.id),
+    const page2Response = await app.request(
+      '/api/v1/chats/' + chat.id + '/media?kind=audio&limit=1&cursor=' + encodeURIComponent(page1.cursor.next),
     );
     const page2 = await page2Response.json();
 
@@ -188,10 +148,7 @@ describe('media API', () => {
 
     expect(uploadResponse.status).toBe(201);
 
-    const fullResponse = await fileGet(
-      createJsonRequest(`http://localhost/api/v1/files/${uploaded.id}`, 'GET'),
-      mediaContext(uploaded.id),
-    );
+    const fullResponse = await app.request('/api/v1/files/' + uploaded.id);
 
     expect(fullResponse.status).toBe(200);
     expect(fullResponse.headers.get('content-type')).toBe('audio/webm');
@@ -201,24 +158,20 @@ describe('media API', () => {
     expect(fullResponse.headers.get('x-content-type-options')).toBe('nosniff');
     await expect(fullResponse.text()).resolves.toBe('fake-audio');
 
-    const partialResponse = await fileGet(
-      new Request(`http://localhost/api/v1/files/${uploaded.id}`, {
-        method: 'GET',
+    const partialResponse = await app.request(
+      new Request('http://localhost/api/v1/files/' + uploaded.id, {
         headers: { range: 'bytes=0-3' },
       }),
-      mediaContext(uploaded.id),
     );
 
     expect(partialResponse.status).toBe(206);
     expect(partialResponse.headers.get('content-range')).toBe('bytes 0-3/10');
     await expect(partialResponse.text()).resolves.toBe('fake');
 
-    const unsatisfiableResponse = await fileGet(
-      new Request(`http://localhost/api/v1/files/${uploaded.id}`, {
-        method: 'GET',
+    const unsatisfiableResponse = await app.request(
+      new Request('http://localhost/api/v1/files/' + uploaded.id, {
         headers: { range: 'bytes=999-1000' },
       }),
-      mediaContext(uploaded.id),
     );
 
     expect(unsatisfiableResponse.status).toBe(416);
@@ -242,10 +195,7 @@ describe('media API', () => {
     const uploaded = await uploadResponse.json();
     expect(uploadResponse.status).toBe(201);
 
-    const response = await fileGet(
-      createJsonRequest(`http://localhost/api/v1/files/${uploaded.id}`, 'GET'),
-      mediaContext(uploaded.id),
-    );
+    const response = await app.request('/api/v1/files/' + uploaded.id);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="note.txt"');
@@ -296,10 +246,7 @@ describe('media API', () => {
       Date.now(),
     );
 
-    const response = await fileGet(
-      createJsonRequest(`http://localhost/api/v1/files/${mediaId}`, 'GET'),
-      mediaContext(mediaId),
-    );
+    const response = await app.request('/api/v1/files/' + mediaId);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="legacy.svg"');
@@ -312,10 +259,7 @@ describe('media API', () => {
     const uploadResponse = await uploadBase64Media(chat.id, 'voice.webm', 'audio/webm', Buffer.from('fake-audio'));
     const uploaded = await uploadResponse.json();
 
-    const thumbnailResponse = await thumbnailGet(
-      createJsonRequest(`http://localhost/api/v1/files/${uploaded.id}/thumbnail`, 'GET'),
-      mediaContext(uploaded.id),
-    );
+    const thumbnailResponse = await app.request('/api/v1/files/' + uploaded.id + '/thumbnail');
 
     expect(thumbnailResponse.status).toBe(404);
   });
@@ -326,18 +270,15 @@ describe('media API', () => {
     const uploaded = await uploadResponse.json();
     expect(uploadResponse.status).toBe(201);
 
-    const deleteResponse = await mediaByIdDelete(
-      createJsonRequest(`http://localhost/api/v1/media/${uploaded.id}`, 'DELETE'),
-      mediaContext(uploaded.id),
-    );
+    const deleteResponse = await app.request('/api/v1/media/' + uploaded.id, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+    });
 
     expect(deleteResponse.status).toBe(200);
     expect((await deleteResponse.json()).id).toBe(uploaded.id);
 
-    const metadataResponse = await mediaByIdGet(
-      createJsonRequest(`http://localhost/api/v1/media/${uploaded.id}`, 'GET'),
-      mediaContext(uploaded.id),
-    );
+    const metadataResponse = await app.request('/api/v1/media/' + uploaded.id);
     expect(metadataResponse.status).toBe(404);
 
     const uploadsDir = join(tempDir, 'uploads', chat.id);
@@ -375,10 +316,10 @@ describe('media API', () => {
     const uploaded = await uploadResponse.json();
     expect(uploadResponse.status).toBe(201);
 
-    const deleteResponse = await mediaByIdDelete(
-      createJsonRequest(`http://localhost/api/v1/media/${uploaded.id}`, 'DELETE'),
-      mediaContext(uploaded.id),
-    );
+    const deleteResponse = await app.request('/api/v1/media/' + uploaded.id, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+    });
     expect(deleteResponse.status).toBe(409);
   });
 
@@ -426,8 +367,8 @@ describe('media API', () => {
     const chat = await createChat();
     const body = '--x\r\nContent-Disposition: form-data; name="file"; filename="tiny.txt"\r\nContent-Type: text/plain\r\n\r\nok\r\n--x--\r\n';
 
-    const response = await mediaPost(
-      new Request(`http://localhost/api/v1/chats/${chat.id}/media`, {
+    const response = await app.request(
+      new Request('http://localhost/api/v1/chats/' + chat.id + '/media', {
         method: 'POST',
         headers: {
           'content-type': 'multipart/form-data; boundary=x',
@@ -435,7 +376,6 @@ describe('media API', () => {
         },
         body,
       }),
-      chatContext(chat.id),
     );
 
     expect(response.status).toBe(413);
@@ -456,13 +396,10 @@ describe('media API', () => {
     const form = new FormData();
     form.set('file', new File([Buffer.from('too-large')], 'big.txt', { type: 'text/plain' }));
 
-    const response = await mediaPost(
-      new Request(`http://localhost/api/v1/chats/${chat.id}/media`, {
-        method: 'POST',
-        body: form,
-      }),
-      chatContext(chat.id),
-    );
+    const response = await app.request('/api/v1/chats/' + chat.id + '/media', {
+      method: 'POST',
+      body: form,
+    });
 
     expect(response.status).toBe(413);
   });
@@ -484,15 +421,14 @@ describe('media API', () => {
       `--x\r\nContent-Disposition: form-data; name="pad"\r\n\r\n${pad}\r\n` +
       '--x\r\nContent-Disposition: form-data; name="file"; filename="tiny.txt"\r\nContent-Type: text/plain\r\n\r\nok\r\n--x--\r\n';
 
-    const response = await mediaPost(
-      new Request(`http://localhost/api/v1/chats/${chat.id}/media`, {
+    const response = await app.request(
+      new Request('http://localhost/api/v1/chats/' + chat.id + '/media', {
         method: 'POST',
         headers: {
           'content-type': 'multipart/form-data; boundary=x',
         },
         body,
       }),
-      chatContext(chat.id),
     );
 
     expect(response.status).toBe(413);
@@ -518,15 +454,16 @@ describe('media API', () => {
   it('does not leave orphaned upload files when messageId is invalid', async () => {
     const chat = await createChat();
 
-    const uploadResponse = await mediaPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/media`, 'POST', {
+    const uploadResponse = await app.request('/api/v1/chats/' + chat.id + '/media', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         fileName: 'voice.webm',
         contentType: 'audio/webm',
         base64Data: Buffer.from('fake-audio').toString('base64'),
         messageId: 'missing-message-id',
       }),
-      chatContext(chat.id),
-    );
+    });
 
     expect(uploadResponse.status).toBe(400);
 
@@ -536,13 +473,5 @@ describe('media API', () => {
     } else {
       expect(existsSync(uploadsDir)).toBe(false);
     }
-  });
-
-  it('serves facehash avatar image via /api/avatar', async () => {
-    const response = await avatarGet(new Request('http://localhost/api/avatar?name=agent-default'));
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toBe('image/png');
-    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
   });
 });

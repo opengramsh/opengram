@@ -5,36 +5,24 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendNotificationMock, setVapidDetailsMock } = vi.hoisted(() => ({
-  sendNotificationMock: vi.fn(),
-  setVapidDetailsMock: vi.fn(),
+const { sendWebPushNotificationMock } = vi.hoisted(() => ({
+  sendWebPushNotificationMock: vi.fn(),
 }));
 
-vi.mock('web-push', () => ({
-  default: {
-    sendNotification: sendNotificationMock,
-    setVapidDetails: setVapidDetailsMock,
-  },
+vi.mock('@/src/services/push-crypto', () => ({
+  sendWebPushNotification: sendWebPushNotificationMock,
 }));
 
-import { DELETE as pushSubscribeDelete, POST as pushSubscribePost } from '@/app/api/v1/push/subscribe/route';
-import { POST as pushTestPost } from '@/app/api/v1/push/test/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 import { resetPushServiceForTests } from '@/src/services/push-service';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 let tempConfigPath: string;
-
-function createJsonRequest(url: string, method: string, body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
 
 function writePushEnabledConfig() {
   const tempDir = mkdtempSync(join(tmpdir(), 'opengram-push-config-'));
@@ -85,45 +73,49 @@ beforeEach(() => {
 
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
 
-  sendNotificationMock.mockReset();
-  setVapidDetailsMock.mockReset();
+  sendWebPushNotificationMock.mockReset();
   resetPushServiceForTests();
   resetWriteRateLimitForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   delete process.env.OPENGRAM_CONFIG_PATH;
-  sendNotificationMock.mockReset();
-  setVapidDetailsMock.mockReset();
+  sendWebPushNotificationMock.mockReset();
   resetPushServiceForTests();
   resetWriteRateLimitForTests();
 });
 
 describe('push API', () => {
   it('subscribes and upserts push subscriptions by endpoint', async () => {
-    const firstResponse = await pushSubscribePost(
-      createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
+    const firstResponse = await app.request('/api/v1/push/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         endpoint: 'https://fcm.googleapis.com/sub/1',
         keys: {
           p256dh: 'p256dh-key',
           auth: 'auth-key',
         },
       }),
-    );
+    });
     expect(firstResponse.status).toBe(201);
 
-    const secondResponse = await pushSubscribePost(
-      createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
+    const secondResponse = await app.request('/api/v1/push/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         endpoint: 'https://fcm.googleapis.com/sub/1',
         keys: {
           p256dh: 'p256dh-key-updated',
           auth: 'auth-key-updated',
         },
       }),
-    );
+    });
     expect(secondResponse.status).toBe(201);
 
     const count = db
@@ -141,26 +133,30 @@ describe('push API', () => {
   });
 
   it('rejects non-https and private-network subscription endpoints', async () => {
-    const insecureResponse = await pushSubscribePost(
-      createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
+    const insecureResponse = await app.request('/api/v1/push/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         endpoint: 'http://fcm.googleapis.com/sub/1',
         keys: {
           p256dh: 'p256dh-key',
           auth: 'auth-key',
         },
       }),
-    );
+    });
     expect(insecureResponse.status).toBe(400);
 
-    const privateResponse = await pushSubscribePost(
-      createJsonRequest('http://localhost/api/v1/push/subscribe', 'POST', {
+    const privateResponse = await app.request('/api/v1/push/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         endpoint: 'https://127.0.0.1/sub/1',
         keys: {
           p256dh: 'p256dh-key',
           auth: 'auth-key',
         },
       }),
-    );
+    });
     expect(privateResponse.status).toBe(400);
   });
 
@@ -172,11 +168,13 @@ describe('push API', () => {
       ].join(' '),
     ).run('111111111111111111111', 'https://fcm.googleapis.com/sub/remove', 'k1', 'k2', 'agent', Date.now());
 
-    const response = await pushSubscribeDelete(
-      createJsonRequest('http://localhost/api/v1/push/subscribe', 'DELETE', {
+    const response = await app.request('/api/v1/push/subscribe', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         endpoint: 'https://fcm.googleapis.com/sub/remove',
       }),
-    );
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true, removed: true });
@@ -208,16 +206,18 @@ describe('push API', () => {
       Date.now(),
     );
 
-    sendNotificationMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce({ statusCode: 410 });
+    sendWebPushNotificationMock.mockResolvedValueOnce({ statusCode: 201 }).mockRejectedValueOnce({ statusCode: 410 });
 
-    const response = await pushTestPost(
-      createJsonRequest('http://localhost/api/v1/push/test', 'POST', {
+    const response = await app.request('/api/v1/push/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         title: 'Test title',
         body: 'Test body',
         chatId: 'chat-1',
         url: '/chats/chat-1',
       }),
-    );
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -227,13 +227,7 @@ describe('push API', () => {
       removed: 1,
     });
 
-    expect(setVapidDetailsMock).toHaveBeenCalledWith(
-      'mailto:test@example.com',
-      'public-key',
-      'private-key',
-    );
-
-    const payload = sendNotificationMock.mock.calls[0]?.[1];
+    const payload = sendWebPushNotificationMock.mock.calls[0]?.[1];
     expect(typeof payload).toBe('string');
     expect(JSON.parse(String(payload))).toMatchObject({
       title: 'Test title',
