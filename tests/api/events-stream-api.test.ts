@@ -259,4 +259,20 @@ describe('events stream API', () => {
     expect(response.status).toBe(200);
     expect(getEventSubscriberCountForTests()).toBe(0);
   });
+
+  it('returns SSE-specific response headers', async () => {
+    const abort = new AbortController();
+    const response = await app.request(
+      new Request('http://localhost/api/v1/events/stream?ephemeral=true', { signal: abort.signal }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+    expect(response.headers.get('Cache-Control')).toBe('no-cache');
+    expect(response.headers.get('Connection')).toBe('keep-alive');
+    expect(response.headers.get('X-Accel-Buffering')).toBe('no');
+
+    abort.abort();
+    await response.body?.cancel();
+  });
 });

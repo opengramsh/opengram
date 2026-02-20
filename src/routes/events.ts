@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 
 import { toErrorResponse, validationError } from '@/src/api/http';
 import { requireSseAuth } from '@/src/api/write-controls';
@@ -10,13 +11,7 @@ import {
   type EventEnvelope,
 } from '@/src/services/events-service';
 
-const encoder = new TextEncoder();
 const MAX_QUEUED_LIVE_EVENTS_DURING_REPLAY = 512;
-
-function toSseChunk(event: EventEnvelope) {
-  const data = JSON.stringify(event);
-  return `id: ${event.id}\nevent: ${event.type}\ndata: ${data}\n\n`;
-}
 
 function parseEphemeralParam(url: URL) {
   const value = url.searchParams.get('ephemeral');
@@ -50,89 +45,143 @@ events.get('/stream', (c) => {
       throw validationError('cursor event id was not found.', { field: 'cursor' });
     }
 
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        let closed = false;
-        let replayCursorRowid = cursorRowid;
-        const queuedLiveEvents: EventEnvelope[] = [];
-        let replaying = true;
-        let replayQueueOverflowed = false;
-        const replayHighWaterRowid = getLatestEventRowid();
-        let keepAlive: ReturnType<typeof setInterval> | null = null;
-        let unsubscribe: (() => void) | null = null;
-        const close = () => {
-          if (closed) return;
-          closed = true;
-          c.req.raw.signal.removeEventListener('abort', close);
-          if (keepAlive) { clearInterval(keepAlive); keepAlive = null; }
-          if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-          try { controller.close(); } catch { /* noop */ }
-        };
+    c.header('Cache-Control', 'no-cache, no-transform');
+    c.header('X-Accel-Buffering', 'no');
+    c.header('Content-Type', 'text/event-stream; charset=utf-8');
 
-        c.req.raw.signal.addEventListener('abort', close, { once: true });
-        if (c.req.raw.signal.aborted) { close(); return; }
+    return streamSSE(c, async (stream) => {
+      let closed = false;
+      let replayCursorRowid = cursorRowid;
+      const queuedLiveEvents: EventEnvelope[] = [];
+      let replaying = true;
+      let replayQueueOverflowed = false;
+      const replayHighWaterRowid = getLatestEventRowid();
+      let keepAlive: ReturnType<typeof setInterval> | null = null;
+      let unsubscribe: (() => void) | null = null;
+      let resolveClosedPromise: (() => void) | null = null;
+      const closedPromise = new Promise<void>((resolve) => {
+        resolveClosedPromise = resolve;
+      });
 
-        const send = (value: string) => {
-          if (closed || c.req.raw.signal.aborted) { close(); return false; }
-          try { controller.enqueue(encoder.encode(value)); return true; }
-          catch { close(); return false; }
-        };
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        c.req.raw.signal.removeEventListener('abort', onAbortSignal);
+        if (keepAlive) { clearInterval(keepAlive); keepAlive = null; }
+        if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+        resolveClosedPromise?.();
+      };
 
-        unsubscribe = subscribeToEvents(ephemeral, (event) => {
-          if (closed || c.req.raw.signal.aborted) { close(); return; }
-          if (replaying) {
-            if (queuedLiveEvents.length >= MAX_QUEUED_LIVE_EVENTS_DURING_REPLAY) {
-              replayQueueOverflowed = true;
-              return;
-            }
-            queuedLiveEvents.push(event);
-            return;
-          }
-          send(toSseChunk(event));
-        });
+      const onAbortSignal = () => {
+        stream.abort();
+        cleanup();
+      };
 
-        if (!send(': stream opened\n\n')) return;
+      c.req.raw.signal.addEventListener('abort', onAbortSignal, { once: true });
+      stream.onAbort(cleanup);
 
-        if (replayCursorRowid === null) {
-          replayCursorRowid = replayHighWaterRowid;
+      if (c.req.raw.signal.aborted || stream.aborted) {
+        cleanup();
+        return;
+      }
+
+      const sendComment = async (value: string) => {
+        if (closed || c.req.raw.signal.aborted || stream.aborted) {
+          cleanup();
+          return false;
         }
 
-        let replayBatchCursorRowid = replayCursorRowid;
-        while (true) {
-          if (closed || c.req.raw.signal.aborted) { close(); return; }
-          const replayBatch = listEventsAfterRowid(replayBatchCursorRowid, limit, replayHighWaterRowid);
-          for (const event of replayBatch) {
-            if (!send(toSseChunk(event))) return;
-          }
-          if (replayBatch.length < limit) break;
-          replayBatchCursorRowid = replayBatch.at(-1)?.rowid ?? replayBatchCursorRowid;
+        try {
+          await stream.write(value);
+          return true;
+        } catch {
+          cleanup();
+          return false;
+        }
+      };
+
+      const sendEvent = async (event: EventEnvelope) => {
+        if (closed || c.req.raw.signal.aborted || stream.aborted) {
+          cleanup();
+          return false;
         }
 
-        replaying = false;
-        if (replayQueueOverflowed) {
-          send(': replay queue overflowed; reconnect required\n\n');
-          close();
+        try {
+          await stream.writeSSE({
+            id: event.id,
+            event: event.type,
+            data: JSON.stringify(event),
+          });
+          return true;
+        } catch {
+          cleanup();
+          return false;
+        }
+      };
+
+      unsubscribe = subscribeToEvents(ephemeral, (event) => {
+        if (closed || c.req.raw.signal.aborted || stream.aborted) {
+          cleanup();
           return;
         }
 
-        for (const event of queuedLiveEvents) {
-          if (closed || c.req.raw.signal.aborted) { close(); return; }
-          const rowid = getEventRowidById(event.id);
-          if (rowid !== null && rowid <= replayHighWaterRowid) continue;
-          if (!send(toSseChunk(event))) return;
+        if (replaying) {
+          if (queuedLiveEvents.length >= MAX_QUEUED_LIVE_EVENTS_DURING_REPLAY) {
+            replayQueueOverflowed = true;
+            return;
+          }
+          queuedLiveEvents.push(event);
+          return;
         }
 
-        keepAlive = setInterval(() => { send(': keepalive\n\n'); }, 15_000);
-      },
-    });
+        void sendEvent(event);
+      });
 
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
+      if (!(await sendComment(': stream opened\n\n'))) return;
+
+      if (replayCursorRowid === null) {
+        replayCursorRowid = replayHighWaterRowid;
+      }
+
+      let replayBatchCursorRowid = replayCursorRowid;
+      while (true) {
+        if (closed || c.req.raw.signal.aborted || stream.aborted) {
+          cleanup();
+          return;
+        }
+
+        const replayBatch = listEventsAfterRowid(replayBatchCursorRowid, limit, replayHighWaterRowid);
+        for (const event of replayBatch) {
+          if (!(await sendEvent(event))) return;
+        }
+
+        if (replayBatch.length < limit) break;
+        replayBatchCursorRowid = replayBatch.at(-1)?.rowid ?? replayBatchCursorRowid;
+      }
+
+      replaying = false;
+      if (replayQueueOverflowed) {
+        await sendComment(': replay queue overflowed; reconnect required\n\n');
+        cleanup();
+        return;
+      }
+
+      for (const event of queuedLiveEvents) {
+        if (closed || c.req.raw.signal.aborted || stream.aborted) {
+          cleanup();
+          return;
+        }
+
+        const rowid = getEventRowidById(event.id);
+        if (rowid !== null && rowid <= replayHighWaterRowid) continue;
+        if (!(await sendEvent(event))) return;
+      }
+
+      keepAlive = setInterval(() => {
+        void sendComment(': keepalive\n\n');
+      }, 15_000);
+
+      await closedPromise;
     });
   } catch (error) {
     return toErrorResponse(error);
