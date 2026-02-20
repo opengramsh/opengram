@@ -1,0 +1,65 @@
+{
+  "name": "openclaw-plugin-opengram",
+  "version": "0.1.0",
+  "description": "OpenGram channel plugin for OpenClaw — mobile-first AI agent chat interface",
+  "license": "MIT",
+  "author": "Brice Ventures",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brice-ventures/opengram.git",
+    "directory": "packages/openclaw-plugin"
+  },
+  "homepage": "https://github.com/brice-ventures/opengram/tree/main/packages/openclaw-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/brice-ventures/opengram/issues"
+  },
+  "keywords": [
+    "openclaw",
+    "opengram",
+    "channel-plugin",
+    "ai-agent",
+    "chat",
+    "pwa"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "skills/",
+    "openclaw.plugin.json",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.1.0"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41",
+    "eventsource": "^3.0.7",
+    "mime-types": "^2.1.35",
+    "zod": "^4.3.6"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
