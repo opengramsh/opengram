@@ -44,6 +44,7 @@ function resolveMigrationTrackingColumn(db) {
 
 function getAppliedNames(db, migrationFiles, trackingColumn) {
   const appliedNames = new Set();
+  const knownFiles = new Set(migrationFiles);
 
   if (trackingColumn) {
     const trackedRows = db
@@ -57,34 +58,36 @@ function getAppliedNames(db, migrationFiles, trackingColumn) {
   }
 
   if (!tableExists(db, "__drizzle_migrations")) {
+    // Existing databases with baseline schema should never replay initial migration.
+    if (migrationFiles[0] && tableExists(db, "chats")) {
+      appliedNames.add(migrationFiles[0]);
+    }
     return appliedNames;
   }
 
   const columns = db.prepare("PRAGMA table_info(__drizzle_migrations)").all();
   const legacyNameColumn = columns.find((column) => column.name === "hash" || column.name === "tag");
-  if (!legacyNameColumn) {
-    return appliedNames;
-  }
+  if (legacyNameColumn) {
+    const legacyRows = db
+      .prepare(`SELECT "${legacyNameColumn.name}" AS name FROM __drizzle_migrations`)
+      .all();
+    for (const row of legacyRows) {
+      if (typeof row.name !== "string" || !row.name) {
+        continue;
+      }
 
-  const knownFiles = new Set(migrationFiles);
-  const legacyRows = db
-    .prepare(`SELECT "${legacyNameColumn.name}" AS name FROM __drizzle_migrations`)
-    .all();
-  for (const row of legacyRows) {
-    if (typeof row.name !== "string" || !row.name) {
-      continue;
-    }
+      const directMatch = row.name;
+      const sqlMatch = `${row.name}.sql`;
 
-    const directMatch = row.name;
-    const sqlMatch = `${row.name}.sql`;
-
-    if (knownFiles.has(directMatch)) {
-      appliedNames.add(directMatch);
-    } else if (knownFiles.has(sqlMatch)) {
-      appliedNames.add(sqlMatch);
+      if (knownFiles.has(directMatch)) {
+        appliedNames.add(directMatch);
+      } else if (knownFiles.has(sqlMatch)) {
+        appliedNames.add(sqlMatch);
+      }
     }
   }
 
+  // Existing databases with baseline schema should never replay initial migration.
   if (migrationFiles[0] && tableExists(db, "chats")) {
     appliedNames.add(migrationFiles[0]);
   }
