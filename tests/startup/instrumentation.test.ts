@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { register } from '@/instrumentation';
+import { startBackgroundJobs } from '@/src/server';
 import {
   isStreamingTimeoutSweeperRunningForTests,
   resetStreamingTimeoutSweeperForTests,
@@ -13,12 +13,12 @@ afterEach(() => {
   resetStreamingTimeoutSweeperForTests();
 });
 
-describe('instrumentation startup', () => {
-  it('starts the streaming timeout sweeper during app register', async () => {
+describe('background job startup', () => {
+  it('starts the streaming timeout sweeper via startBackgroundJobs', () => {
     resetStreamingTimeoutSweeperForTests();
     process.env.NODE_ENV = 'development';
 
-    await register();
+    startBackgroundJobs();
 
     expect(isStreamingTimeoutSweeperRunningForTests()).toBe(true);
   });

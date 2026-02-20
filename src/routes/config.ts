@@ -1,0 +1,51 @@
+import { Hono } from 'hono';
+
+import { toErrorResponse } from '@/src/api/http';
+import { applyReadMiddlewares } from '@/src/api/write-controls';
+import { loadOpengramConfig } from '@/src/config/opengram-config';
+
+const config = new Hono();
+
+config.get('/', (c) => {
+  try {
+    applyReadMiddlewares(c.req.raw);
+    const cfg = loadOpengramConfig();
+
+    return c.json({
+      appName: cfg.appName,
+      maxUploadBytes: cfg.maxUploadBytes,
+      allowedMimeTypes: cfg.allowedMimeTypes,
+      titleMaxChars: cfg.titleMaxChars,
+      defaultCustomState: cfg.defaultCustomState,
+      customStates: cfg.customStates,
+      defaultModelIdForNewChats: cfg.defaultModelIdForNewChats,
+      agents: cfg.agents,
+      models: cfg.models,
+      push: {
+        enabled: cfg.push.enabled,
+        vapidPublicKey: cfg.push.vapidPublicKey,
+        subject: cfg.push.subject,
+      },
+      security: {
+        instanceSecretEnabled: cfg.security.instanceSecretEnabled,
+        readEndpointsRequireInstanceSecret: cfg.security.readEndpointsRequireInstanceSecret,
+      },
+      server: {
+        publicBaseUrl: cfg.server.publicBaseUrl,
+        port: cfg.server.port,
+        streamTimeoutSeconds: cfg.server.streamTimeoutSeconds,
+        idempotencyTtlSeconds: cfg.server.idempotencyTtlSeconds,
+      },
+      hooks: cfg.hooks.map((hook) => ({
+        url: hook.url,
+        events: hook.events,
+        timeoutMs: hook.timeoutMs,
+        maxRetries: hook.maxRetries,
+      })),
+    });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+});
+
+export default config;
