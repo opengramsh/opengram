@@ -22,7 +22,7 @@ function parseEphemeralParam(url: URL) {
 
 const events = new Hono();
 
-events.get('/stream', (c) => {
+events.get('/stream', async (c) => {
   try {
     requireSseAuth(c.req.raw);
     const url = new URL(c.req.url);
@@ -49,7 +49,7 @@ events.get('/stream', (c) => {
     c.header('X-Accel-Buffering', 'no');
     c.header('Content-Type', 'text/event-stream; charset=utf-8');
 
-    return streamSSE(c, async (stream) => {
+    const response = await streamSSE(c, async (stream) => {
       let closed = false;
       let replayCursorRowid = cursorRowid;
       const queuedLiveEvents: EventEnvelope[] = [];
@@ -183,6 +183,9 @@ events.get('/stream', (c) => {
 
       await closedPromise;
     });
+
+    response.headers.set('Cache-Control', 'no-cache, no-transform');
+    return response;
   } catch (error) {
     return toErrorResponse(error);
   }
