@@ -178,18 +178,22 @@ async function getVips() {
 
 async function createThumbnail(fileBytes: Uint8Array): Promise<Uint8Array> {
   const vips = await getVips();
-  const image = vips.Image.newFromBuffer(fileBytes);
-  const rotated = image.autorot();
-  const thumb = rotated.thumbnailImage(512, {
-    height: 512,
-    size: vips.Size.down,
-  });
+  let image: Vips.Image | null = null;
+  let rotated: Vips.Image | null = null;
+  let thumb: Vips.Image | null = null;
+
   try {
+    image = vips.Image.newFromBuffer(fileBytes);
+    rotated = image.autorot();
+    thumb = rotated.thumbnailImage(512, {
+      height: 512,
+      size: vips.Size.down,
+    });
     return thumb.writeToBuffer('.webp', { Q: 80 });
   } finally {
-    image.delete();
-    rotated.delete();
-    thumb.delete();
+    thumb?.delete();
+    rotated?.delete();
+    image?.delete();
   }
 }
 

@@ -1,4 +1,4 @@
-import { createECDH, randomBytes } from 'node:crypto';
+import { createDecipheriv, createECDH, createHmac, randomBytes } from 'node:crypto';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,17 +18,34 @@ type VapidDetails = {
   privateKey: string;
 };
 
-function createSubscription(): WebPushSubscription {
+type SubscriptionFixture = {
+  subscription: WebPushSubscription;
+  privateKey: Buffer;
+  publicKey: Buffer;
+  authSecret: Buffer;
+};
+
+function createSubscriptionFixture(): SubscriptionFixture {
   const ecdh = createECDH('prime256v1');
   ecdh.generateKeys();
+  const authSecret = randomBytes(16);
 
   return {
-    endpoint: 'https://fcm.googleapis.com/fcm/send/test-id',
-    keys: {
-      p256dh: ecdh.getPublicKey().toString('base64url'),
-      auth: randomBytes(16).toString('base64url'),
+    subscription: {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/test-id',
+      keys: {
+        p256dh: ecdh.getPublicKey().toString('base64url'),
+        auth: authSecret.toString('base64url'),
+      },
     },
+    privateKey: ecdh.getPrivateKey(),
+    publicKey: ecdh.getPublicKey(),
+    authSecret,
   };
+}
+
+function createSubscription(): WebPushSubscription {
+  return createSubscriptionFixture().subscription;
 }
 
 function createVapidDetails(): VapidDetails {
@@ -40,6 +57,66 @@ function createVapidDetails(): VapidDetails {
     publicKey: ecdh.getPublicKey().toString('base64url'),
     privateKey: ecdh.getPrivateKey().toString('base64url'),
   };
+}
+
+function hmacSha256(key: Buffer, input: Buffer): Buffer {
+  return createHmac('sha256', key).update(input).digest();
+}
+
+function hkdfExtract(salt: Buffer, ikm: Buffer): Buffer {
+  return hmacSha256(salt, ikm);
+}
+
+function hkdfExpand(prk: Buffer, info: Buffer, length: number): Buffer {
+  let output = Buffer.alloc(0);
+  let previous = Buffer.alloc(0);
+  let counter = 1;
+
+  while (output.length < length) {
+    previous = hmacSha256(prk, Buffer.concat([previous, info, Buffer.from([counter])]));
+    output = Buffer.concat([output, previous]);
+    counter += 1;
+  }
+
+  return output.subarray(0, length);
+}
+
+function decryptWebPushCiphertext(
+  ciphertext: Buffer,
+  receiverPrivateKey: Buffer,
+  receiverPublicKey: Buffer,
+  authSecret: Buffer,
+): string {
+  const salt = ciphertext.subarray(0, 16);
+  const keyIdLength = ciphertext.readUInt8(20);
+  const keyStart = 21;
+  const keyEnd = keyStart + keyIdLength;
+  const senderPublicKey = ciphertext.subarray(keyStart, keyEnd);
+  const encryptedWithTag = ciphertext.subarray(keyEnd);
+  const encrypted = encryptedWithTag.subarray(0, -16);
+  const authTag = encryptedWithTag.subarray(-16);
+
+  const ecdh = createECDH('prime256v1');
+  ecdh.setPrivateKey(receiverPrivateKey);
+  const sharedSecret = ecdh.computeSecret(senderPublicKey);
+
+  const ikm = hkdfExpand(
+    hkdfExtract(authSecret, sharedSecret),
+    Buffer.concat([Buffer.from('WebPush: info\0', 'ascii'), receiverPublicKey, senderPublicKey]),
+    32,
+  );
+  const prk = hkdfExtract(salt, ikm);
+  const contentEncryptionKey = hkdfExpand(prk, Buffer.from('Content-Encoding: aes128gcm\0', 'ascii'), 16);
+  const nonce = hkdfExpand(prk, Buffer.from('Content-Encoding: nonce\0', 'ascii'), 12);
+
+  const decipher = createDecipheriv('aes-128-gcm', contentEncryptionKey, nonce);
+  decipher.setAuthTag(authTag);
+  const plaintext = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+
+  expect(plaintext.length).toBeGreaterThan(0);
+  expect(plaintext.at(-1)).toBe(0x02);
+
+  return plaintext.subarray(0, -1).toString('utf8');
 }
 
 afterEach(() => {
@@ -98,6 +175,22 @@ describe('push crypto', () => {
     expect(Buffer.isBuffer(body)).toBe(true);
     expect(body.length).toBeGreaterThan(Buffer.byteLength(payload, 'utf8'));
     expect(headers['Content-Length']).toBe(String(body.length));
+  });
+
+  it('produces RFC 8291-compatible ciphertext decryptable by the subscription keys', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const payload = JSON.stringify({ title: 'Interop', body: 'Decrypt me', data: { chatId: 'chat-1' } });
+    const fixture = createSubscriptionFixture();
+
+    await sendWebPushNotification(fixture.subscription, payload, createVapidDetails());
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const ciphertext = Buffer.from(init.body as Buffer);
+    const decryptedPayload = decryptWebPushCiphertext(ciphertext, fixture.privateKey, fixture.publicKey, fixture.authSecret);
+
+    expect(decryptedPayload).toBe(payload);
   });
 
   it('throws with statusCode for non-success push response', async () => {
