@@ -23,7 +23,7 @@ export function ChatHeader({
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/95 px-3 py-2 backdrop-blur-md">
+    <header className="sticky top-0 z-30 h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
       <div className="flex items-center gap-3">
         <Button
           variant="outline"
