@@ -231,11 +231,6 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   }, [chatId]);
 
   const goBack = useCallback(() => {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-
     navigate('/');
   }, [navigate]);
 

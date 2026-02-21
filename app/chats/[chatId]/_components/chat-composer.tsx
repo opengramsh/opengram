@@ -170,43 +170,43 @@ export function ChatComposer({
         <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-5 pt-3">
           <DrawerTitle className="sr-only">Composer menu</DrawerTitle>
 
-          {/* Big square buttons */}
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          {/* Attachment buttons */}
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
-              className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 transition active:scale-95 disabled:opacity-50"
+              className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
               disabled={isUploadingAttachment}
               onClick={() => filesInputRef.current?.click()}
             >
-              <div className="flex size-11 items-center justify-center rounded-full bg-primary/15">
-                <FileText size={22} className="text-primary" />
+              <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
+                <FileText size={20} className="text-primary" />
               </div>
               <span className="text-xs font-medium text-foreground">Files</span>
             </button>
 
             <button
               type="button"
-              className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 transition active:scale-95 disabled:opacity-50"
+              className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
               disabled={isUploadingAttachment}
               onClick={() => {
                 setIsComposerMenuOpen(false);
                 onCameraCapture();
               }}
             >
-              <div className="flex size-11 items-center justify-center rounded-full bg-primary/15">
-                <Camera size={22} className="text-primary" />
+              <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
+                <Camera size={20} className="text-primary" />
               </div>
               <span className="text-xs font-medium text-foreground">Camera</span>
             </button>
 
             <button
               type="button"
-              className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 transition active:scale-95 disabled:opacity-50"
+              className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
               disabled={isUploadingAttachment}
               onClick={() => photosInputRef.current?.click()}
             >
-              <div className="flex size-11 items-center justify-center rounded-full bg-primary/15">
-                <Images size={22} className="text-primary" />
+              <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
+                <Images size={20} className="text-primary" />
               </div>
               <span className="text-xs font-medium text-foreground">Photos</span>
             </button>

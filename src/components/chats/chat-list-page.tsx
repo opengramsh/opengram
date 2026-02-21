@@ -172,7 +172,7 @@ export function ChatListPage({
           aria-label="New chat"
           size="icon-xl"
           className="bg-[hsl(151,100%,43%)] text-black shadow-lg shadow-[hsl(151,100%,43%)]/30 hover:bg-[hsl(151,100%,38%)]"
-          onClick={openNewChatSheet}
+          onClick={() => navigate('/chats/new')}
         >
           <Plus size={19} strokeWidth={2.5} />
         </Button>

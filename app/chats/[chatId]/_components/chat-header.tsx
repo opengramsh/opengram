@@ -34,12 +34,14 @@ export function ChatHeader({
           <ArrowLeft size={16} />
         </Button>
 
-        <Facehash
-          name={primaryAgent?.name ?? 'Unknown Agent'}
-          size={36}
-          interactive={false}
-          className="shrink-0 rounded-xl text-black"
-        />
+        <button type="button" onClick={onTitleClick} className="shrink-0">
+          <Facehash
+            name={primaryAgent?.name ?? 'Unknown Agent'}
+            size={36}
+            interactive={false}
+            className="rounded-xl text-black"
+          />
+        </button>
 
         <button
           type="button"
