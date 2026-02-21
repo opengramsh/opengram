@@ -76,11 +76,15 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
 
           switch (data.type) {
             case "message.created":
-              handleMessageCreated(data, cfg, client, log, dispatch);
+              void handleMessageCreated(data, cfg, client, log, dispatch).catch((err) => {
+                log?.warn(`[opengram] Failed to process message.created event: ${String(err)}`);
+              });
               break;
 
             case "request.resolved":
-              handleRequestResolved(data, cfg, client, log, dispatch);
+              void handleRequestResolved(data, cfg, client, log, dispatch).catch((err) => {
+                log?.warn(`[opengram] Failed to process request.resolved event: ${String(err)}`);
+              });
               break;
           }
         } catch (err) {
@@ -140,7 +144,8 @@ async function handleMessageCreated(
     processedMessageIds.delete(first);
   }
 
-  const chatId = payload.chatId as string;
+  const chatId = parseChatId(payload.chatId, "message.created", log);
+  if (!chatId) return;
   trackActiveChat(chatId);
 
   const agentId = await resolveAgentForChat(chatId, cfg);
@@ -171,7 +176,8 @@ async function handleRequestResolved(
   dispatch?: DispatchFn,
 ) {
   const payload = data.payload;
-  const chatId = payload.chatId as string;
+  const chatId = parseChatId(payload.chatId, "request.resolved", log);
+  if (!chatId) return;
   const requestId = payload.requestId as string;
   const body = formatRequestResolution(payload);
 
@@ -269,14 +275,18 @@ async function dispatchViaSdk(opts: {
     dispatcherOptions: {
       ...prefixOptions,
       deliver: async (payload, info) => {
-        log?.info(`[opengram] deliver called: kind=${info.kind} textLen=${payload.text?.length ?? 0} text=${JSON.stringify((payload.text ?? '').substring(0, 80))}`);
+        log?.info(
+          `[opengram] deliver called: kind=${info.kind} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
+        );
         await deliver(
           { text: payload.text, mediaUrl: payload.mediaUrl },
           { kind: info.kind },
         );
       },
       onSkip: (payload, info) => {
-        log?.warn(`[opengram] deliver SKIPPED: kind=${info.kind} reason=${info.reason} text=${JSON.stringify((payload.text ?? '').substring(0, 120))}`);
+        log?.warn(
+          `[opengram] deliver skipped: kind=${info.kind} reason=${info.reason} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
+        );
       },
       onError: (err, info) => {
         log?.error(`[opengram] ${info.kind} reply failed: ${String(err)}`);
@@ -301,7 +311,9 @@ function buildDeliver(
   log?: InboundListenerParams["log"],
 ): (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void> {
   return async (replyPayload, { kind }) => {
-    log?.info(`[opengram] buildDeliver called: kind=${kind} textLen=${replyPayload.text?.length ?? 0} text=${JSON.stringify((replyPayload.text ?? '').substring(0, 80))}`);
+    log?.info(
+      `[opengram] buildDeliver called: kind=${kind} textLen=${replyPayload.text?.length ?? 0} hasMedia=${Boolean(replyPayload.mediaUrl)}`,
+    );
     if (kind === "block") {
       await handleBlockReply(client, chatId, agentId, dispatchId, replyPayload);
       return;
@@ -340,6 +352,25 @@ function buildDeliver(
       });
     }
   };
+}
+
+function parseChatId(
+  rawChatId: unknown,
+  eventType: "message.created" | "request.resolved",
+  log?: InboundListenerParams["log"],
+): string | null {
+  if (typeof rawChatId !== "string") {
+    log?.warn(`[opengram] Skipping ${eventType}: invalid chatId type`);
+    return null;
+  }
+
+  const chatId = rawChatId.trim();
+  if (!chatId) {
+    log?.warn(`[opengram] Skipping ${eventType}: empty chatId`);
+    return null;
+  }
+
+  return chatId;
 }
 
 function formatRequestResolution(payload: Record<string, unknown>): string {

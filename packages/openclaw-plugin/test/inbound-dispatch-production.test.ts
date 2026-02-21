@@ -354,4 +354,52 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
 
     abortController.abort();
   });
+
+  it("should skip malformed inbound payloads with empty chatId", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+      log,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-empty-chatid-1",
+      type: "message.created",
+      payload: {
+        chatId: "   ",
+        messageId: "user-msg-empty-chatid-1",
+        role: "user",
+        content: "Should be ignored",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(log.warn).toHaveBeenCalledWith("[opengram] Skipping message.created: empty chatId"),
+    );
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    expect(finalizeInboundContextSpy).not.toHaveBeenCalled();
+    expect(client.createMessage).not.toHaveBeenCalled();
+
+    abortController.abort();
+  });
 });
