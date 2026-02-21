@@ -1,5 +1,9 @@
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 
+export function isMessageTyping(message: Message) {
+  return message.stream_state === 'streaming' && !message.content_partial?.trim() && !message.content_final?.trim();
+}
+
 export function messageText(message: Message) {
   if (message.content_final?.trim()) {
     return message.content_final;

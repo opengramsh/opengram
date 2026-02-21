@@ -29,11 +29,13 @@ export function ChatPageSections() {
 
 function ChatHeaderSection() {
   const chat = useChatPageContext();
+  const isStreaming = chat.messages.some((m) => m.stream_state === 'streaming');
 
   return (
     <ChatHeader
       chat={chat.chat}
       primaryAgent={chat.primaryAgent}
+      isStreaming={isStreaming}
       goBack={chat.goBack}
       onTitleClick={() => {
         chat.setTitleInput(chat.chat?.title ?? '');

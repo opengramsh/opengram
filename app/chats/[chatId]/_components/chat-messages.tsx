@@ -1,7 +1,7 @@
 import { type RefObject } from 'react';
 import { ChevronRight, File, FileSpreadsheet, FileText, Video } from 'lucide-react';
 
-import { formatBytes, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';
+import { formatBytes, isMessageTyping, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
@@ -53,6 +53,20 @@ function getFileTypeInfo(contentType: string, filename: string): FileTypeInfo {
     return { Icon: Video, colorClass: 'bg-purple-500/20 text-purple-400', label: ext.toUpperCase() || 'VIDEO' };
   }
   return { Icon: File, colorClass: 'bg-slate-500/20 text-slate-400', label: ext.toUpperCase() || 'FILE' };
+}
+
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1 py-0.5" aria-label="Agent is typing">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+          style={{ animation: `typing-dot 1.2s ease-in-out ${i * 0.15}s infinite` }}
+        />
+      ))}
+    </span>
+  );
 }
 
 function FileAttachmentCard({
@@ -139,6 +153,7 @@ export function ChatMessages({
           const audioItems = attachments.filter((item) => item.kind === 'audio');
           const fileItems = attachments.filter((item) => item.kind === 'file');
 
+          const typing = isMessageTyping(message);
           const text = messageText(message);
           const hasText = !!text.trim();
           const isImageOnly =
@@ -152,7 +167,7 @@ export function ChatMessages({
           return (
             <div key={message.id} className="mb-2 flex w-full">
               <div className={bubbleClass}>
-                {hasText && text}
+                {typing ? <TypingDots /> : hasText && text}
 
                 {/* Images */}
                 {imageItems.length > 0 && (

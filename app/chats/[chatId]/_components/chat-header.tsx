@@ -8,9 +8,25 @@ import type { Agent, Chat } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
 
+function Spinner() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      style={{ animation: 'spin 0.8s linear infinite' }}
+    >
+      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+      <path d="M12.5 7a5.5 5.5 0 0 0-5.5-5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 type ChatHeaderProps = {
   chat: Chat | null;
   primaryAgent?: Agent;
+  isStreaming?: boolean;
   goBack: () => void;
   onTitleClick: () => void;
 };
@@ -18,6 +34,7 @@ type ChatHeaderProps = {
 export function ChatHeader({
   chat,
   primaryAgent,
+  isStreaming,
   goBack,
   onTitleClick,
 }: ChatHeaderProps) {
@@ -46,6 +63,8 @@ export function ChatHeader({
             variant="gradient"
             gradientOverlayClass="facehash-gradient"
             className="rounded-xl text-black"
+            enableBlink={isStreaming}
+            onRenderMouth={isStreaming ? () => <Spinner /> : undefined}
           />
         </button>
 
@@ -58,7 +77,7 @@ export function ChatHeader({
             {chat?.title || 'Chat'}
           </p>
           <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">
-            {primaryAgent?.name ?? 'Unknown Agent'}
+            {primaryAgent?.name ?? 'Unknown Agent'}{isStreaming ? ' · typing...' : ''}
           </p>
         </button>
 

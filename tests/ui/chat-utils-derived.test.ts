@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildInlineMessageMedia, formatBytes, formatDuration, mediaSortAsc } from '@/app/chats/[chatId]/_lib/chat-utils';
+import { buildInlineMessageMedia, formatBytes, formatDuration, isMessageTyping, mediaSortAsc } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 
 describe('chat utils derived helpers', () => {
@@ -52,6 +52,27 @@ describe('chat utils derived helpers', () => {
     expect(formatBytes(2048)).toBe('2 KB');
     expect(formatDuration(65.8)).toBe('1:05');
     expect(formatDuration(-1)).toBe('0:00');
+  });
+
+  it('detects typing state when streaming with no content', () => {
+    const base: Message = {
+      id: 'm1',
+      role: 'agent',
+      sender_id: 'agent-default',
+      created_at: '2026-02-21T00:00:00.000Z',
+      content_final: null,
+      content_partial: null,
+      stream_state: 'streaming',
+    };
+
+    expect(isMessageTyping(base)).toBe(true);
+    expect(isMessageTyping({ ...base, content_partial: '' })).toBe(true);
+    expect(isMessageTyping({ ...base, content_partial: '  ' })).toBe(true);
+    expect(isMessageTyping({ ...base, content_partial: 'hello' })).toBe(false);
+    expect(isMessageTyping({ ...base, content_final: 'done' })).toBe(false);
+    expect(isMessageTyping({ ...base, stream_state: 'none' })).toBe(false);
+    expect(isMessageTyping({ ...base, stream_state: 'complete' })).toBe(false);
+    expect(isMessageTyping({ ...base, stream_state: 'cancelled' })).toBe(false);
   });
 
   it('sorts media chronologically with id tie-breaker', () => {
