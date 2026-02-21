@@ -5,6 +5,7 @@ import { OpenGramClient } from "./api-client.js";
 import { getActiveChatIds, initializeChatManager } from "./chat-manager.js";
 import { OpenGramConfigSchema, resolveOpenGramAccount, type ResolvedOpenGramAccount } from "./config.js";
 import { startInboundListener } from "./inbound.js";
+import { opengramOnboardingAdapter } from "./onboarding.js";
 import { sendMedia, sendText } from "./outbound.js";
 import { opengramChatTool } from "./tools/opengram-chat.js";
 import { opengramMediaTool } from "./tools/opengram-media.js";
@@ -25,7 +26,7 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
     docsPath: "/channels/opengram",
     blurb: "Mobile-first PWA for AI agent chat + task management.",
     aliases: ["og"],
-    order: 10,
+    order: 20,
   },
   capabilities: {
     chatTypes: ["direct"],
@@ -37,6 +38,7 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
     blockStreaming: true,
   },
   reload: { configPrefixes: ["channels.opengram"] },
+  onboarding: opengramOnboardingAdapter,
   configSchema: buildChannelConfigSchema(OpenGramConfigSchema),
   config: {
     listAccountIds: (cfg) => (getOpenGramSection(cfg)?.enabled !== false ? ["default"] : []),

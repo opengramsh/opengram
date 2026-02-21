@@ -1,3 +1,4 @@
+'use client';
 
 import { Facehash } from 'facehash';
 
@@ -10,6 +11,13 @@ import {
   DrawerTitle,
 } from '@/src/components/ui/drawer';
 import { Label } from '@/src/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/src/components/ui/select';
 import { Textarea } from '@/src/components/ui/textarea';
 
 type NewChatSheetProps = {
@@ -79,17 +87,18 @@ export function NewChatSheet({
           </div>
           <div>
             <Label className="mb-1 text-xs text-muted-foreground">Model</Label>
-            <select
-              className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70"
-              value={selectedModelId}
-              onChange={(event) => onSelectModel(event.target.value)}
-            >
-              {models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+            <Select value={selectedModelId} onValueChange={onSelectModel}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label className="mb-1 text-xs text-muted-foreground">First message</Label>

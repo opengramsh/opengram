@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Outlet, useMatch } from 'react-router';
 
+import logoSm from '/opengram-logo-sm.webp';
 import { sortInboxChats } from '@/src/lib/inbox';
 import { ChatListPage } from '@/src/components/chats/chat-list-page';
 import type { Chat } from '@/src/components/chats/types';
@@ -140,7 +141,7 @@ export default function InboxLayout() {
           headerContent={
             <>
               <div className="flex items-center justify-center gap-1.5">
-                <img src="/opengram-logo-sm.webp" alt="" width={20} height={20} className="shrink-0" />
+                <img src={logoSm} alt="" width={20} height={20} className="shrink-0" />
                 <h1 className="text-sm font-semibold tracking-wide text-foreground">{chatList.appName}</h1>
               </div>
               <p className="text-xs text-muted-foreground">{pendingLabel(pendingRequestsTotal)}</p>

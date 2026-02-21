@@ -9,13 +9,13 @@ import { formatInboxTimestamp, resolveInboxSwipeEnd, shouldStartInboxSwipeDrag }
 import type { Agent, Chat } from '@/src/components/chats/types';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/src/components/ui/dropdown-menu';
 import { cn } from '@/src/lib/utils';
-
-type ContextMenuState = {
-  chatId: string;
-  x: number;
-  y: number;
-};
 
 type ChatListProps = {
   chats: Chat[];
@@ -46,97 +46,39 @@ export function ChatList({
   rowActionLabel,
   activeChatId,
 }: ChatListProps) {
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-
-  useEffect(() => {
-    function closeMenu() {
-      setContextMenu(null);
-    }
-
-    window.addEventListener('pointerdown', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-    return () => {
-      window.removeEventListener('pointerdown', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-    };
-  }, []);
-
-  const chatForMenu = contextMenu ? chats.find((chat) => chat.id === contextMenu.chatId) : undefined;
+  const [activeContextChatId, setActiveContextChatId] = useState<string | null>(null);
 
   return (
-    <>
-      <main className="flex-1 overflow-y-auto px-2 py-2">
-        {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading chats...</p>}
-        {!loading && error && <p className="px-4 py-6 text-sm text-red-300">{error}</p>}
-        {!loading && !error && chats.length === 0 && <p className="px-4 py-8 text-sm text-muted-foreground">{emptyLabel}</p>}
-        {!loading &&
-          !error &&
-          chats.map((chat) => {
-            const firstAgentId = chat.agent_ids[0];
-            const agent = firstAgentId ? agentsById.get(firstAgentId) : undefined;
-            return (
-              <ChatRow
-                key={chat.id}
-                chat={chat}
-                agentName={agent?.name ?? 'Unknown Agent'}
-                actionLabel={rowActionLabel}
-                isActive={activeChatId === chat.id}
-                onOpen={() => onOpenChat(chat)}
-                onAction={() => {
-                  void onToggleArchive(chat);
-                }}
-                onLongPress={(point) => setContextMenu({ chatId: chat.id, ...point })}
-              />
-            );
-          })}
-      </main>
-
-      {contextMenu && chatForMenu && (
-        <div
-          className="fixed z-40 min-w-48 rounded-2xl border border-border bg-card p-1 shadow-2xl shadow-black/40"
-          style={{
-            top: Math.min(contextMenu.y, window.innerHeight - 180),
-            left: Math.min(contextMenu.x, window.innerWidth - 220),
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <Button
-            variant="ghost"
-            className="w-full justify-start px-3 py-2 text-sm"
-            onClick={() => {
-              setContextMenu(null);
-              if (chatForMenu.unread_count > 0) {
-                void onMarkRead(chatForMenu);
-              } else {
-                void onMarkUnread(chatForMenu);
-              }
-            }}
-          >
-            {chatForMenu.unread_count > 0 ? 'Mark as read' : 'Mark as unread'}
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start px-3 py-2 text-sm"
-            onClick={() => {
-              setContextMenu(null);
-              void onTogglePin(chatForMenu);
-            }}
-          >
-            {chatForMenu.pinned ? 'Unpin' : 'Pin'}
-          </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start px-3 py-2 text-sm"
-            onClick={() => {
-              setContextMenu(null);
-              void onToggleArchive(chatForMenu);
-            }}
-          >
-            {chatForMenu.is_archived ? 'Unarchive' : 'Archive'}
-          </Button>
-        </div>
-      )}
-    </>
+    <main className="flex-1 overflow-y-auto px-2 py-2">
+      {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading chats...</p>}
+      {!loading && error && <p className="px-4 py-6 text-sm text-red-300">{error}</p>}
+      {!loading && !error && chats.length === 0 && <p className="px-4 py-8 text-sm text-muted-foreground">{emptyLabel}</p>}
+      {!loading &&
+        !error &&
+        chats.map((chat) => {
+          const firstAgentId = chat.agent_ids[0];
+          const agent = firstAgentId ? agentsById.get(firstAgentId) : undefined;
+          return (
+            <ChatRow
+              key={chat.id}
+              chat={chat}
+              agentName={agent?.name ?? 'Unknown Agent'}
+              actionLabel={rowActionLabel}
+              isActive={activeChatId === chat.id}
+              isContextMenuOpen={activeContextChatId === chat.id}
+              onOpen={() => onOpenChat(chat)}
+              onAction={() => void onToggleArchive(chat)}
+              onLongPress={() => setActiveContextChatId(chat.id)}
+              onContextMenuOpenChange={(open) => setActiveContextChatId(open ? chat.id : null)}
+              onMarkReadToggle={() => {
+                if (chat.unread_count > 0) void onMarkRead(chat);
+                else void onMarkUnread(chat);
+              }}
+              onTogglePin={() => void onTogglePin(chat)}
+            />
+          );
+        })}
+    </main>
   );
 }
 
@@ -145,12 +87,16 @@ type ChatRowProps = {
   agentName: string;
   actionLabel: 'Archive' | 'Unarchive';
   isActive?: boolean;
+  isContextMenuOpen: boolean;
   onOpen: () => void;
   onAction: () => void;
-  onLongPress: (point: { x: number; y: number }) => void;
+  onLongPress: () => void;
+  onContextMenuOpenChange: (open: boolean) => void;
+  onMarkReadToggle: () => void;
+  onTogglePin: () => void;
 };
 
-function ChatRow({ chat, agentName, actionLabel, isActive = false, onOpen, onAction, onLongPress }: ChatRowProps) {
+function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenuOpen, onOpen, onAction, onLongPress, onContextMenuOpenChange, onMarkReadToggle, onTogglePin }: ChatRowProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartXRef = useRef(0);
@@ -186,7 +132,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, onOpen, onAct
       longPressTimerRef.current = window.setTimeout(() => {
         if (!isDragging) {
           longPressTriggeredRef.current = true;
-          onLongPress({ x: event.clientX, y: event.clientY });
+          onLongPress();
         }
       }, 520);
     },
@@ -324,7 +270,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, onOpen, onAct
         onKeyDown={handleKeyDown}
         onContextMenu={(event) => {
           event.preventDefault();
-          onLongPress({ x: event.clientX, y: event.clientY });
+          onLongPress();
         }}
       >
         <div className="shrink-0">
@@ -356,6 +302,36 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, onOpen, onAct
           </div>
         </div>
       </button>
+
+      <DropdownMenu open={isContextMenuOpen} onOpenChange={onContextMenuOpenChange}>
+        <DropdownMenuTrigger className="pointer-events-none absolute bottom-0 right-0 opacity-0" tabIndex={-1} aria-hidden="true" />
+        <DropdownMenuContent align="end" className="min-w-48">
+          <DropdownMenuItem
+            onClick={() => {
+              onContextMenuOpenChange(false);
+              onMarkReadToggle();
+            }}
+          >
+            {chat.unread_count > 0 ? 'Mark as read' : 'Mark as unread'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              onContextMenuOpenChange(false);
+              onTogglePin();
+            }}
+          >
+            {chat.pinned ? 'Unpin' : 'Pin'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              onContextMenuOpenChange(false);
+              onAction();
+            }}
+          >
+            {chat.is_archived ? 'Unarchive' : 'Archive'}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

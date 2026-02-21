@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogTitle,
 } from '@/src/components/ui/dialog';
+import { Skeleton } from '@/src/components/ui/skeleton';
 
 type FilePreviewSectionProps = {
   previewFile?: MediaItem;
@@ -141,11 +142,7 @@ function TextPreview({ item }: { item: MediaItem }) {
   const state = useTextContent(item.id);
 
   if (state.status === 'loading') {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-white/60">Loading...</p>
-      </div>
-    );
+    return <Skeleton className="h-full w-full rounded-none" />;
   }
 
   if (state.status === 'error') {
@@ -285,11 +282,7 @@ function MarkdownPreview({ item }: { item: MediaItem }) {
   const state = useTextContent(item.id);
 
   if (state.status === 'loading') {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-white/60">Loading...</p>
-      </div>
-    );
+    return <Skeleton className="h-full w-full rounded-none" />;
   }
 
   if (state.status === 'error') {

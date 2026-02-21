@@ -10,6 +10,13 @@ import {
 } from '@/src/components/ui/drawer';
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/src/components/ui/select';
 
 type ChatSettingsProps = {
   isChatSettingsOpen: boolean;
@@ -60,20 +67,22 @@ export function ChatSettings({
         <div className="space-y-3">
           <div>
             <Label className="mb-1 text-xs text-muted-foreground">Model</Label>
-            <select
-              className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70 disabled:opacity-60"
+            <Select
               value={chat.model_id}
               disabled={isUpdatingChatSettings}
-              onChange={(event) => {
-                void patchChatSettings({ modelId: event.target.value });
-              }}
+              onValueChange={(value) => void patchChatSettings({ modelId: value })}
             >
-              {models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -128,20 +137,22 @@ export function ChatSettings({
           {customStates.length > 0 && (
             <div>
               <Label className="mb-1 text-xs text-muted-foreground">State</Label>
-              <select
-                className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary/70 disabled:opacity-60"
+              <Select
                 value={chat.custom_state ?? customStates[0] ?? ''}
                 disabled={isUpdatingChatSettings}
-                onChange={(event) => {
-                  void patchChatSettings({ customState: event.target.value });
-                }}
+                onValueChange={(value) => void patchChatSettings({ customState: value })}
               >
-                {customStates.map((state) => (
-                  <option key={state} value={state}>
-                    {state}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-10 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {customStates.map((state) => (
+                    <SelectItem key={state} value={state}>
+                      {state}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

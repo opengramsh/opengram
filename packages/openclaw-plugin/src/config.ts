@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { OpenClawConfig } from "openclaw/plugin-sdk";
 
 export const OpenGramConfigSchema = z.object({
-  baseUrl: z.string().describe("OpenGram instance URL"),
+  baseUrl: z.string().optional().default("http://localhost:3000").describe("OpenGram instance URL"),
   instanceSecret: z.string().optional().describe("API auth secret"),
   agents: z.array(z.string()).optional().describe("Linked agent IDs"),
   defaultModelId: z.string().optional().describe("Default model for new chats"),
