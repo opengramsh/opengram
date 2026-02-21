@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router';
 
 import type { Agent, Chat } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
+import { FACEHASH_COLORS } from '@/src/lib/utils';
 
 type ChatHeaderProps = {
   chat: Chat | null;
@@ -23,7 +24,7 @@ export function ChatHeader({
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-30 h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
+    <header className="facehash-hover-group sticky top-0 z-30 h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
       <div className="flex items-center gap-3">
         <Button
           variant="outline"
@@ -39,7 +40,11 @@ export function ChatHeader({
           <Facehash
             name={primaryAgent?.name ?? 'Unknown Agent'}
             size={36}
-            interactive={false}
+            interactive
+            colors={FACEHASH_COLORS}
+            intensity3d="dramatic"
+            variant="gradient"
+            gradientOverlayClass="facehash-gradient"
             className="rounded-xl text-black"
           />
         </button>
