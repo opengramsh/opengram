@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
@@ -14,6 +14,7 @@ import {
 import { subscribeToEventsStream, type FrontendStreamEvent } from '@/src/lib/events-stream';
 
 export function useChatPageEffects(data: ChatPageData) {
+  const markReadInFlightRef = useRef<string | null>(null);
   const {
     chat,
     chatId,
@@ -31,6 +32,7 @@ export function useChatPageEffects(data: ChatPageData) {
     setIsLoadingTagSuggestions,
     setKeyboardOffset,
     setMessages,
+    setChat,
     setTagSuggestions,
     swipeRef,
     tagInput,
@@ -41,6 +43,46 @@ export function useChatPageEffects(data: ChatPageData) {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!chatId || !chat || chat.id !== chatId) {
+      return;
+    }
+
+    const unreadCount = Math.max(0, chat.unread_count ?? 0);
+    if (unreadCount === 0) {
+      return;
+    }
+
+    if (markReadInFlightRef.current === chatId) {
+      return;
+    }
+
+    markReadInFlightRef.current = chatId;
+    void fetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to mark chat as read');
+        }
+        setChat((current) => {
+          if (!current || current.id !== chatId) {
+            return current;
+          }
+
+          return {
+            ...current,
+            unread_count: 0,
+            last_read_at: new Date().toISOString(),
+          };
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (markReadInFlightRef.current === chatId) {
+          markReadInFlightRef.current = null;
+        }
+      });
+  }, [chat, chatId, setChat]);
 
   useEffect(() => {
     if (!isChatSettingsOpen || !chat) {

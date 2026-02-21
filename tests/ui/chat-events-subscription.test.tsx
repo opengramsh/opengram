@@ -53,6 +53,7 @@ describe('chat screen event subscriptions', () => {
   let fetchMock: FetchMock;
   let requestsPayload: Array<Record<string, unknown>>;
   let messagesPayload: Array<Record<string, unknown>>;
+  let chatPayload: Record<string, unknown>;
 
   beforeEach(() => {
     streamMock.listener = null;
@@ -60,6 +61,20 @@ describe('chat screen event subscriptions', () => {
     eventId = 0;
     requestsPayload = [];
     messagesPayload = [];
+    chatPayload = {
+      id: 'chat-1',
+      title: 'Chat 1',
+      tags: [],
+      custom_state: 'Open',
+      model_id: 'model-a',
+      pinned: false,
+      is_archived: false,
+      agent_ids: ['agent-a'],
+      pending_requests_count: 0,
+      notifications_muted: false,
+      unread_count: 0,
+      last_read_at: null,
+    };
     Element.prototype.scrollTo = vi.fn();
 
     fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -77,20 +92,16 @@ describe('chat screen event subscriptions', () => {
       }
 
       if (url === '/api/v1/chats/chat-1') {
-        return new Response(
-          JSON.stringify({
-            id: 'chat-1',
-            title: 'Chat 1',
-            tags: [],
-            custom_state: 'Open',
-            model_id: 'model-a',
-            pinned: false,
-            is_archived: false,
-            agent_ids: ['agent-a'],
-            pending_requests_count: 0,
-          }),
-          { status: 200 },
-        );
+        return new Response(JSON.stringify(chatPayload), { status: 200 });
+      }
+
+      if (url === '/api/v1/chats/chat-1/mark-read') {
+        chatPayload = {
+          ...chatPayload,
+          unread_count: 0,
+          last_read_at: '2026-02-18T20:39:00.000Z',
+        };
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
       if (url === '/api/v1/chats/chat-1/messages?limit=200') {
@@ -269,5 +280,21 @@ describe('chat screen event subscriptions', () => {
       expect(screen.getByText('Pending requests (1)')).toBeTruthy();
     });
     expect(screen.getByText('Need input')).toBeTruthy();
+  });
+
+  it('marks unread chat as read on open and avoids duplicate mark-read calls', async () => {
+    chatPayload = {
+      ...chatPayload,
+      unread_count: 3,
+      last_read_at: null,
+    };
+
+    renderChatPage();
+    await screen.findByText('Chat 1');
+
+    await waitFor(() => {
+      const markReadCalls = fetchMock.mock.calls.filter(([url]: [string]) => url === '/api/v1/chats/chat-1/mark-read');
+      expect(markReadCalls).toHaveLength(1);
+    });
   });
 });

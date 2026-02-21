@@ -336,6 +336,42 @@ describe('chats API', () => {
     expect(body.unread_count).toBe(0);
   });
 
+  it('keeps unread count at zero when mark-read is called repeatedly', async () => {
+    const created = await createChat({
+      title: 'read-idempotent',
+      agentIds: ['main'],
+      modelId: 'claude-sonnet-4-6',
+    });
+    expect(created.response.status).toBe(201);
+    const chatId = created.json.id as string;
+    const now = Date.now();
+
+    db.prepare(
+      [
+        'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, stream_state)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('123456789012345678905', chatId, 'agent', 'agent-default', now, now, 'agent update', 'complete');
+
+    await app.request(`/api/v1/chats/${chatId}/mark-unread`, { method: 'POST' });
+
+    const firstReadResponse = await app.request(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' });
+    expect(await firstReadResponse.json()).toEqual({ ok: true });
+
+    const firstGet = await app.request(`/api/v1/chats/${chatId}`, { method: 'GET' });
+    const firstBody = await firstGet.json();
+    expect(firstBody.unread_count).toBe(0);
+    expect(firstBody.last_read_at).toBeTypeOf('string');
+
+    const secondReadResponse = await app.request(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' });
+    expect(await secondReadResponse.json()).toEqual({ ok: true });
+
+    const secondGet = await app.request(`/api/v1/chats/${chatId}`, { method: 'GET' });
+    const secondBody = await secondGet.json();
+    expect(secondBody.unread_count).toBe(0);
+    expect(secondBody.last_read_at).toBeTypeOf('string');
+  });
+
   it('recalculates Voice note preview for audio-only last messages', async () => {
     const created = await createChat({ title: 'voice-preview' });
     const chatId = created.json.id as string;
