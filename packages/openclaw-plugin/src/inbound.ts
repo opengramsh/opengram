@@ -210,6 +210,15 @@ async function handleRequestResolved(
 }
 
 const CHANNEL_ID = "opengram";
+const SESSION_KEY_PREFIX = `${CHANNEL_ID}:`;
+
+function buildSessionKey(chatId: string): string {
+  const normalizedChatId = chatId.trim();
+  if (!normalizedChatId) {
+    throw new Error("[opengram] Cannot dispatch inbound event without chatId");
+  }
+  return `${SESSION_KEY_PREFIX}${normalizedChatId}`;
+}
 
 /**
  * Production dispatch path — calls the SDK's buffered block dispatcher
@@ -228,12 +237,9 @@ async function dispatchViaSdk(opts: {
   const { chatId, agentId, messageId, content, cfg, deliver, onError, log } = opts;
   const core = getOpenGramRuntime();
 
-  const route = core.channel.routing.resolveAgentRoute({
-    cfg,
-    channel: CHANNEL_ID,
-    peer: { kind: "direct", id: chatId },
-  });
-  const sessionKey = route.sessionKey;
+  // Use a per-chat session key so each OpenGram chat gets its own isolated
+  // conversation history (not the shared heartbeat/default session).
+  const sessionKey = buildSessionKey(chatId);
 
   const ctx = core.channel.reply.finalizeInboundContext({
     Body: content,
@@ -263,10 +269,14 @@ async function dispatchViaSdk(opts: {
     dispatcherOptions: {
       ...prefixOptions,
       deliver: async (payload, info) => {
+        log?.info(`[opengram] deliver called: kind=${info.kind} textLen=${payload.text?.length ?? 0} text=${JSON.stringify((payload.text ?? '').substring(0, 80))}`);
         await deliver(
           { text: payload.text, mediaUrl: payload.mediaUrl },
           { kind: info.kind },
         );
+      },
+      onSkip: (payload, info) => {
+        log?.warn(`[opengram] deliver SKIPPED: kind=${info.kind} reason=${info.reason} text=${JSON.stringify((payload.text ?? '').substring(0, 120))}`);
       },
       onError: (err, info) => {
         log?.error(`[opengram] ${info.kind} reply failed: ${String(err)}`);
@@ -291,6 +301,7 @@ function buildDeliver(
   log?: InboundListenerParams["log"],
 ): (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void> {
   return async (replyPayload, { kind }) => {
+    log?.info(`[opengram] buildDeliver called: kind=${kind} textLen=${replyPayload.text?.length ?? 0} text=${JSON.stringify((replyPayload.text ?? '').substring(0, 80))}`);
     if (kind === "block") {
       await handleBlockReply(client, chatId, agentId, dispatchId, replyPayload);
       return;
