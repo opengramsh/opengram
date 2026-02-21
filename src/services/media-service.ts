@@ -77,7 +77,8 @@ function serializeMedia(record: MediaRecord) {
 
 function resolveDataRoot() {
   const envRoot = process.env.OPENGRAM_DATA_ROOT?.trim();
-  return resolve(envRoot || '/opt/opengram/data');
+  if (envRoot) return resolve(envRoot);
+  return resolve(process.env.NODE_ENV === 'production' ? '/opt/opengram/data' : './data');
 }
 
 function resolveStoragePath(relativePath: string) {

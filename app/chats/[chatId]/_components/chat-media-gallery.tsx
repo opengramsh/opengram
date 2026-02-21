@@ -1,5 +1,6 @@
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
 import { formatBytes } from '@/app/chats/[chatId]/_lib/chat-utils';
+import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaFilter, MediaItem } from '@/app/chats/[chatId]/_lib/types';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
@@ -24,6 +25,7 @@ type ChatMediaGalleryProps = {
   galleryListMedia: MediaItem[];
   viewerMedia?: MediaItem;
   setViewerMediaId: (id: string | null) => void;
+  setPreviewFileId: (id: string | null) => void;
 };
 
 export function ChatMediaGallery({
@@ -36,6 +38,7 @@ export function ChatMediaGallery({
   galleryListMedia,
   viewerMedia,
   setViewerMediaId,
+  setPreviewFileId,
 }: ChatMediaGalleryProps) {
   return (
     <>
@@ -103,6 +106,15 @@ export function ChatMediaGallery({
                         {item.kind === 'audio' ? 'Audio' : 'File'} &bull; {formatBytes(item.byte_size || 0)}
                       </p>
                     </div>
+                    {item.kind === 'file' && isPreviewable(item.content_type, item.byte_size || 0) && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={() => setPreviewFileId(item.id)}
+                      >
+                        Preview
+                      </Button>
+                    )}
                     <Button variant="link" size="sm" asChild>
                       <a
                         href={`/api/v1/files/${item.id}`}

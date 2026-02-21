@@ -1,6 +1,8 @@
 import { type RefObject } from 'react';
+import { ChevronRight, File, FileSpreadsheet, FileText, Video } from 'lucide-react';
 
 import { formatBytes, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';
+import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
 
@@ -12,7 +14,99 @@ type ChatMessagesProps = {
   inlineMessageMedia: Map<string, MediaItem[]>;
   keyboardOffset: number;
   setViewerMediaId: (id: string) => void;
+  setPreviewFileId: (id: string | null) => void;
 };
+
+type FileTypeInfo = {
+  Icon: React.ElementType;
+  colorClass: string;
+  label: string;
+};
+
+function getFileTypeInfo(contentType: string, filename: string): FileTypeInfo {
+  const ext = filename?.split('.').pop()?.toLowerCase() ?? '';
+
+  if (contentType === 'application/pdf' || ext === 'pdf') {
+    return { Icon: FileText, colorClass: 'bg-red-500/20 text-red-400', label: 'PDF' };
+  }
+  if (
+    contentType.includes('word') ||
+    contentType === 'application/msword' ||
+    ext === 'doc' ||
+    ext === 'docx'
+  ) {
+    return { Icon: FileText, colorClass: 'bg-blue-500/20 text-blue-400', label: ext.toUpperCase() || 'DOC' };
+  }
+  if (
+    contentType.includes('excel') ||
+    contentType.includes('spreadsheet') ||
+    ext === 'xls' ||
+    ext === 'xlsx' ||
+    ext === 'csv'
+  ) {
+    return { Icon: FileSpreadsheet, colorClass: 'bg-green-500/20 text-green-400', label: ext.toUpperCase() || 'XLS' };
+  }
+  if (contentType.startsWith('text/')) {
+    return { Icon: FileText, colorClass: 'bg-slate-500/20 text-slate-400', label: ext.toUpperCase() || 'TXT' };
+  }
+  if (contentType.startsWith('video/')) {
+    return { Icon: Video, colorClass: 'bg-purple-500/20 text-purple-400', label: ext.toUpperCase() || 'VIDEO' };
+  }
+  return { Icon: File, colorClass: 'bg-slate-500/20 text-slate-400', label: ext.toUpperCase() || 'FILE' };
+}
+
+function FileAttachmentCard({
+  item,
+  role,
+  setPreviewFileId,
+}: {
+  item: MediaItem;
+  role: Message['role'];
+  setPreviewFileId: (id: string | null) => void;
+}) {
+  const { Icon, colorClass, label } = getFileTypeInfo(item.content_type, item.filename);
+  const isUserBubble = role === 'user';
+  const canPreview = isPreviewable(item.content_type, item.byte_size || 0);
+
+  const inner = (
+    <>
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isUserBubble ? 'bg-white/20 text-white' : colorClass}`}>
+        <Icon size={20} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-sm font-medium ${isUserBubble ? 'text-white' : ''}`}>{item.filename || 'Attachment'}</p>
+        <p className={`text-xs ${isUserBubble ? 'text-white/60' : 'text-muted-foreground/70'}`}>
+          {formatBytes(item.byte_size || 0)} &bull; {label}
+        </p>
+      </div>
+      <ChevronRight size={16} className={`shrink-0 ${isUserBubble ? 'text-white/50' : 'text-muted-foreground/50'}`} />
+    </>
+  );
+
+  if (canPreview) {
+    return (
+      <button
+        type="button"
+        aria-label={`Preview ${item.filename || 'attachment'}`}
+        className="flex w-full cursor-pointer items-center gap-3 rounded-xl bg-black/10 px-3 py-2.5"
+        onClick={() => setPreviewFileId(item.id)}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <a
+      href={`/api/v1/files/${item.id}`}
+      download
+      aria-label={`Download ${item.filename || 'attachment'}`}
+      className="flex items-center gap-3 rounded-xl bg-black/10 px-3 py-2.5"
+    >
+      {inner}
+    </a>
+  );
+}
 
 export function ChatMessages({
   feedRef,
@@ -22,6 +116,7 @@ export function ChatMessages({
   inlineMessageMedia,
   keyboardOffset,
   setViewerMediaId,
+  setPreviewFileId,
 }: ChatMessagesProps) {
   return (
     <main
@@ -44,31 +139,95 @@ export function ChatMessages({
           const audioItems = attachments.filter((item) => item.kind === 'audio');
           const fileItems = attachments.filter((item) => item.kind === 'file');
 
+          const text = messageText(message);
+          const hasText = !!text.trim();
+          const isImageOnly =
+            imageItems.length > 0 && !hasText && audioItems.length === 0 && fileItems.length === 0;
+
+          const baseBubbleClass = messageBubbleClass(message.role);
+          const bubbleClass = isImageOnly
+            ? baseBubbleClass.replace('px-3 py-2', 'p-0 overflow-hidden')
+            : baseBubbleClass;
+
           return (
             <div key={message.id} className="mb-2 flex w-full">
-              <div className={messageBubbleClass(message.role)}>
-                {messageText(message)}
+              <div className={bubbleClass}>
+                {hasText && text}
+
+                {/* Images */}
                 {imageItems.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    {imageItems.map((item) => (
+                  isImageOnly ? (
+                    imageItems.length === 1 ? (
                       <button
-                        key={item.id}
                         type="button"
-                        className="block overflow-hidden rounded-lg border border-border/70"
-                        aria-label={`Open image ${item.filename || item.id}`}
-                        onClick={() => setViewerMediaId(item.id)}
+                        className="block w-full"
+                        aria-label={`Open image ${imageItems[0].filename || imageItems[0].id}`}
+                        onClick={() => setViewerMediaId(imageItems[0].id)}
                       >
                         <img
-                          src={`/api/v1/files/${item.id}/thumbnail`}
-                          alt={item.filename || 'Image attachment'}
-                          width={220}
-                          height={160}
-                          className="h-28 w-full object-cover"
+                          src={`/api/v1/files/${imageItems[0].id}/thumbnail`}
+                          alt={imageItems[0].filename || 'Image attachment'}
+                          className="h-auto max-h-52 w-full object-cover"
                         />
                       </button>
-                    ))}
-                  </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-px">
+                        {imageItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="block overflow-hidden"
+                            aria-label={`Open image ${item.filename || item.id}`}
+                            onClick={() => setViewerMediaId(item.id)}
+                          >
+                            <img
+                              src={`/api/v1/files/${item.id}/thumbnail`}
+                              alt={item.filename || 'Image attachment'}
+                              className="h-36 w-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <div className="-mx-3 -mb-2 mt-2 overflow-hidden rounded-b-2xl">
+                      {imageItems.length === 1 ? (
+                        <button
+                          type="button"
+                          className="block w-full"
+                          aria-label={`Open image ${imageItems[0].filename || imageItems[0].id}`}
+                          onClick={() => setViewerMediaId(imageItems[0].id)}
+                        >
+                          <img
+                            src={`/api/v1/files/${imageItems[0].id}/thumbnail`}
+                            alt={imageItems[0].filename || 'Image attachment'}
+                            className="h-auto max-h-48 w-full object-cover"
+                          />
+                        </button>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-px">
+                          {imageItems.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className="block overflow-hidden"
+                              aria-label={`Open image ${item.filename || item.id}`}
+                              onClick={() => setViewerMediaId(item.id)}
+                            >
+                              <img
+                                src={`/api/v1/files/${item.id}/thumbnail`}
+                                alt={item.filename || 'Image attachment'}
+                                className="h-36 w-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
                 )}
+
+                {/* Audio */}
                 {audioItems.length > 0 && (
                   <div className="space-y-2 pt-2">
                     {audioItems.map((item) => (
@@ -76,19 +235,12 @@ export function ChatMessages({
                     ))}
                   </div>
                 )}
+
+                {/* Files */}
                 {fileItems.length > 0 && (
                   <div className="space-y-2 pt-2">
                     {fileItems.map((item) => (
-                      <a
-                        key={item.id}
-                        href={`/api/v1/files/${item.id}`}
-                        download
-                        aria-label={`Download ${item.filename || 'attachment'}`}
-                        className="block rounded-lg border border-border/70 bg-muted/30 px-2 py-1.5"
-                      >
-                        <p className="truncate text-xs text-foreground">{item.filename || 'Attachment'}</p>
-                        <p className="text-[11px] text-muted-foreground">{formatBytes(item.byte_size || 0)}</p>
-                      </a>
+                      <FileAttachmentCard key={item.id} item={item} role={message.role} setPreviewFileId={setPreviewFileId} />
                     ))}
                   </div>
                 )}

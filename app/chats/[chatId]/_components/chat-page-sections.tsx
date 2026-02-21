@@ -8,6 +8,7 @@ import { ChatMessages } from '@/app/chats/[chatId]/_components/chat-messages';
 import { ChatRequestWidget } from '@/app/chats/[chatId]/_components/chat-request-widget';
 import { ChatSettings } from '@/app/chats/[chatId]/_components/chat-settings';
 import { CameraCapture } from '@/app/chats/[chatId]/_components/camera-capture';
+import { FilePreviewSection } from '@/app/chats/[chatId]/_components/file-preview-section';
 import { useChatPageContext } from '@/app/chats/[chatId]/_components/chat-page-provider';
 
 export function ChatPageSections() {
@@ -21,6 +22,7 @@ export function ChatPageSections() {
       <ChatSettingsSection />
       <ChatMenuSection />
       <CameraCaptureSection />
+      <FilePreviewSectionWrapper />
     </>
   );
 }
@@ -53,6 +55,7 @@ function ChatMessagesSection() {
       inlineMessageMedia={chat.inlineMessageMedia}
       keyboardOffset={chat.keyboardOffset}
       setViewerMediaId={(id) => chat.setViewerMediaId(id)}
+      setPreviewFileId={chat.setPreviewFileId}
     />
   );
 }
@@ -120,6 +123,7 @@ function ChatMediaGallerySection() {
       galleryListMedia={chat.galleryListMedia}
       viewerMedia={chat.viewerMedia}
       setViewerMediaId={chat.setViewerMediaId}
+      setPreviewFileId={chat.setPreviewFileId}
     />
   );
 }
@@ -182,6 +186,17 @@ function CameraCaptureSection() {
         dataTransfer.items.add(file);
         await chat.uploadComposerFiles(dataTransfer.files, 'image');
       }}
+    />
+  );
+}
+
+function FilePreviewSectionWrapper() {
+  const chat = useChatPageContext();
+
+  return (
+    <FilePreviewSection
+      previewFile={chat.previewFile}
+      setPreviewFileId={chat.setPreviewFileId}
     />
   );
 }

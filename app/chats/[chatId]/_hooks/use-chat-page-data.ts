@@ -48,6 +48,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [viewerMediaId, setViewerMediaId] = useState<string | null>(null);
+  const [previewFileId, setPreviewFileId] = useState<string | null>(null);
   const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -134,6 +135,11 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   const viewerMedia = useMemo(
     () => (viewerMediaId ? mediaById.get(viewerMediaId) : undefined),
     [mediaById, viewerMediaId],
+  );
+
+  const previewFile = useMemo(
+    () => (previewFileId ? mediaById.get(previewFileId) : undefined),
+    [mediaById, previewFileId],
   );
 
   const scrollToBottom = useCallback((smooth = false) => {
@@ -321,20 +327,40 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
           formData.append('kind', forcedKind);
         }
 
-        const response = await fetch(`/api/v1/chats/${chat.id}/media`, { method: 'POST', body: formData });
-        if (!response.ok) {
+        const uploadResponse = await fetch(`/api/v1/chats/${chat.id}/media`, { method: 'POST', body: formData });
+        if (!uploadResponse.ok) {
           throw new Error('Failed to upload media');
         }
+
+        const media = (await uploadResponse.json()) as MediaItem;
+
+        const messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            role: 'user',
+            senderId: 'user:primary',
+            trace: { mediaId: media.id, kind: media.kind },
+          }),
+        });
+
+        if (!messageResponse.ok) {
+          throw new Error('Failed to create message');
+        }
+
+        const message = (await messageResponse.json()) as Message;
+        setMessages((current) => upsertFeedMessage(current, message));
       }
 
       await refreshMedia();
       setIsComposerMenuOpen(false);
+      scrollToBottom(true);
     } catch {
       toast.error('Failed to upload attachment.');
     } finally {
       setIsUploadingAttachment(false);
     }
-  }, [chat, isUploadingAttachment, refreshMedia]);
+  }, [chat, isUploadingAttachment, refreshMedia, scrollToBottom]);
 
   const addTagToChat = useCallback(async (rawTag: string) => {
     const normalized = normalizeTagInput(rawTag);
@@ -392,6 +418,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     galleryImageMedia,
     galleryListMedia,
     viewerMedia,
+    previewFile,
     isChatSettingsOpen,
     isChatMenuOpen,
     isCameraOpen,
@@ -425,6 +452,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     setIsMediaGalleryOpen,
     setMediaFilter,
     setViewerMediaId,
+    setPreviewFileId,
     setIsChatSettingsOpen,
     setIsChatMenuOpen,
     setIsCameraOpen,
