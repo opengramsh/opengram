@@ -3,7 +3,8 @@
  *
  * When `dispatch` is not injected (the production case — see channel.ts gateway),
  * inbound handlers must use the SDK dispatcher and finalize context with
- * SessionKey `opengram:<chatId>` so each chat is isolated.
+ * SessionKey `agent:<agentId>:...` so agent resolution is correct and
+ * chats remain isolated.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,7 +21,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     sendChunk: vi.fn().mockResolvedValue(undefined),
     completeMessage: vi.fn().mockResolvedValue(undefined),
     cancelMessage: vi.fn().mockResolvedValue(undefined),
-    getChat: vi.fn().mockImplementation(async (chatId: string) => ({ id: chatId, agentIds: ["grami"] } as Chat)),
+    getChat: vi.fn().mockImplementation(async (chatId: string) => ({ id: chatId, agent_ids: ["grami"] } as Chat)),
     listChats: vi.fn().mockResolvedValue({ data: [], cursor: { hasMore: false } } as ListChatsResponse),
     connectSSE: vi.fn(),
     health: vi.fn().mockResolvedValue({ status: "ok", version: "1.0.0", uptime: 100 }),
@@ -89,8 +90,23 @@ function createMockRuntime() {
     CommandAuthorized: ctx.CommandAuthorized ?? false,
   }));
 
+  const resolveAgentRouteSpy = vi.fn().mockImplementation(({ peer }: { peer?: { id?: string } }) => {
+    const chatId = peer?.id ?? "unknown";
+    return {
+      agentId: "main",
+      channel: "opengram",
+      accountId: "default",
+      sessionKey: `agent:main:opengram:direct:${chatId}`,
+      mainSessionKey: "agent:main:main",
+      matchedBy: "default",
+    };
+  });
+
   const runtime = {
     channel: {
+      routing: {
+        resolveAgentRoute: resolveAgentRouteSpy,
+      },
       reply: {
         dispatchReplyWithBufferedBlockDispatcher: dispatchSpy,
         finalizeInboundContext: finalizeInboundContextSpy,
@@ -98,7 +114,7 @@ function createMockRuntime() {
     },
   };
 
-  return { runtime, dispatchSpy, finalizeInboundContextSpy };
+  return { runtime, dispatchSpy, finalizeInboundContextSpy, resolveAgentRouteSpy };
 }
 
 describe("GRAM-058: production inbound dispatch session routing", () => {
@@ -157,7 +173,7 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
         CommandBody: "Hello from production!",
         From: "opengram:chat-1",
         To: "opengram:chat-1",
-        SessionKey: "opengram:chat-1",
+        SessionKey: "agent:grami:opengram:direct:chat-1",
         ChatType: "direct",
         Provider: "opengram",
         Surface: "opengram",
@@ -228,7 +244,7 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
       expect.objectContaining({
         Body: '[Request resolved: "Deploy?"] Selected: approve',
         MessageSid: "req:req-prod-1:resolved",
-        SessionKey: "opengram:chat-1",
+        SessionKey: "agent:grami:opengram:direct:chat-1",
       }),
     );
 
@@ -335,13 +351,13 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
     expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         MessageSid: "user-msg-chat-1",
-        SessionKey: "opengram:chat-1",
+        SessionKey: "agent:grami:opengram:direct:chat-1",
       }),
     );
     expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         MessageSid: "user-msg-chat-2",
-        SessionKey: "opengram:chat-2",
+        SessionKey: "agent:grami:opengram:direct:chat-2",
       }),
     );
 

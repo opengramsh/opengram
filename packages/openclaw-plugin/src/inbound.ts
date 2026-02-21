@@ -148,7 +148,7 @@ async function handleMessageCreated(
   if (!chatId) return;
   trackActiveChat(chatId);
 
-  const agentId = await resolveAgentForChat(chatId, cfg);
+  const agentId = await resolveAgentForChat(chatId, cfg, log);
   const content = typeof payload.contentFinal === "string"
     ? payload.contentFinal
     : typeof payload.content_final === "string"
@@ -187,7 +187,7 @@ async function handleRequestResolved(
   const requestId = payload.requestId as string;
   const body = formatRequestResolution(payload);
 
-  const agentId = await resolveAgentForChat(chatId, cfg);
+  const agentId = await resolveAgentForChat(chatId, cfg, log);
   const dispatchId = `req:${requestId}`;
 
   const deliver = buildDeliver(client, chatId, agentId, dispatchId, log);
@@ -222,14 +222,31 @@ async function handleRequestResolved(
 }
 
 const CHANNEL_ID = "opengram";
-const SESSION_KEY_PREFIX = `${CHANNEL_ID}:`;
+const AGENT_SESSION_KEY_RE = /^agent:[^:]+:(.+)$/i;
 
-function buildSessionKey(chatId: string): string {
+function normalizeAgentIdForSessionKey(agentId: string): string {
+  const trimmed = agentId.trim().toLowerCase();
+  if (!trimmed) {
+    return "main";
+  }
+  return trimmed.replace(/[^a-z0-9_-]+/g, "-").replace(/^-+/, "").replace(/-+$/, "") || "main";
+}
+
+function buildSessionKey(chatId: string, agentId: string, routeSessionKey?: string): string {
   const normalizedChatId = chatId.trim();
   if (!normalizedChatId) {
     throw new Error("[opengram] Cannot dispatch inbound event without chatId");
   }
-  return `${SESSION_KEY_PREFIX}${normalizedChatId}`;
+
+  const normalizedAgentId = normalizeAgentIdForSessionKey(agentId);
+  const routeMatch = routeSessionKey?.trim().match(AGENT_SESSION_KEY_RE);
+  if (routeMatch?.[1]) {
+    return `agent:${normalizedAgentId}:${routeMatch[1].toLowerCase()}`;
+  }
+
+  // Fallback format keeps per-chat isolation and preserves OpenClaw's
+  // `agent:<id>:` session-key contract for agent selection.
+  return `agent:${normalizedAgentId}:${CHANNEL_ID}:direct:${normalizedChatId.toLowerCase()}`;
 }
 
 /**
@@ -249,9 +266,17 @@ async function dispatchViaSdk(opts: {
   const { chatId, agentId, messageId, content, cfg, deliver, onError, log } = opts;
   const core = getOpenGramRuntime();
 
-  // Use a per-chat session key so each OpenGram chat gets its own isolated
-  // conversation history (not the shared heartbeat/default session).
-  const sessionKey = buildSessionKey(chatId);
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg,
+    channel: CHANNEL_ID,
+    peer: { kind: "direct", id: chatId },
+  });
+  // Preserve route suffix (dm scope/account identity handling) but force the
+  // chat-selected agent into the `agent:<id>:` prefix.
+  const sessionKey = buildSessionKey(chatId, agentId, route.sessionKey);
+  log?.info(
+    `[opengram] dispatch route: chatId=${chatId} routeAgent=${route.agentId} selectedAgent=${agentId} matchedBy=${route.matchedBy} sessionKey=${sessionKey}`,
+  );
 
   const ctx = core.channel.reply.finalizeInboundContext({
     Body: content,
