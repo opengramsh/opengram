@@ -14,7 +14,7 @@ export type OpenClawConfig = {
 
 export type Chat = {
   id: string;
-  agentIds?: string[];
+  agent_ids?: string[];
   [key: string]: unknown;
 };
 
