@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaItem } from '@/app/chats/[chatId]/_lib/types';
+import { Slider } from '@/src/components/ui/slider';
 
 export function InlineAudioPlayer({ item }: { item: MediaItem }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -62,15 +63,15 @@ export function InlineAudioPlayer({ item }: { item: MediaItem }) {
     setIsPlaying(false);
   }, []);
 
-  const handleSeek = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+  const handleSeek = useCallback((values: number[]) => {
     const audio = audioRef.current;
-    if (!audio) {
+    const val = values[0];
+    if (!audio || val === undefined) {
       return;
     }
 
-    const nextTime = Number(event.target.value);
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
+    audio.currentTime = val;
+    setCurrentTime(val);
   }, []);
 
   return (
@@ -85,15 +86,14 @@ export function InlineAudioPlayer({ item }: { item: MediaItem }) {
         >
           {isPlaying ? <Pause size={14} /> : <Play size={14} className="translate-x-[1px]" />}
         </button>
-        <input
-          type="range"
+        <Slider
           min={0}
           max={duration > 0 ? duration : 1}
           step={0.1}
-          value={Math.min(currentTime, duration > 0 ? duration : 1)}
-          onChange={handleSeek}
+          value={[Math.min(currentTime, duration > 0 ? duration : 1)]}
+          onValueChange={handleSeek}
           aria-label={`Progress ${item.filename || item.id}`}
-          className="h-1 w-full accent-primary"
+          className="w-full"
         />
         <p className="w-20 shrink-0 text-right text-[11px] text-muted-foreground">
           {formatDuration(currentTime)} / {formatDuration(duration)}

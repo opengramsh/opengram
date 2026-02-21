@@ -10,6 +10,13 @@ import {
   DrawerContent,
   DrawerTitle,
 } from '@/src/components/ui/drawer';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/src/components/ui/select';
 
 type ChatMenuProps = {
   isOpen: boolean;
@@ -73,20 +80,22 @@ export function ChatMenu({
           {customStates.length > 0 && (
             <div className="rounded-2xl border border-border bg-muted/40 px-4 py-3">
               <p className="pb-1 text-[11px] font-medium text-muted-foreground">Status</p>
-              <select
-                className="h-8 w-full rounded-lg border-none bg-transparent p-0 text-sm font-semibold text-foreground outline-none disabled:opacity-60"
+              <Select
                 value={chat.custom_state ?? customStates[0] ?? ''}
                 disabled={isUpdatingChatSettings}
-                onChange={(event) => {
-                  void patchChatSettings({ customState: event.target.value });
-                }}
+                onValueChange={(value) => void patchChatSettings({ customState: value })}
               >
-                {customStates.map((state) => (
-                  <option key={state} value={state}>
-                    {state}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-8 border-none bg-transparent px-0 text-sm font-semibold shadow-none focus:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {customStates.map((state) => (
+                    <SelectItem key={state} value={state}>
+                      {state}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

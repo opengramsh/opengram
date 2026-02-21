@@ -8,6 +8,13 @@ import { Button } from '@/src/components/ui/button';
 import { Checkbox } from '@/src/components/ui/checkbox';
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/src/components/ui/select';
 import { Textarea } from '@/src/components/ui/textarea';
 
 type ChatRequestWidgetProps = {
@@ -211,11 +218,10 @@ export function ChatRequestWidget({
                                 {field.label}
                                 {field.required ? ' *' : ''}
                               </Label>
-                              <select
-                                id={`field-${request.id}-${field.name}`}
+                              <Select
                                 value={typeof fieldValue === 'string' ? fieldValue : ''}
-                                onChange={(event) => {
-                                  const value = event.target.value;
+                                disabled={isResolving}
+                                onValueChange={(value) => {
                                   updateRequestDraft(request.id, (prev) => {
                                     const prevValues = typeof prev.values === 'object' && prev.values && !Array.isArray(prev.values)
                                       ? prev.values as Record<string, unknown>
@@ -226,14 +232,16 @@ export function ChatRequestWidget({
                                     };
                                   });
                                 }}
-                                className="h-8 w-full rounded-lg border border-amber-200/40 bg-amber-950/30 px-2 text-xs text-amber-50 outline-none"
-                                disabled={isResolving}
                               >
-                                <option value="">Select an option</option>
-                                {field.options.map((option) => (
-                                  <option key={option} value={option}>{option}</option>
-                                ))}
-                              </select>
+                                <SelectTrigger className="h-8 rounded-lg border-amber-200/40 bg-amber-950/30 text-xs text-amber-50">
+                                  <SelectValue placeholder="Select an option" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {field.options.map((option) => (
+                                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
                           );
                         }
