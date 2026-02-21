@@ -3,9 +3,11 @@
 import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
 import { ChatHeader } from '@/app/chats/[chatId]/_components/chat-header';
 import { ChatMediaGallery } from '@/app/chats/[chatId]/_components/chat-media-gallery';
+import { ChatMenu } from '@/app/chats/[chatId]/_components/chat-menu';
 import { ChatMessages } from '@/app/chats/[chatId]/_components/chat-messages';
 import { ChatRequestWidget } from '@/app/chats/[chatId]/_components/chat-request-widget';
 import { ChatSettings } from '@/app/chats/[chatId]/_components/chat-settings';
+import { CameraCapture } from '@/app/chats/[chatId]/_components/camera-capture';
 import { useChatPageContext } from '@/app/chats/[chatId]/_components/chat-page-provider';
 
 export function ChatPageSections() {
@@ -17,6 +19,8 @@ export function ChatPageSections() {
       <ChatComposerSection />
       <ChatMediaGallerySection />
       <ChatSettingsSection />
+      <ChatMenuSection />
+      <CameraCaptureSection />
     </>
   );
 }
@@ -29,14 +33,10 @@ function ChatHeaderSection() {
       chat={chat.chat}
       primaryAgent={chat.primaryAgent}
       goBack={chat.goBack}
-      isEditingTitle={chat.isEditingTitle}
-      titleInput={chat.titleInput}
-      titleError={chat.titleError}
-      titleInputRef={chat.titleInputRef}
-      setTitleInput={chat.setTitleInput}
-      setIsEditingTitle={chat.setIsEditingTitle}
-      setTitleError={chat.setTitleError}
-      saveTitle={chat.saveTitle}
+      onTitleClick={() => {
+        chat.setTitleInput(chat.chat?.title ?? '');
+        chat.setIsChatMenuOpen(true);
+      }}
     />
   );
 }
@@ -90,18 +90,18 @@ function ChatComposerSection() {
       showMicSettingsPrompt={chat.showMicSettingsPrompt}
       isComposerMenuOpen={chat.isComposerMenuOpen}
       isUploadingAttachment={chat.isUploadingAttachment}
+      chat={chat.chat}
+      models={chat.models}
       cameraInputRef={chat.cameraInputRef}
       photosInputRef={chat.photosInputRef}
       filesInputRef={chat.filesInputRef}
       setComposerText={chat.setComposerText}
       setIsComposerMenuOpen={chat.setIsComposerMenuOpen}
-      setIsMediaGalleryOpen={chat.setIsMediaGalleryOpen}
-      setTagInput={chat.setTagInput}
-      setTagSuggestions={chat.setTagSuggestions}
-      setIsChatSettingsOpen={chat.setIsChatSettingsOpen}
       sendMessage={chat.sendMessage}
       handleMicAction={chat.handleMicAction}
       uploadComposerFiles={chat.uploadComposerFiles}
+      patchChatSettings={chat.patchChatSettings}
+      onCameraCapture={() => chat.setIsCameraOpen(true)}
     />
   );
 }
@@ -144,6 +144,44 @@ function ChatSettingsSection() {
       removeTagFromChat={chat.removeTagFromChat}
       archiveCurrentChat={chat.archiveCurrentChat}
       unarchiveCurrentChat={chat.unarchiveCurrentChat}
+    />
+  );
+}
+
+function ChatMenuSection() {
+  const chat = useChatPageContext();
+
+  return (
+    <ChatMenu
+      isOpen={chat.isChatMenuOpen}
+      setIsOpen={chat.setIsChatMenuOpen}
+      chat={chat.chat}
+      customStates={chat.customStates}
+      isUpdatingChatSettings={chat.isUpdatingChatSettings}
+      titleInput={chat.titleInput}
+      titleInputRef={chat.titleInputRef}
+      setTitleInput={chat.setTitleInput}
+      saveTitle={chat.saveTitle}
+      patchChatSettings={chat.patchChatSettings}
+      archiveCurrentChat={chat.archiveCurrentChat}
+      unarchiveCurrentChat={chat.unarchiveCurrentChat}
+      setIsMediaGalleryOpen={chat.setIsMediaGalleryOpen}
+    />
+  );
+}
+
+function CameraCaptureSection() {
+  const chat = useChatPageContext();
+
+  return (
+    <CameraCapture
+      isOpen={chat.isCameraOpen}
+      onClose={() => chat.setIsCameraOpen(false)}
+      onCapture={async (file) => {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        await chat.uploadComposerFiles(dataTransfer.files, 'image');
+      }}
     />
   );
 }

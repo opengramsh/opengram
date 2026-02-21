@@ -14,7 +14,7 @@ type UseChatSettingsActionsArgs = {
 export function useChatSettingsActions({ chat, setChat, setError, goBack }: UseChatSettingsActionsArgs) {
   const [isUpdatingChatSettings, setIsUpdatingChatSettings] = useState(false);
 
-  const patchChatSettings = useCallback(async (payload: { modelId?: string; tags?: string[]; customState?: string; pinned?: boolean }) => {
+  const patchChatSettings = useCallback(async (payload: { modelId?: string; tags?: string[]; customState?: string; pinned?: boolean; notificationsMuted?: boolean }) => {
     if (!chat || isUpdatingChatSettings) {
       return;
     }
@@ -26,6 +26,7 @@ export function useChatSettingsActions({ chat, setChat, setError, goBack }: UseC
       ...(payload.tags !== undefined ? { tags: payload.tags } : {}),
       ...(payload.customState !== undefined ? { custom_state: payload.customState } : {}),
       ...(payload.pinned !== undefined ? { pinned: payload.pinned } : {}),
+      ...(payload.notificationsMuted !== undefined ? { notifications_muted: payload.notificationsMuted } : {}),
     };
     setChat(optimistic);
     setIsUpdatingChatSettings(true);

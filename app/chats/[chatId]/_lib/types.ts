@@ -25,6 +25,7 @@ export type Chat = {
   model_id: string;
   pinned: boolean;
   is_archived: boolean;
+  notifications_muted: boolean;
   agent_ids: string[];
   pending_requests_count: number;
 };

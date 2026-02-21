@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { toast } from 'sonner';
+
 import { buildInlineMessageMedia, mediaSortAsc, normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type {
   Agent,
@@ -47,6 +49,8 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [viewerMediaId, setViewerMediaId] = useState<string | null>(null);
   const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
+  const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
@@ -331,7 +335,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       await refreshMedia();
       setIsComposerMenuOpen(false);
     } catch {
-      setError('Failed to upload attachment.');
+      toast.error('Failed to upload attachment.');
     } finally {
       setIsUploadingAttachment(false);
     }
@@ -394,6 +398,8 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     galleryListMedia,
     viewerMedia,
     isChatSettingsOpen,
+    isChatMenuOpen,
+    isCameraOpen,
     isEditingTitle,
     titleInput,
     titleError,
@@ -425,6 +431,8 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     setMediaFilter,
     setViewerMediaId,
     setIsChatSettingsOpen,
+    setIsChatMenuOpen,
+    setIsCameraOpen,
     setTagInput,
     setIsRequestWidgetOpen: requests.setIsRequestWidgetOpen,
     refreshMessages,
