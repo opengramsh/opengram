@@ -116,6 +116,37 @@ describe("applyOpenGramConfig", () => {
     expect((result.channels as any).discord.token).toBe("abc");
   });
 
+  it("sets plugins.entries['openclaw-plugin-opengram'].enabled to true", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+      defaultModelId: "claude-opus-4-6",
+    });
+
+    const entry = (result as any).plugins.entries["openclaw-plugin-opengram"];
+    expect(entry.enabled).toBe(true);
+  });
+
+  it("preserves existing plugin entries", () => {
+    const cfg = createMinimalConfig({
+      plugins: {
+        entries: {
+          "some-other-plugin": { enabled: true, foo: "bar" },
+        },
+      },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+      defaultModelId: "claude-opus-4-6",
+    });
+
+    const plugins = (result as any).plugins;
+    expect(plugins.entries["some-other-plugin"]).toEqual({ enabled: true, foo: "bar" });
+    expect(plugins.entries["openclaw-plugin-opengram"].enabled).toBe(true);
+  });
+
   it("preserves existing opengram fields not set by wizard", () => {
     const cfg = createMinimalConfig({
       channels: { opengram: { reconnectDelayMs: 5000, baseUrl: "old" } },

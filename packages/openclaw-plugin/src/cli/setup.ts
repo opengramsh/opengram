@@ -219,11 +219,24 @@ export function applyOpenGramConfig(
     delete opengramSection.instanceSecret;
   }
 
+  const plugins = (cfg as any).plugins ?? {};
+  const entries = plugins.entries ?? {};
+
   return {
     ...cfg,
     channels: {
       ...channels,
       opengram: opengramSection,
+    },
+    plugins: {
+      ...plugins,
+      entries: {
+        ...entries,
+        "openclaw-plugin-opengram": {
+          ...entries["openclaw-plugin-opengram"],
+          enabled: true,
+        },
+      },
     },
   } as OpenClawConfig;
 }

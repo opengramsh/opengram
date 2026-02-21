@@ -26,7 +26,7 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
     docsPath: "/channels/opengram",
     blurb: "Mobile-first PWA for AI agent chat + task management.",
     aliases: ["og"],
-    order: 10,
+    order: 20,
   },
   capabilities: {
     chatTypes: ["direct"],
