@@ -463,6 +463,8 @@ export function createChat(input: CreateChatInput) {
       role: 'user',
       senderId: USER_SENDER_ID,
       streamState: 'complete',
+      contentFinal: firstMessageContent,
+      createdAt: new Date(now).toISOString(),
     });
   }
 
