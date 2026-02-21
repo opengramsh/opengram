@@ -149,11 +149,13 @@ async function handleMessageCreated(
   trackActiveChat(chatId);
 
   const agentId = await resolveAgentForChat(chatId, cfg);
-  const content =
-    (typeof payload.contentFinal === "string" && payload.contentFinal)
-    || (typeof payload.content_final === "string" && payload.content_final)
-    || (typeof payload.content === "string" && payload.content)
-    || "";
+  const content = typeof payload.contentFinal === "string"
+    ? payload.contentFinal
+    : typeof payload.content_final === "string"
+      ? payload.content_final
+      : typeof payload.content === "string"
+        ? payload.content
+        : "";
 
   // Unique per dispatch to isolate concurrent stream state.
   const dispatchId = `${chatId}:${Date.now()}`;

@@ -507,4 +507,48 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
 
     abortController.abort();
   });
+
+  it("should preserve empty string contentFinal over legacy payload.content", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-contentfinal-empty-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-contentfinal-empty-1",
+        role: "user",
+        contentFinal: "",
+        content: "legacy content",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "",
+        MessageSid: "user-msg-contentfinal-empty-1",
+      }),
+    );
+
+    abortController.abort();
+  });
 });
