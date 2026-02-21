@@ -14,8 +14,15 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    allowedHosts: [".ts.net"],
     proxy: {
       "/api": "http://localhost:3333",
+    },
+    hmr: {
+      protocol: "wss",
+      host: "your-server.example.com",
+      clientPort: 443,
+      path: "/opengram-dev/",
     },
   },
 });

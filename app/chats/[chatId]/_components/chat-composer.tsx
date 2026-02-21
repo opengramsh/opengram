@@ -66,8 +66,8 @@ export function ChatComposer({
   return (
     <>
       <footer
-        className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-2"
-        style={{ paddingBottom: `calc(10px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)` }}
+        className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-3"
+        style={{ paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)` }}
       >
         <div className="flex items-end gap-2">
           <Button
@@ -84,7 +84,7 @@ export function ChatComposer({
             value={composerText}
             onChange={(event) => setComposerText(event.target.value)}
             placeholder="Message"
-            className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-3"
+            className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
