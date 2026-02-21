@@ -2,7 +2,7 @@
   "id": "opengram",
   "name": "openclaw-plugin-opengram",
   "version": "0.1.0",
-  "description": "OpenGram channel plugin for OpenClaw",
+  "description": "OpenGram channel plugin for OpenClaw — mobile-first AI agent chat interface",
   "author": "Brice Ventures",
   "license": "MIT",
   "channels": ["opengram"],
@@ -17,7 +17,7 @@
       },
       "instanceSecret": {
         "type": "string",
-        "description": "OpenGram instance secret for API auth"
+        "description": "OpenGram instance secret for API auth (if security is enabled)"
       },
       "defaultModelId": {
         "type": "string",
@@ -26,7 +26,7 @@
       "reconnectDelayMs": {
         "type": "number",
         "default": 3000,
-        "description": "SSE reconnect delay in ms"
+        "description": "SSE reconnect delay in ms after connection loss"
       },
       "agents": {
         "type": "array",

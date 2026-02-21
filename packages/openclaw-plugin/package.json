@@ -60,6 +60,20 @@
   "openclaw": {
     "extensions": [
       "./index.ts"
-    ]
+    ],
+    "channel": {
+      "id": "opengram",
+      "label": "OpenGram",
+      "selectionLabel": "OpenGram (self-hosted)",
+      "docsPath": "/channels/opengram",
+      "docsLabel": "opengram",
+      "blurb": "Mobile-first PWA for AI agent chat + task management.",
+      "order": 20,
+      "aliases": ["og"]
+    },
+    "install": {
+      "npmSpec": "openclaw-plugin-opengram",
+      "defaultChoice": "npm"
+    }
   }
 }
