@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Facehash } from 'facehash';
 import { Plus } from 'lucide-react';
 
-import { cn } from '@/src/lib/utils';
+import { cn, FACEHASH_COLORS } from '@/src/lib/utils';
 
 import { ChatList } from '@/src/components/chats/chat-list';
 import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
@@ -116,7 +116,7 @@ export function ChatListPage({
               onClick={() => setSelectedAgentId((current) => (current === agent.id ? '' : agent.id))}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAgentId((current) => (current === agent.id ? '' : agent.id)); } }}
             >
-              <Facehash name={agent.name} size={16} interactive={false} className="shrink-0 rounded-sm text-black" />
+              <Facehash name={agent.name} size={16} interactive={false} colors={FACEHASH_COLORS} intensity3d="none" variant="gradient" gradientOverlayClass="facehash-gradient" className="shrink-0 rounded-sm text-black" />
               {agent.name}
             </Badge>
           ))}

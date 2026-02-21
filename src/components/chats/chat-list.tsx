@@ -7,6 +7,7 @@ import { Pin } from 'lucide-react';
 
 import { formatInboxTimestamp, resolveInboxSwipeEnd, shouldStartInboxSwipeDrag } from '@/src/lib/inbox';
 import type { Agent, Chat } from '@/src/components/chats/types';
+import { FACEHASH_COLORS } from '@/src/lib/utils';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
 import {
@@ -257,7 +258,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenu
       <button
         type="button"
         className={cn(
-          'relative z-10 flex w-full cursor-default items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-150',
+          'facehash-hover-group relative z-10 flex w-full cursor-default items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-150',
           isActive
             ? 'border-primary/40 bg-muted'
             : 'border-border/80 bg-card',
@@ -274,7 +275,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenu
         }}
       >
         <div className="shrink-0">
-          <Facehash name={agentName} size={44} interactive={false} className="rounded-xl text-black" />
+          <Facehash name={agentName} size={44} interactive colors={FACEHASH_COLORS} intensity3d="dramatic" variant="gradient" gradientOverlayClass="facehash-gradient" className="rounded-xl text-black" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">

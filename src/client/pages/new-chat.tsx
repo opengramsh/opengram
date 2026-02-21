@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronDown, Send } from 'lucide-react';
 import { Facehash } from 'facehash';
 
 import { Button } from '@/src/components/ui/button';
+import { FACEHASH_COLORS } from '@/src/lib/utils';
 import { Textarea } from '@/src/components/ui/textarea';
 import {
   Drawer,
@@ -123,7 +124,11 @@ export default function NewChatPage() {
                 <Facehash
                   name={selectedAgent.name}
                   size={36}
-                  interactive={false}
+                  interactive
+                  colors={FACEHASH_COLORS}
+                  intensity3d="dramatic"
+                  variant="gradient"
+                  gradientOverlayClass="facehash-gradient"
                   className="shrink-0 rounded-xl text-black"
                 />
               )}
@@ -219,7 +224,11 @@ export default function NewChatPage() {
                   <Facehash
                     name={agent.name}
                     size={34}
-                    interactive={false}
+                    interactive
+                    colors={FACEHASH_COLORS}
+                    intensity3d="dramatic"
+                    variant="gradient"
+                    gradientOverlayClass="facehash-gradient"
                     className="shrink-0 rounded-lg text-black"
                   />
                   <div className="min-w-0 flex-1">

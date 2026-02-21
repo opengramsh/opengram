@@ -3,6 +3,7 @@
 import { Facehash } from 'facehash';
 
 import type { Agent, Model } from '@/src/components/chats/types';
+import { FACEHASH_COLORS } from '@/src/lib/utils';
 import { Button } from '@/src/components/ui/button';
 import {
   Drawer,
@@ -75,7 +76,7 @@ export function NewChatSheet({
                     }`}
                     onClick={() => onSelectAgent(agent.id)}
                   >
-                    <Facehash name={agent.id} size={34} interactive={false} className="shrink-0 rounded-lg text-black" />
+                    <Facehash name={agent.id} size={34} interactive colors={FACEHASH_COLORS} intensity3d="dramatic" variant="gradient" gradientOverlayClass="facehash-gradient" className="shrink-0 rounded-lg text-black" />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-foreground">{agent.name}</span>
                       <span className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</span>

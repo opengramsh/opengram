@@ -81,6 +81,15 @@ body {
   font-family: var(--font-sans);
 }
 
+.facehash-gradient {
+  background: radial-gradient(ellipse 130% 110% at 50% -10%, rgba(255, 255, 255, 0.50) 0%, transparent 58%);
+}
+
+/* Trigger Facehash 3D hover effect from a parent container */
+.facehash-hover-group:hover [data-facehash-face] {
+  transform: rotateX(0deg) rotateY(0deg) translateZ(12px) !important;
+}
+
 .liquid-glass {
   background: var(--card);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
