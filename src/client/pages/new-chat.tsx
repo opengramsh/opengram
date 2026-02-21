@@ -97,14 +97,15 @@ export default function NewChatPage() {
   }, [message, selectedAgentId, selectedModelId, isCreating, navigate]);
 
   return (
-    <div className="flex min-h-[100dvh] w-full flex-col bg-background">
+    <div className="flex h-[100dvh] w-full flex-col bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
+      <header className="sticky top-0 z-30 h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
             size="icon"
             aria-label="Back"
+            className="md:hidden shrink-0"
             onClick={() => {
               if (window.history.length > 1) navigate(-1);
               else navigate('/');
@@ -113,49 +114,43 @@ export default function NewChatPage() {
             <ArrowLeft size={16} />
           </Button>
 
-          <div className="flex flex-1 flex-col items-center gap-2">
-            {/* Agent selector */}
-            <button
-              type="button"
-              className="flex items-center gap-2.5 rounded-2xl border border-border/70 bg-muted/40 px-3 py-2 transition active:scale-[0.97]"
-              onClick={() => setIsAgentPickerOpen(true)}
-            >
-              {selectedAgent && (
-                <Facehash
-                  name={selectedAgent.name}
-                  size={36}
-                  interactive
-                  colors={FACEHASH_COLORS}
-                  intensity3d="dramatic"
-                  variant="gradient"
-                  gradientOverlayClass="facehash-gradient"
-                  className="shrink-0 rounded-xl text-black"
-                />
-              )}
-              <div className="min-w-0 text-left">
-                <p className="text-sm font-semibold text-foreground">
-                  {selectedAgent?.name ?? 'Choose agent'}
-                </p>
-                <p className="truncate text-[11px] text-muted-foreground">Tap to change agent</p>
-              </div>
-              <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
-            </button>
-
-            {/* Model selector */}
-            <button
-              type="button"
-              className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/30 px-2.5 py-1 transition active:scale-[0.97]"
-              onClick={() => setIsModelPickerOpen(true)}
-            >
-              <p className="text-[11px] font-medium text-muted-foreground">
-                {selectedModel?.name ?? 'Choose model'}
+          {/* Agent selector */}
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
+            onClick={() => setIsAgentPickerOpen(true)}
+          >
+            {selectedAgent && (
+              <Facehash
+                name={selectedAgent.name}
+                size={36}
+                interactive
+                colors={FACEHASH_COLORS}
+                intensity3d="dramatic"
+                variant="gradient"
+                gradientOverlayClass="facehash-gradient"
+                className="shrink-0 rounded-xl text-black"
+              />
+            )}
+            <div className="min-w-0 text-left">
+              <p className="truncate text-sm font-semibold text-foreground">
+                {selectedAgent?.name ?? 'Choose agent'}
               </p>
-              <ChevronDown size={11} className="text-muted-foreground" />
-            </button>
-          </div>
+              <p className="truncate text-[11px] text-muted-foreground">Tap to change agent</p>
+            </div>
+          </button>
 
-          {/* Spacer to balance back button */}
-          <div className="size-9" />
+          {/* Model selector */}
+          <button
+            type="button"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/60 bg-muted/30 px-2.5 py-1 transition active:scale-[0.97]"
+            onClick={() => setIsModelPickerOpen(true)}
+          >
+            <p className="text-[11px] font-medium text-muted-foreground">
+              {selectedModel?.name ?? 'Choose model'}
+            </p>
+            <ChevronDown size={11} className="text-muted-foreground" />
+          </button>
         </div>
       </header>
 
@@ -173,8 +168,8 @@ export default function NewChatPage() {
 
       {/* Composer */}
       <footer
-        className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-2"
-        style={{ paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}
+        className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-3"
+        style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex items-end gap-2">
           <Textarea
@@ -183,7 +178,7 @@ export default function NewChatPage() {
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             placeholder="Message"
-            className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-3"
+            className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();

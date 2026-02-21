@@ -1,9 +1,9 @@
 /**
- * GRAM-056 — Production dispatch path: SDK dispatch when no injected dispatch fn.
+ * GRAM-058 — Production inbound dispatch uses per-chat session routing.
  *
  * When `dispatch` is not injected (the production case — see channel.ts gateway),
- * `handleMessageCreated` and `handleRequestResolved` must fall through to the
- * SDK's `dispatchReplyWithBufferedBlockDispatcher` via the PluginRuntime singleton.
+ * inbound handlers must use the SDK dispatcher and finalize context with
+ * SessionKey `opengram:<chatId>` so each chat is isolated.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,7 +20,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     sendChunk: vi.fn().mockResolvedValue(undefined),
     completeMessage: vi.fn().mockResolvedValue(undefined),
     cancelMessage: vi.fn().mockResolvedValue(undefined),
-    getChat: vi.fn().mockResolvedValue({ id: "chat-1", agentIds: ["grami"] } as Chat),
+    getChat: vi.fn().mockImplementation(async (chatId: string) => ({ id: chatId, agentIds: ["grami"] } as Chat)),
     listChats: vi.fn().mockResolvedValue({ data: [], cursor: { hasMore: false } } as ListChatsResponse),
     connectSSE: vi.fn(),
     health: vi.fn().mockResolvedValue({ status: "ok", version: "1.0.0", uptime: 100 }),
@@ -89,31 +89,19 @@ function createMockRuntime() {
     CommandAuthorized: ctx.CommandAuthorized ?? false,
   }));
 
-  const resolveAgentRouteSpy = vi.fn().mockReturnValue({
-    agentId: "grami",
-    channel: "opengram",
-    accountId: "default",
-    sessionKey: "agent:grami:opengram:direct:chat-1",
-    mainSessionKey: "agent:grami:main",
-    matchedBy: "default",
-  });
-
   const runtime = {
     channel: {
       reply: {
         dispatchReplyWithBufferedBlockDispatcher: dispatchSpy,
         finalizeInboundContext: finalizeInboundContextSpy,
       },
-      routing: {
-        resolveAgentRoute: resolveAgentRouteSpy,
-      },
     },
   };
 
-  return { runtime, dispatchSpy, finalizeInboundContextSpy, resolveAgentRouteSpy };
+  return { runtime, dispatchSpy, finalizeInboundContextSpy };
 }
 
-describe("GRAM-056: production dispatch path (no injected dispatch)", () => {
+describe("GRAM-058: production inbound dispatch session routing", () => {
   beforeEach(() => {
     clearActiveStreamsForTests();
     clearProcessedIdsForTests();
@@ -125,8 +113,7 @@ describe("GRAM-056: production dispatch path (no injected dispatch)", () => {
   });
 
   it("should dispatch message.created via SDK when no injected dispatch fn", async () => {
-    const { runtime, dispatchSpy, finalizeInboundContextSpy, resolveAgentRouteSpy } =
-      createMockRuntime();
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
     setOpenGramRuntime(runtime as any);
 
     const client = createMockClient();
@@ -162,13 +149,6 @@ describe("GRAM-056: production dispatch path (no injected dispatch)", () => {
     // Wait for async processing
     await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
 
-    // Verify resolveAgentRoute was called with correct params
-    expect(resolveAgentRouteSpy).toHaveBeenCalledWith({
-      cfg: baseCfg,
-      channel: "opengram",
-      peer: { kind: "direct", id: "chat-1" },
-    });
-
     // Verify finalizeInboundContext was called with correct MsgContext
     expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -177,7 +157,7 @@ describe("GRAM-056: production dispatch path (no injected dispatch)", () => {
         CommandBody: "Hello from production!",
         From: "opengram:chat-1",
         To: "opengram:chat-1",
-        SessionKey: "agent:grami:opengram:direct:chat-1",
+        SessionKey: "opengram:chat-1",
         ChatType: "direct",
         Provider: "opengram",
         Surface: "opengram",
@@ -248,7 +228,7 @@ describe("GRAM-056: production dispatch path (no injected dispatch)", () => {
       expect.objectContaining({
         Body: '[Request resolved: "Deploy?"] Selected: approve',
         MessageSid: "req:req-prod-1:resolved",
-        SessionKey: "agent:grami:opengram:direct:chat-1",
+        SessionKey: "opengram:chat-1",
       }),
     );
 
@@ -303,6 +283,271 @@ describe("GRAM-056: production dispatch path (no injected dispatch)", () => {
 
     // SDK dispatch should NOT have been called
     expect(dispatchSpy).not.toHaveBeenCalled();
+
+    abortController.abort();
+  });
+
+  it("should isolate SDK finalize context and replies across multiple chats", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-chat-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-chat-1",
+        role: "user",
+        content: "Hello from chat 1",
+        senderId: "user:one",
+      },
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-chat-2",
+      type: "message.created",
+      payload: {
+        chatId: "chat-2",
+        messageId: "user-msg-chat-2",
+        role: "user",
+        content: "Hello from chat 2",
+        senderId: "user:two",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalledTimes(2));
+
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        MessageSid: "user-msg-chat-1",
+        SessionKey: "opengram:chat-1",
+      }),
+    );
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        MessageSid: "user-msg-chat-2",
+        SessionKey: "opengram:chat-2",
+      }),
+    );
+
+    const createMessageCalls = (client.createMessage as ReturnType<typeof vi.fn>).mock.calls;
+    const agentReplies = createMessageCalls.filter(
+      ([_chatId, msg]: [string, { role: string }]) => msg.role === "agent",
+    );
+    const replyChats = new Set(agentReplies.map(([chatId]: [string, unknown]) => chatId));
+    expect(replyChats).toEqual(new Set(["chat-1", "chat-2"]));
+
+    abortController.abort();
+  });
+
+  it("should skip malformed inbound payloads with empty chatId", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+      log,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-empty-chatid-1",
+      type: "message.created",
+      payload: {
+        chatId: "   ",
+        messageId: "user-msg-empty-chatid-1",
+        role: "user",
+        content: "Should be ignored",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(log.warn).toHaveBeenCalledWith("[opengram] Skipping message.created: empty chatId"),
+    );
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    expect(finalizeInboundContextSpy).not.toHaveBeenCalled();
+    expect(client.createMessage).not.toHaveBeenCalled();
+
+    abortController.abort();
+  });
+
+  it("should prefer payload.contentFinal for message.created body", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-contentfinal-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-contentfinal-1",
+        role: "user",
+        content: "legacy content",
+        contentFinal: "final content",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "final content",
+        MessageSid: "user-msg-contentfinal-1",
+      }),
+    );
+
+    abortController.abort();
+  });
+
+  it("should fallback from payload.content_final to payload.content", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-content-snake-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-content-snake-1",
+        role: "user",
+        content_final: "snake final",
+        senderId: "user:primary",
+      },
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-content-legacy-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-content-legacy-1",
+        role: "user",
+        content: "legacy only",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalledTimes(2));
+
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "snake final",
+        MessageSid: "user-msg-content-snake-1",
+      }),
+    );
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "legacy only",
+        MessageSid: "user-msg-content-legacy-1",
+      }),
+    );
+
+    abortController.abort();
+  });
+
+  it("should preserve empty string contentFinal over legacy payload.content", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-contentfinal-empty-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-contentfinal-empty-1",
+        role: "user",
+        contentFinal: "",
+        content: "legacy content",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "",
+        MessageSid: "user-msg-contentfinal-empty-1",
+      }),
+    );
 
     abortController.abort();
   });

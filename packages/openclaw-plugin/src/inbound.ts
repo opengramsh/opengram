@@ -67,24 +67,36 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
         log?.info("[opengram] SSE connected");
       };
 
-      es.onmessage = (event: MessageEvent) => {
+      // Named SSE events (e.g. "event: message.created") don't fire onmessage —
+      // they require explicit addEventListener calls per event type.
+      const handleSSEEvent = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
           lastEventCursor = data.id;
 
           switch (data.type) {
             case "message.created":
-              handleMessageCreated(data, cfg, client, log, dispatch);
+              void handleMessageCreated(data, cfg, client, log, dispatch).catch((err) => {
+                log?.warn(`[opengram] Failed to process message.created event: ${String(err)}`);
+              });
               break;
 
             case "request.resolved":
-              handleRequestResolved(data, cfg, client, log, dispatch);
+              void handleRequestResolved(data, cfg, client, log, dispatch).catch((err) => {
+                log?.warn(`[opengram] Failed to process request.resolved event: ${String(err)}`);
+              });
               break;
           }
         } catch (err) {
           log?.warn(`[opengram] Failed to parse SSE event: ${err}`);
         }
       };
+
+      // Attach to named event types the server actually sends.
+      es.addEventListener("message.created", handleSSEEvent);
+      es.addEventListener("request.resolved", handleSSEEvent);
+      // Fallback for any unnamed events (future-proofing).
+      es.onmessage = handleSSEEvent;
 
       es.onerror = (event: Event & { code?: number; message?: string }) => {
         es.close();
@@ -132,11 +144,18 @@ async function handleMessageCreated(
     processedMessageIds.delete(first);
   }
 
-  const chatId = payload.chatId as string;
+  const chatId = parseChatId(payload.chatId, "message.created", log);
+  if (!chatId) return;
   trackActiveChat(chatId);
 
   const agentId = await resolveAgentForChat(chatId, cfg);
-  const content = (payload.content as string) ?? "";
+  const content = typeof payload.contentFinal === "string"
+    ? payload.contentFinal
+    : typeof payload.content_final === "string"
+      ? payload.content_final
+      : typeof payload.content === "string"
+        ? payload.content
+        : "";
 
   // Unique per dispatch to isolate concurrent stream state.
   const dispatchId = `${chatId}:${Date.now()}`;
@@ -163,7 +182,8 @@ async function handleRequestResolved(
   dispatch?: DispatchFn,
 ) {
   const payload = data.payload;
-  const chatId = payload.chatId as string;
+  const chatId = parseChatId(payload.chatId, "request.resolved", log);
+  if (!chatId) return;
   const requestId = payload.requestId as string;
   const body = formatRequestResolution(payload);
 
@@ -202,6 +222,15 @@ async function handleRequestResolved(
 }
 
 const CHANNEL_ID = "opengram";
+const SESSION_KEY_PREFIX = `${CHANNEL_ID}:`;
+
+function buildSessionKey(chatId: string): string {
+  const normalizedChatId = chatId.trim();
+  if (!normalizedChatId) {
+    throw new Error("[opengram] Cannot dispatch inbound event without chatId");
+  }
+  return `${SESSION_KEY_PREFIX}${normalizedChatId}`;
+}
 
 /**
  * Production dispatch path — calls the SDK's buffered block dispatcher
@@ -220,12 +249,9 @@ async function dispatchViaSdk(opts: {
   const { chatId, agentId, messageId, content, cfg, deliver, onError, log } = opts;
   const core = getOpenGramRuntime();
 
-  const route = core.channel.routing.resolveAgentRoute({
-    cfg,
-    channel: CHANNEL_ID,
-    peer: { kind: "direct", id: chatId },
-  });
-  const sessionKey = route.sessionKey;
+  // Use a per-chat session key so each OpenGram chat gets its own isolated
+  // conversation history (not the shared heartbeat/default session).
+  const sessionKey = buildSessionKey(chatId);
 
   const ctx = core.channel.reply.finalizeInboundContext({
     Body: content,
@@ -255,9 +281,17 @@ async function dispatchViaSdk(opts: {
     dispatcherOptions: {
       ...prefixOptions,
       deliver: async (payload, info) => {
+        log?.info(
+          `[opengram] deliver called: kind=${info.kind} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
+        );
         await deliver(
           { text: payload.text, mediaUrl: payload.mediaUrl },
           { kind: info.kind },
+        );
+      },
+      onSkip: (payload, info) => {
+        log?.warn(
+          `[opengram] deliver skipped: kind=${info.kind} reason=${info.reason} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
         );
       },
       onError: (err, info) => {
@@ -283,6 +317,9 @@ function buildDeliver(
   log?: InboundListenerParams["log"],
 ): (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void> {
   return async (replyPayload, { kind }) => {
+    log?.info(
+      `[opengram] buildDeliver called: kind=${kind} textLen=${replyPayload.text?.length ?? 0} hasMedia=${Boolean(replyPayload.mediaUrl)}`,
+    );
     if (kind === "block") {
       await handleBlockReply(client, chatId, agentId, dispatchId, replyPayload);
       return;
@@ -321,6 +358,25 @@ function buildDeliver(
       });
     }
   };
+}
+
+function parseChatId(
+  rawChatId: unknown,
+  eventType: "message.created" | "request.resolved",
+  log?: InboundListenerParams["log"],
+): string | null {
+  if (typeof rawChatId !== "string") {
+    log?.warn(`[opengram] Skipping ${eventType}: invalid chatId type`);
+    return null;
+  }
+
+  const chatId = rawChatId.trim();
+  if (!chatId) {
+    log?.warn(`[opengram] Skipping ${eventType}: empty chatId`);
+    return null;
+  }
+
+  return chatId;
 }
 
 function formatRequestResolution(payload: Record<string, unknown>): string {

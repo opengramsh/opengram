@@ -19,9 +19,9 @@ export function App() {
         <Route element={<InboxLayout />}>
           <Route path="/" element={null} />
           <Route path="/chats/:chatId" element={<ChatPage />} />
+          <Route path="/chats/new" element={<NewChatPage />} />
         </Route>
         <Route path="/archived" element={<ArchivedPage />} />
-        <Route path="/chats/new" element={<NewChatPage />} />
         <Route path="/manage" element={<ManagePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutPage />} />
