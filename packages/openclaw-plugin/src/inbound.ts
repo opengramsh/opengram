@@ -1,8 +1,9 @@
 import type { OpenGramClient } from "./api-client.js";
 import { resolveAgentForChat, trackActiveChat } from "./chat-manager.js";
 import { downloadMedia } from "./media.js";
+import { getOpenGramRuntime } from "./runtime.js";
 import { cancelStream, finalizeStream, handleBlockReply } from "./streaming.js";
-import type { OpenClawConfig } from "openclaw/plugin-sdk";
+import { createReplyPrefixOptions, type OpenClawConfig } from "openclaw/plugin-sdk";
 
 export type InboundListenerParams = {
   client: OpenGramClient;
@@ -149,9 +150,9 @@ async function handleMessageCreated(
 
   if (dispatch) {
     dispatch({ chatId, agentId, messageId, content, cfg, deliver, onCleanup, onError });
+  } else {
+    await dispatchViaSdk({ chatId, agentId, messageId, content, cfg, deliver, onError, log });
   }
-  // In production, this would call dispatchInboundMessageWithBufferedDispatcher
-  // from openclaw/plugin-sdk. The dispatch function is injected to allow testing.
 }
 
 async function handleRequestResolved(
@@ -186,7 +187,88 @@ async function handleRequestResolved(
       onCleanup,
       onError,
     });
+  } else {
+    await dispatchViaSdk({
+      chatId,
+      agentId,
+      messageId: `req:${requestId}:resolved`,
+      content: body,
+      cfg,
+      deliver,
+      onError: (err) => log?.error(`[opengram] Reply dispatch error: ${err}`),
+      log,
+    });
   }
+}
+
+const CHANNEL_ID = "opengram";
+
+/**
+ * Production dispatch path — calls the SDK's buffered block dispatcher
+ * so the agent actually processes the inbound message and replies.
+ */
+async function dispatchViaSdk(opts: {
+  chatId: string;
+  agentId: string;
+  messageId: string;
+  content: string;
+  cfg: OpenClawConfig;
+  deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
+  onError: (err: unknown) => void;
+  log?: InboundListenerParams["log"];
+}): Promise<void> {
+  const { chatId, agentId, messageId, content, cfg, deliver, onError, log } = opts;
+  const core = getOpenGramRuntime();
+
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg,
+    channel: CHANNEL_ID,
+    peer: { kind: "direct", id: chatId },
+  });
+  const sessionKey = route.sessionKey;
+
+  const ctx = core.channel.reply.finalizeInboundContext({
+    Body: content,
+    RawBody: content,
+    CommandBody: content,
+    From: `opengram:${chatId}`,
+    To: `opengram:${chatId}`,
+    SessionKey: sessionKey,
+    ChatType: "direct",
+    Provider: CHANNEL_ID,
+    Surface: CHANNEL_ID,
+    MessageSid: messageId,
+    OriginatingChannel: CHANNEL_ID,
+    OriginatingTo: `opengram:${chatId}`,
+    CommandAuthorized: true,
+  });
+
+  const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
+    cfg,
+    agentId,
+    channel: CHANNEL_ID,
+  });
+
+  await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+    ctx,
+    cfg,
+    dispatcherOptions: {
+      ...prefixOptions,
+      deliver: async (payload, info) => {
+        await deliver(
+          { text: payload.text, mediaUrl: payload.mediaUrl },
+          { kind: info.kind },
+        );
+      },
+      onError: (err, info) => {
+        log?.error(`[opengram] ${info.kind} reply failed: ${String(err)}`);
+        onError(err);
+      },
+    },
+    replyOptions: {
+      onModelSelected,
+    },
+  });
 }
 
 /**

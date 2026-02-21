@@ -1,9 +1,14 @@
-let runtimeRef: unknown = null;
+import type { PluginRuntime } from "openclaw/plugin-sdk";
 
-export function setOpenGramRuntime(runtime: unknown): void {
-  runtimeRef = runtime;
+let runtime: PluginRuntime | null = null;
+
+export function setOpenGramRuntime(next: PluginRuntime): void {
+  runtime = next;
 }
 
-export function getOpenGramRuntime(): unknown {
-  return runtimeRef;
+export function getOpenGramRuntime(): PluginRuntime {
+  if (!runtime) {
+    throw new Error("OpenGram runtime not initialized");
+  }
+  return runtime;
 }
