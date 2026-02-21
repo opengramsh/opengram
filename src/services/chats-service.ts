@@ -27,6 +27,7 @@ type ChatRecord = {
   pending_requests_count: number;
   last_read_at: number | null;
   unread_count: number;
+  notifications_muted: number;
   created_at: number;
   updated_at: number;
   last_message_at: number | null;
@@ -47,6 +48,7 @@ type UpdateChatInput = {
   customState?: string;
   pinned?: boolean;
   modelId?: string;
+  notificationsMuted?: boolean;
 };
 
 type ListChatsResult = {
@@ -199,6 +201,7 @@ function serializeChat(record: ChatRecord) {
     pending_requests_count: record.pending_requests_count,
     last_read_at: toTimestamp(record.last_read_at),
     unread_count: record.unread_count,
+    notifications_muted: Boolean(record.notifications_muted),
     created_at: toTimestamp(record.created_at),
     updated_at: toTimestamp(record.updated_at),
     last_message_at: toTimestamp(record.last_message_at),
@@ -641,6 +644,15 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
     ensureModelExists(input.modelId, new Set(config.models.map((model) => model.id)));
     updates.push('model_id = ?');
     values.push(input.modelId);
+  }
+
+  if (input.notificationsMuted !== undefined) {
+    if (typeof input.notificationsMuted !== 'boolean') {
+      throw validationError('notificationsMuted must be a boolean.', { field: 'notificationsMuted' });
+    }
+
+    updates.push('notifications_muted = ?');
+    values.push(input.notificationsMuted ? 1 : 0);
   }
 
   if (!updates.length) {

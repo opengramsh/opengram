@@ -31,6 +31,7 @@ type UpdateChatRequest = {
   customState?: string;
   pinned?: boolean;
   modelId?: string;
+  notificationsMuted?: boolean;
 };
 
 const chats = new Hono();

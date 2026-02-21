@@ -1,9 +1,10 @@
 'use client';
 
-import { type RefObject } from 'react';
-import { Camera, FileText, GalleryVerticalEnd, Images, Mic, Plus, Send, Settings2, Square } from 'lucide-react';
+import { type RefObject, useState } from 'react';
+import { Camera, ChevronRight, FileText, Images, Mic, Plus, Send, Square } from 'lucide-react';
 
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
+import type { Chat, Model } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
 import {
   Drawer,
@@ -22,18 +23,18 @@ type ChatComposerProps = {
   showMicSettingsPrompt: boolean;
   isComposerMenuOpen: boolean;
   isUploadingAttachment: boolean;
+  chat: Chat | null;
+  models: Model[];
   cameraInputRef: RefObject<HTMLInputElement | null>;
   photosInputRef: RefObject<HTMLInputElement | null>;
   filesInputRef: RefObject<HTMLInputElement | null>;
   setComposerText: (value: string) => void;
   setIsComposerMenuOpen: (value: boolean) => void;
-  setIsMediaGalleryOpen: (value: boolean) => void;
-  setTagInput: (value: string) => void;
-  setTagSuggestions: (value: Array<{ name: string; usage_count: number }>) => void;
-  setIsChatSettingsOpen: (value: boolean) => void;
   sendMessage: () => Promise<void>;
   handleMicAction: () => Promise<void>;
   uploadComposerFiles: (files: FileList | null, forcedKind?: 'image' | 'file') => Promise<void>;
+  patchChatSettings: (payload: { modelId?: string }) => Promise<void>;
+  onCameraCapture: () => void;
 };
 
 export function ChatComposer({
@@ -46,19 +47,22 @@ export function ChatComposer({
   showMicSettingsPrompt,
   isComposerMenuOpen,
   isUploadingAttachment,
+  chat,
+  models,
   cameraInputRef,
   photosInputRef,
   filesInputRef,
   setComposerText,
   setIsComposerMenuOpen,
-  setIsMediaGalleryOpen,
-  setTagInput,
-  setTagSuggestions,
-  setIsChatSettingsOpen,
   sendMessage,
   handleMicAction,
   uploadComposerFiles,
+  patchChatSettings,
+  onCameraCapture,
 }: ChatComposerProps) {
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const currentModel = models.find((m) => m.id === chat?.model_id);
+
   return (
     <>
       <footer
@@ -161,58 +165,103 @@ export function ChatComposer({
         />
       </footer>
 
+      {/* Composer Menu */}
       <Drawer open={isComposerMenuOpen} onOpenChange={setIsComposerMenuOpen}>
-        <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-4 pt-3">
-          <DrawerTitle className="pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Composer menu</DrawerTitle>
-          <div className="grid grid-cols-1 gap-2">
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
-              disabled={isUploadingAttachment}
-              onClick={() => cameraInputRef.current?.click()}
-            >
-              <Camera size={15} /> Attach: Camera
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
-              disabled={isUploadingAttachment}
-              onClick={() => photosInputRef.current?.click()}
-            >
-              <Images size={15} /> Attach: Photos
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
+        <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-5 pt-3">
+          <DrawerTitle className="sr-only">Composer menu</DrawerTitle>
+
+          {/* Big square buttons */}
+          <div className="grid grid-cols-3 gap-3 pt-2">
+            <button
+              type="button"
+              className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 transition active:scale-95 disabled:opacity-50"
               disabled={isUploadingAttachment}
               onClick={() => filesInputRef.current?.click()}
             >
-              <FileText size={15} /> Attach: Files
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
+              <div className="flex size-11 items-center justify-center rounded-full bg-primary/15">
+                <FileText size={22} className="text-primary" />
+              </div>
+              <span className="text-xs font-medium text-foreground">Files</span>
+            </button>
+
+            <button
+              type="button"
+              className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 transition active:scale-95 disabled:opacity-50"
+              disabled={isUploadingAttachment}
               onClick={() => {
                 setIsComposerMenuOpen(false);
-                setIsMediaGalleryOpen(true);
+                onCameraCapture();
               }}
             >
-              <GalleryVerticalEnd size={15} /> Media gallery
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
-              onClick={() => {
-                setIsComposerMenuOpen(false);
-                setTagInput('');
-                setTagSuggestions([]);
-                setIsChatSettingsOpen(true);
-              }}
+              <div className="flex size-11 items-center justify-center rounded-full bg-primary/15">
+                <Camera size={22} className="text-primary" />
+              </div>
+              <span className="text-xs font-medium text-foreground">Camera</span>
+            </button>
+
+            <button
+              type="button"
+              className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 transition active:scale-95 disabled:opacity-50"
+              disabled={isUploadingAttachment}
+              onClick={() => photosInputRef.current?.click()}
             >
-              <Settings2 size={15} /> Chat settings
-            </Button>
+              <div className="flex size-11 items-center justify-center rounded-full bg-primary/15">
+                <Images size={22} className="text-primary" />
+              </div>
+              <span className="text-xs font-medium text-foreground">Photos</span>
+            </button>
           </div>
+
+          {/* Model selector */}
+          <button
+            type="button"
+            className="mt-3 flex w-full items-center justify-between rounded-2xl border border-border bg-muted/60 px-4 py-3 transition active:scale-[0.98]"
+            onClick={() => {
+              setIsComposerMenuOpen(false);
+              setIsModelPickerOpen(true);
+            }}
+          >
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-muted-foreground">Model</p>
+              <p className="truncate text-sm font-semibold text-foreground">{currentModel?.name ?? 'Unknown'}</p>
+            </div>
+            <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
+          </button>
+
           {isUploadingAttachment && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment...</p>}
+        </DrawerContent>
+      </Drawer>
+
+      {/* Model Picker Drawer */}
+      <Drawer open={isModelPickerOpen} onOpenChange={setIsModelPickerOpen}>
+        <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-5 pt-3">
+          <DrawerTitle className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Choose model</DrawerTitle>
+          <div className="space-y-1">
+            {models.map((model) => {
+              const isActive = model.id === chat?.model_id;
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                    isActive ? 'bg-primary/15 text-foreground' : 'text-foreground hover:bg-muted/60'
+                  }`}
+                  onClick={() => {
+                    void patchChatSettings({ modelId: model.id });
+                    setIsModelPickerOpen(false);
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm ${isActive ? 'font-semibold' : 'font-medium'}`}>{model.name}</p>
+                    {model.description && (
+                      <p className="truncate text-xs text-muted-foreground">{model.description}</p>
+                    )}
+                  </div>
+                  {isActive && <div className="size-2 shrink-0 rounded-full bg-primary" />}
+                </button>
+              );
+            })}
+          </div>
         </DrawerContent>
       </Drawer>
     </>
