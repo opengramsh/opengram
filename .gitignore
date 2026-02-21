@@ -38,3 +38,4 @@ packages/openclaw-plugin/node_modules
 
 .next/*
 .codecrew/*
+config/opengram.config.json
