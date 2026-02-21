@@ -67,7 +67,9 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
         log?.info("[opengram] SSE connected");
       };
 
-      es.onmessage = (event: MessageEvent) => {
+      // Named SSE events (e.g. "event: message.created") don't fire onmessage —
+      // they require explicit addEventListener calls per event type.
+      const handleSSEEvent = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
           lastEventCursor = data.id;
@@ -85,6 +87,12 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
           log?.warn(`[opengram] Failed to parse SSE event: ${err}`);
         }
       };
+
+      // Attach to named event types the server actually sends.
+      es.addEventListener("message.created", handleSSEEvent);
+      es.addEventListener("request.resolved", handleSSEEvent);
+      // Fallback for any unnamed events (future-proofing).
+      es.onmessage = handleSSEEvent;
 
       es.onerror = (event: Event & { code?: number; message?: string }) => {
         es.close();
