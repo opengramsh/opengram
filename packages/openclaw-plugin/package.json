@@ -68,7 +68,7 @@
       "docsPath": "/channels/opengram",
       "docsLabel": "opengram",
       "blurb": "Mobile-first PWA for AI agent chat + task management.",
-      "order": 20,
+      "order": 10,
       "aliases": ["og"]
     },
     "install": {

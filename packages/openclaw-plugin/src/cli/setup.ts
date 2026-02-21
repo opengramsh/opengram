@@ -93,28 +93,32 @@ async function testConnection(
   prompter: WizardPrompter,
   baseUrl: string,
 ): Promise<void> {
-  const spin = prompter.progress("Testing connection…");
-
   const client = new OpenGramClient(baseUrl);
-  try {
-    const health = await client.health();
-    spin.stop(`Connected to OpenGram v${health.version}`);
-  } catch (error) {
-    spin.stop(`Connection failed: ${error}`);
 
-    const retry = await prompter.confirm({
-      message: "Retry connection test?",
-      initialValue: true,
-    });
+  while (true) {
+    const spin = prompter.progress("Testing connection…");
 
-    if (retry) {
-      await testConnection(prompter, baseUrl);
-    } else {
-      await prompter.note(
-        "Continuing without a successful connection test.\n" +
-          "Make sure OpenGram is running before starting the gateway.",
-        "Warning",
-      );
+    try {
+      const health = await client.health();
+      spin.stop(`Connected to OpenGram v${health.version}`);
+      return;
+    } catch (error) {
+      spin.stop(`Connection failed: ${error}`);
+
+      const retry = await prompter.confirm({
+        message:
+          "Retry connection test? (If your instance requires a secret, you can skip and provide it in the next step.)",
+        initialValue: true,
+      });
+
+      if (!retry) {
+        await prompter.note(
+          "Continuing without a successful connection test.\n" +
+            "Make sure OpenGram is running before starting the gateway.",
+          "Warning",
+        );
+        return;
+      }
     }
   }
 }
@@ -175,8 +179,8 @@ async function promptAgents(
 async function promptDefaultModel(prompter: WizardPrompter): Promise<string> {
   return prompter.text({
     message: "Default model for OpenGram chats",
-    initialValue: "claude-sonnet-4-20250514",
-    placeholder: "claude-sonnet-4-20250514",
+    initialValue: "claude-opus-4-6",
+    placeholder: "claude-opus-4-6",
   });
 }
 
