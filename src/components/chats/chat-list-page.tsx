@@ -69,7 +69,7 @@ export function ChatListPage({
 
   return (
     <div className={cn('flex w-full flex-col bg-background', sidebarMode ? 'h-full overflow-hidden' : 'min-h-screen pb-36')}>
-      <header className="sticky top-0 z-20 h-[61px] border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-md">
+      <header className="sticky top-0 z-20 h-[61px] border-b border-border/70 bg-background/95 px-4 py-1.5 backdrop-blur-md">
         <div className="grid grid-cols-[36px_1fr_36px] items-center">
           <HamburgerMenu />
           <div className="text-center">{headerContent}</div>

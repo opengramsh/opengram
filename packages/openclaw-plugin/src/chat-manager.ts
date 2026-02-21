@@ -44,7 +44,7 @@ export async function resolveAgentForChat(chatId: string, cfg?: OpenClawConfig):
   try {
     const client = clientRef ?? getOpenGramClient();
     const chat = await client.getChat(chatId);
-    const agentId = chat.agentIds?.[0];
+    const agentId = chat.agent_ids?.[0];
     if (agentId) {
       chatAgentCache.set(chatId, agentId);
       return agentId;
