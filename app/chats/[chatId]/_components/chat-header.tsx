@@ -30,6 +30,7 @@ export function ChatHeader({
           size="icon"
           aria-label="Back"
           onClick={goBack}
+          className="md:hidden"
         >
           <ArrowLeft size={16} />
         </Button>

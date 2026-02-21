@@ -3,7 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import { PushBootstrap } from '@/src/components/push/push-bootstrap';
 import { Toaster } from '@/src/components/ui/sonner';
 
-import HomePage from '@/src/client/pages/home';
+import InboxLayout from '@/src/client/pages/inbox-layout';
 import ArchivedPage from '@/src/client/pages/archived';
 import ChatPage from '@/src/client/pages/chat';
 import NewChatPage from '@/src/client/pages/new-chat';
@@ -16,10 +16,12 @@ export function App() {
     <BrowserRouter>
       <PushBootstrap />
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route element={<InboxLayout />}>
+          <Route path="/" element={null} />
+          <Route path="/chats/:chatId" element={<ChatPage />} />
+        </Route>
         <Route path="/archived" element={<ArchivedPage />} />
         <Route path="/chats/new" element={<NewChatPage />} />
-        <Route path="/chats/:chatId" element={<ChatPage />} />
         <Route path="/manage" element={<ManagePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutPage />} />

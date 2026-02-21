@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router';
 import { Facehash } from 'facehash';
 import { Plus } from 'lucide-react';
 
+import { cn } from '@/src/lib/utils';
+
 import { ChatList } from '@/src/components/chats/chat-list';
 import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
 import type { UseChatListReturn } from '@/src/components/chats/use-chat-list';
@@ -17,6 +19,8 @@ type ChatListPageProps = {
   emptyLabel: string;
   rowActionLabel: 'Archive' | 'Unarchive';
   searchPlaceholder: string;
+  sidebarMode?: boolean;
+  activeChatId?: string;
 };
 
 export function ChatListPage({
@@ -25,6 +29,8 @@ export function ChatListPage({
   emptyLabel,
   rowActionLabel,
   searchPlaceholder,
+  sidebarMode = false,
+  activeChatId,
 }: ChatListPageProps) {
   const navigate = useNavigate();
   const {
@@ -62,7 +68,7 @@ export function ChatListPage({
   } = chatList;
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background pb-36">
+    <div className={cn('flex w-full flex-col bg-background', sidebarMode ? 'h-full overflow-hidden' : 'min-h-screen pb-36')}>
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur-md">
         <div className="grid grid-cols-[36px_1fr_36px] items-center">
           <HamburgerMenu />
@@ -153,6 +159,7 @@ export function ChatListPage({
         error={error}
         emptyLabel={emptyLabel}
         rowActionLabel={rowActionLabel}
+        activeChatId={activeChatId}
         onOpenChat={(chat) => navigate(`/chats/${chat.id}`)}
         onMarkRead={markChatRead}
         onMarkUnread={markChatUnread}
@@ -160,7 +167,7 @@ export function ChatListPage({
         onToggleArchive={toggleArchive}
       />
 
-      <div className="liquid-glass fixed inset-x-0 bottom-0 z-30 flex w-full items-center gap-3 px-4 py-3">
+      <div className={cn('liquid-glass z-30 flex w-full items-center gap-3 px-4 py-3', sidebarMode ? 'sticky bottom-0' : 'fixed inset-x-0 bottom-0')}>
         <Input
           type="search"
           value={searchInput}

@@ -8,7 +8,7 @@ export default function ChatPage() {
 
   return (
     <ChatPageProvider chatId={chatId}>
-      <div className="flex min-h-[100dvh] w-full flex-col bg-background">
+      <div className="flex h-[100dvh] w-full flex-col bg-background">
         <ChatPageSections />
       </div>
     </ChatPageProvider>

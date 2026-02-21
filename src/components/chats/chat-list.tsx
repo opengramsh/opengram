@@ -9,6 +9,7 @@ import { formatInboxTimestamp, resolveInboxSwipeEnd, shouldStartInboxSwipeDrag }
 import type { Agent, Chat } from '@/src/components/chats/types';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
+import { cn } from '@/src/lib/utils';
 
 type ContextMenuState = {
   chatId: string;
@@ -28,6 +29,7 @@ type ChatListProps = {
   onTogglePin: (chat: Chat) => Promise<void>;
   onToggleArchive: (chat: Chat) => Promise<void>;
   rowActionLabel: 'Archive' | 'Unarchive';
+  activeChatId?: string;
 };
 
 export function ChatList({
@@ -42,6 +44,7 @@ export function ChatList({
   onTogglePin,
   onToggleArchive,
   rowActionLabel,
+  activeChatId,
 }: ChatListProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
@@ -77,6 +80,7 @@ export function ChatList({
                 chat={chat}
                 agentName={agent?.name ?? 'Unknown Agent'}
                 actionLabel={rowActionLabel}
+                isActive={activeChatId === chat.id}
                 onOpen={() => onOpenChat(chat)}
                 onAction={() => {
                   void onToggleArchive(chat);
@@ -140,12 +144,13 @@ type ChatRowProps = {
   chat: Chat;
   agentName: string;
   actionLabel: 'Archive' | 'Unarchive';
+  isActive?: boolean;
   onOpen: () => void;
   onAction: () => void;
   onLongPress: (point: { x: number; y: number }) => void;
 };
 
-function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }: ChatRowProps) {
+function ChatRow({ chat, agentName, actionLabel, isActive = false, onOpen, onAction, onLongPress }: ChatRowProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartXRef = useRef(0);
@@ -305,7 +310,12 @@ function ChatRow({ chat, agentName, actionLabel, onOpen, onAction, onLongPress }
       </button>
       <button
         type="button"
-        className="relative z-10 flex w-full cursor-default items-center gap-3 rounded-2xl border border-border/80 bg-card px-3 py-3 text-left transition-transform duration-150"
+        className={cn(
+          'relative z-10 flex w-full cursor-default items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-150',
+          isActive
+            ? 'border-primary/40 bg-muted'
+            : 'border-border/80 bg-card',
+        )}
         style={{ transform: `translateX(${offsetX}px)` }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
