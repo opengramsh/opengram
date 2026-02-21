@@ -35,7 +35,11 @@ export function getConfig(): OpenClawConfig {
   return configRef;
 }
 
-export async function resolveAgentForChat(chatId: string, cfg?: OpenClawConfig): Promise<string> {
+export async function resolveAgentForChat(
+  chatId: string,
+  cfg?: OpenClawConfig,
+  log?: { info(msg: string): void; warn(msg: string): void },
+): Promise<string> {
   const cached = chatAgentCache.get(chatId);
   if (cached) {
     return cached;
@@ -45,12 +49,13 @@ export async function resolveAgentForChat(chatId: string, cfg?: OpenClawConfig):
     const client = clientRef ?? getOpenGramClient();
     const chat = await client.getChat(chatId);
     const agentId = chat.agent_ids?.[0];
+    log?.info(`[opengram] resolveAgentForChat(${chatId}): agent_ids=${JSON.stringify(chat.agent_ids)} → resolved="${agentId ?? "(none)"}"`);
     if (agentId) {
       chatAgentCache.set(chatId, agentId);
       return agentId;
     }
-  } catch {
-    // Fallback below.
+  } catch (err) {
+    log?.warn(`[opengram] resolveAgentForChat(${chatId}): getChat failed, using config fallback — ${String(err)}`);
   }
 
   const resolvedCfg = cfg ?? configRef;

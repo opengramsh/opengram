@@ -14,15 +14,22 @@ import {
   DrawerTitle,
 } from '@/src/components/ui/drawer';
 
-type Agent = { id: string; name: string; description: string };
+type Agent = { id: string; name: string; description: string; defaultModelId?: string };
 type Model = { id: string; name: string; description: string };
+
+const AGENT_DEFAULT_MODEL_ID = '__agent_default__';
+const AGENT_DEFAULT_MODEL: Model = {
+  id: AGENT_DEFAULT_MODEL_ID,
+  name: "Agent's default",
+  description: "Uses the agent's configured model",
+};
 
 export default function NewChatPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
+  const [rawModels, setRawModels] = useState<Model[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(searchParams.get('agentId') ?? '');
   const [selectedModelId, setSelectedModelId] = useState(searchParams.get('modelId') ?? '');
   const [message, setMessage] = useState('');
@@ -37,9 +44,9 @@ export default function NewChatPage() {
       try {
         const response = await fetch('/api/v1/config', { cache: 'no-store' });
         if (!response.ok) return;
-        const config = (await response.json()) as { agents: Agent[]; models: Model[]; defaultModelIdForNewChats?: string };
+        const config = (await response.json()) as { agents: Agent[]; models: Model[] };
         setAgents(config.agents ?? []);
-        setModels(config.models ?? []);
+        setRawModels(config.models ?? []);
 
         // Set defaults from URL params or fallback to first available
         const paramAgentId = searchParams.get('agentId');
@@ -52,7 +59,7 @@ export default function NewChatPage() {
         if (paramModelId && config.models.some((m: Model) => m.id === paramModelId)) {
           setSelectedModelId(paramModelId);
         } else {
-          setSelectedModelId(config.defaultModelIdForNewChats || config.models[0]?.id || '');
+          setSelectedModelId(AGENT_DEFAULT_MODEL_ID);
         }
         setConfigLoaded(true);
       } catch {
@@ -60,6 +67,11 @@ export default function NewChatPage() {
       }
     })();
   }, [searchParams]);
+
+  const models = useMemo<Model[]>(
+    () => [AGENT_DEFAULT_MODEL, ...rawModels],
+    [rawModels],
+  );
 
   const selectedAgent = useMemo(
     () => agents.find((a) => a.id === selectedAgentId),
@@ -75,6 +87,14 @@ export default function NewChatPage() {
     const content = message.trim();
     if (!content || !selectedAgentId || !selectedModelId || isCreating) return;
 
+    // Resolve "Agent's default" to the agent's configured model or the first available model
+    const resolvedModelId =
+      selectedModelId === AGENT_DEFAULT_MODEL_ID
+        ? (selectedAgent?.defaultModelId ?? rawModels[0]?.id ?? '')
+        : selectedModelId;
+
+    if (!resolvedModelId) return;
+
     setIsCreating(true);
     try {
       const response = await fetch('/api/v1/chats', {
@@ -82,7 +102,7 @@ export default function NewChatPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           agentIds: [selectedAgentId],
-          modelId: selectedModelId,
+          modelId: resolvedModelId,
           firstMessage: content,
         }),
       });
@@ -94,7 +114,7 @@ export default function NewChatPage() {
     } catch {
       setIsCreating(false);
     }
-  }, [message, selectedAgentId, selectedModelId, isCreating, navigate]);
+  }, [message, selectedAgentId, selectedModelId, selectedAgent, rawModels, isCreating, navigate]);
 
   return (
     <div className="flex h-[100dvh] w-full flex-col bg-background">

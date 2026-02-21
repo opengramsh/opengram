@@ -1,6 +1,8 @@
 'use client';
 
-import type { Chat, Model, TagSuggestion } from '@/app/chats/[chatId]/_lib/types';
+import type { Agent, Chat, Model, TagSuggestion } from '@/app/chats/[chatId]/_lib/types';
+
+const AGENT_DEFAULT_MODEL_ID = '__agent_default__';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
 import {
@@ -22,6 +24,7 @@ type ChatSettingsProps = {
   isChatSettingsOpen: boolean;
   chat: Chat | null;
   models: Model[];
+  primaryAgent?: Agent;
   customStates: string[];
   isUpdatingChatSettings: boolean;
   tagInput: string;
@@ -40,6 +43,7 @@ export function ChatSettings({
   isChatSettingsOpen,
   chat,
   models,
+  primaryAgent,
   customStates,
   isUpdatingChatSettings,
   tagInput,
@@ -57,6 +61,21 @@ export function ChatSettings({
     return null;
   }
 
+  const allModels: Model[] = [
+    { id: AGENT_DEFAULT_MODEL_ID, name: "Agent's default", description: "Uses the agent's configured model" },
+    ...models,
+  ];
+
+  function handleModelChange(value: string) {
+    const resolvedModelId =
+      value === AGENT_DEFAULT_MODEL_ID
+        ? (primaryAgent?.defaultModelId ?? models[0]?.id ?? '')
+        : value;
+    if (resolvedModelId) {
+      void patchChatSettings({ modelId: resolvedModelId });
+    }
+  }
+
   return (
     <Drawer open={isChatSettingsOpen} onOpenChange={setIsChatSettingsOpen}>
       <DrawerContent className="liquid-glass max-h-[82dvh] overflow-y-auto border-x border-t border-border px-4 pb-4 pt-3">
@@ -70,13 +89,13 @@ export function ChatSettings({
             <Select
               value={chat.model_id}
               disabled={isUpdatingChatSettings}
-              onValueChange={(value) => void patchChatSettings({ modelId: value })}
+              onValueChange={handleModelChange}
             >
               <SelectTrigger className="h-10 rounded-xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {models.map((model) => (
+                {allModels.map((model) => (
                   <SelectItem key={model.id} value={model.id}>
                     {model.name}
                   </SelectItem>

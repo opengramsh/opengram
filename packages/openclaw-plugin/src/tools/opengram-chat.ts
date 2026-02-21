@@ -19,6 +19,9 @@ export const opengramChatTool: AgentTool = {
     agentId: Type.Optional(
       Type.String({ description: "Agent ID for new chat (defaults to first configured agent)" }),
     ),
+    modelId: Type.Optional(
+      Type.String({ description: "Model ID (required if agent has no default model configured in OpenGram)" }),
+    ),
     title: Type.Optional(Type.String({ description: "Chat title" })),
     tags: Type.Optional(Type.Array(Type.String(), { description: "Chat tags" })),
     customState: Type.Optional(Type.String({ description: "Custom state JSON" })),
@@ -33,7 +36,13 @@ export const opengramChatTool: AgentTool = {
         const cfg = getConfig();
         const agentId =
           params.agentId ?? cfg.channels?.opengram?.agents?.[0] ?? "unknown";
-        const modelId = cfg.channels?.opengram?.defaultModelId ?? "unknown";
+        const modelId = params.modelId;
+        if (!modelId) {
+          return {
+            content: [{ type: "text" as const, text: "Error: modelId is required (no default model configured). Provide the modelId parameter." }],
+            details: { error: "modelId required" },
+          };
+        }
         const chat = await client.createChat({
           agentIds: [agentId],
           modelId,

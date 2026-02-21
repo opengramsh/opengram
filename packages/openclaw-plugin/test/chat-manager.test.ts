@@ -19,7 +19,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     sendChunk: vi.fn().mockResolvedValue(undefined),
     completeMessage: vi.fn().mockResolvedValue(undefined),
     cancelMessage: vi.fn().mockResolvedValue(undefined),
-    getChat: vi.fn().mockResolvedValue({ id: "chat-1", agentIds: ["grami"] } as Chat),
+    getChat: vi.fn().mockResolvedValue({ id: "chat-1", agent_ids: ["grami"] } as Chat),
     listChats: vi.fn().mockResolvedValue({ data: [], cursor: { hasMore: false } } as ListChatsResponse),
     connectSSE: vi.fn(),
     health: vi.fn().mockResolvedValue({ status: "ok", version: "1.0.0", uptime: 100 }),
@@ -103,7 +103,7 @@ describe("chat-manager", () => {
     it("fetches agent from chat and caches it", async () => {
       const chatId = uniqueChatId();
       const client = createMockClient({
-        getChat: vi.fn().mockResolvedValue({ id: chatId, agentIds: ["agent-x"] }),
+        getChat: vi.fn().mockResolvedValue({ id: chatId, agent_ids: ["agent-x"] }),
       });
       await initializeChatManager(client, baseCfg);
 
@@ -128,7 +128,7 @@ describe("chat-manager", () => {
       expect(agentId).toBe("grami");
     });
 
-    it("falls back to config agents when chat has no agentIds", async () => {
+    it("falls back to config agents when chat has no agent_ids", async () => {
       const chatId = uniqueChatId();
       const client = createMockClient({
         getChat: vi.fn().mockResolvedValue({ id: chatId }),
@@ -203,8 +203,8 @@ describe("chat-manager", () => {
       const client = createMockClient({
         getChat: vi
           .fn()
-          .mockResolvedValueOnce({ id: chatId, agentIds: ["agent-v1"] })
-          .mockResolvedValueOnce({ id: chatId, agentIds: ["agent-v2"] }),
+          .mockResolvedValueOnce({ id: chatId, agent_ids: ["agent-v1"] })
+          .mockResolvedValueOnce({ id: chatId, agent_ids: ["agent-v2"] }),
       });
       await initializeChatManager(client, baseCfg);
 

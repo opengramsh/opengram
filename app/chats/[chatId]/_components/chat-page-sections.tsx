@@ -138,6 +138,7 @@ function ChatSettingsSection() {
       isChatSettingsOpen={chat.isChatSettingsOpen}
       chat={chat.chat}
       models={chat.models}
+      primaryAgent={chat.primaryAgent}
       customStates={chat.customStates}
       isUpdatingChatSettings={chat.isUpdatingChatSettings}
       tagInput={chat.tagInput}

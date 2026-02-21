@@ -6,7 +6,6 @@ export type OpenClawConfig = {
       baseUrl?: string;
       instanceSecret?: string;
       agents?: string[];
-      defaultModelId?: string;
       reconnectDelayMs?: number;
     };
   };

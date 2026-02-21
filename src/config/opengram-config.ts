@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export type OpengramConfig = {
@@ -8,7 +8,7 @@ export type OpengramConfig = {
   titleMaxChars: number;
   defaultCustomState: string;
   customStates: string[];
-  defaultModelIdForNewChats: string;
+  defaultModelIdForNewChats?: string;
   agents: AgentConfig[];
   models: ModelConfig[];
   push: PushConfig;
@@ -72,7 +72,7 @@ const defaultConfig: OpengramConfig = {
   titleMaxChars: 48,
   defaultCustomState: "Open",
   customStates: ["Open"],
-  defaultModelIdForNewChats: "model-default",
+  defaultModelIdForNewChats: undefined,
   agents: [
     {
       id: "agent-default",
@@ -158,10 +158,6 @@ function mergeConfig(defaults: OpengramConfig, incoming: Record<string, unknown>
 }
 
 function validateConfig(config: OpengramConfig): OpengramConfig {
-  if (!config.defaultModelIdForNewChats) {
-    throw new Error("Config validation error: defaultModelIdForNewChats is required.");
-  }
-
   if (!config.models.length) {
     throw new Error("Config validation error: at least one model is required.");
   }
@@ -171,7 +167,8 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
   }
 
   const modelIds = new Set(config.models.map((model) => model.id));
-  if (!modelIds.has(config.defaultModelIdForNewChats)) {
+
+  if (config.defaultModelIdForNewChats && !modelIds.has(config.defaultModelIdForNewChats)) {
     throw new Error(
       "Config validation error: defaultModelIdForNewChats must match one configured model id.",
     );
@@ -313,6 +310,44 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
 
   configCache = { resolvedPath, mtimeMs, config };
   return config;
+}
+
+export function saveOpengramConfig(
+  updates: { agents?: AgentConfig[]; models?: ModelConfig[] },
+  configPath?: string,
+): void {
+  const resolvedPath = resolveConfigPath(configPath);
+
+  // Read current config from disk (or default) as a plain object
+  let current: Record<string, unknown> = {};
+  if (existsSync(resolvedPath)) {
+    const raw = readFileSync(resolvedPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (isRecord(parsed)) {
+      current = parsed;
+    }
+  }
+
+  // Merge updates
+  if (updates.agents !== undefined) {
+    current.agents = updates.agents;
+  }
+  if (updates.models !== undefined) {
+    current.models = updates.models;
+    // Clear the deprecated defaultModelIdForNewChats — it may now reference
+    // a model ID that no longer exists in the updated list.
+    delete current.defaultModelIdForNewChats;
+  }
+
+  // Validate by running through the full load pipeline on the merged result
+  const merged = mergeConfig(structuredClone(defaultConfig), current);
+  validateConfig(merged);
+
+  // Write back as pretty JSON
+  writeFileSync(resolvedPath, JSON.stringify(current, null, 2) + "\n", "utf8");
+
+  // Invalidate cache so next read picks up the new file
+  configCache = null;
 }
 
 export function resetConfigCacheForTests() {

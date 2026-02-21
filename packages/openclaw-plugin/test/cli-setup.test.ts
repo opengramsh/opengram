@@ -16,6 +16,10 @@ vi.mock("../src/api-client.js", () => {
   };
 });
 
+// Mock global fetch for pushToOpenGram
+const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+vi.stubGlobal("fetch", mockFetch);
+
 import { runSetupWizard, applyOpenGramConfig } from "../src/cli/setup.js";
 import { detectTailscaleUrl } from "../src/cli/tailscale.js";
 import type { OpenClawConfig, WizardPrompter } from "openclaw/plugin-sdk";
@@ -46,9 +50,15 @@ function createMinimalConfig(
 ): OpenClawConfig {
   return {
     agents: {
+      defaults: {
+        models: {
+          "anthropic/claude-sonnet-4-6": { alias: "sonnet" },
+          "anthropic/claude-opus-4-6": { alias: "opus" },
+        },
+      },
       list: [
-        { id: "agent-1", name: "Agent One" },
-        { id: "agent-2", name: "Agent Two" },
+        { id: "agent-1", name: "Agent One", model: "anthropic/claude-sonnet-4-6" },
+        { id: "agent-2", name: "Agent Two", model: "anthropic/claude-opus-4-6" },
       ],
     },
     channels: {},
@@ -56,24 +66,50 @@ function createMinimalConfig(
   } as unknown as OpenClawConfig;
 }
 
+beforeEach(() => {
+  mockFetch.mockResolvedValue({ ok: true });
+});
+
 // ---------------------------------------------------------------------------
 // Tests: applyOpenGramConfig
 // ---------------------------------------------------------------------------
 
 describe("applyOpenGramConfig", () => {
-  it("sets baseUrl, agents, defaultModelId, and enabled", () => {
+  it("sets baseUrl, agents, and enabled", () => {
     const cfg = createMinimalConfig();
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "https://gram.example.com",
       agents: ["agent-1"],
-      defaultModelId: "claude-opus-4-6",
     });
 
     const section = (result.channels as any).opengram;
     expect(section.enabled).toBe(true);
     expect(section.baseUrl).toBe("https://gram.example.com");
     expect(section.agents).toEqual(["agent-1"]);
-    expect(section.defaultModelId).toBe("claude-opus-4-6");
+  });
+
+  it("does not include defaultModelId", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: ["agent-1"],
+    });
+
+    const section = (result.channels as any).opengram;
+    expect(section.defaultModelId).toBeUndefined();
+  });
+
+  it("removes legacy defaultModelId from existing config", () => {
+    const cfg = createMinimalConfig({
+      channels: { opengram: { defaultModelId: "old-model", baseUrl: "old" } },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    const section = (result.channels as any).opengram;
+    expect(section.defaultModelId).toBeUndefined();
   });
 
   it("sets instanceSecret when provided", () => {
@@ -82,7 +118,6 @@ describe("applyOpenGramConfig", () => {
       baseUrl: "http://localhost:3000",
       instanceSecret: "my-secret",
       agents: [],
-      defaultModelId: "gpt-4",
     });
 
     const section = (result.channels as any).opengram;
@@ -96,7 +131,6 @@ describe("applyOpenGramConfig", () => {
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
-      defaultModelId: "gpt-4",
     });
 
     const section = (result.channels as any).opengram;
@@ -110,21 +144,19 @@ describe("applyOpenGramConfig", () => {
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
-      defaultModelId: "gpt-4",
     });
 
     expect((result.channels as any).discord.token).toBe("abc");
   });
 
-  it("sets plugins.entries['openclaw-plugin-opengram'].enabled to true", () => {
+  it("sets plugins.entries['opengram'].enabled to true", () => {
     const cfg = createMinimalConfig();
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
-      defaultModelId: "claude-opus-4-6",
     });
 
-    const entry = (result as any).plugins.entries["openclaw-plugin-opengram"];
+    const entry = (result as any).plugins.entries["opengram"];
     expect(entry.enabled).toBe(true);
   });
 
@@ -139,12 +171,11 @@ describe("applyOpenGramConfig", () => {
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
-      defaultModelId: "claude-opus-4-6",
     });
 
     const plugins = (result as any).plugins;
     expect(plugins.entries["some-other-plugin"]).toEqual({ enabled: true, foo: "bar" });
-    expect(plugins.entries["openclaw-plugin-opengram"].enabled).toBe(true);
+    expect(plugins.entries["opengram"].enabled).toBe(true);
   });
 
   it("preserves existing opengram fields not set by wizard", () => {
@@ -154,7 +185,6 @@ describe("applyOpenGramConfig", () => {
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
-      defaultModelId: "gpt-4",
     });
 
     const section = (result.channels as any).opengram;
@@ -175,12 +205,13 @@ describe("runSetupWizard", () => {
   it("runs through the full wizard flow and returns config", async () => {
     const prompter = createMockPrompter({
       text: vi.fn()
-        .mockResolvedValueOnce("http://localhost:3000")   // baseUrl
-        .mockResolvedValueOnce("claude-opus-4-6"),        // defaultModelId
+        .mockResolvedValueOnce("http://localhost:3000"),  // baseUrl
       confirm: vi.fn()
         .mockResolvedValueOnce(false)    // instance secret: no
         .mockResolvedValueOnce(false),   // restart: no
-      multiselect: vi.fn().mockResolvedValue(["agent-1"]),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models
+        .mockResolvedValueOnce(["agent-1"]),                      // agents
     });
 
     const cfg = createMinimalConfig();
@@ -193,7 +224,7 @@ describe("runSetupWizard", () => {
     expect(section.enabled).toBe(true);
     expect(section.baseUrl).toBe("http://localhost:3000");
     expect(section.agents).toEqual(["agent-1"]);
-    expect(section.defaultModelId).toBe("claude-opus-4-6");
+    expect(section.defaultModelId).toBeUndefined();
     expect(section.instanceSecret).toBeUndefined();
   });
 
@@ -201,12 +232,13 @@ describe("runSetupWizard", () => {
     const prompter = createMockPrompter({
       text: vi.fn()
         .mockResolvedValueOnce("http://localhost:3000")   // baseUrl
-        .mockResolvedValueOnce("s3cr3t")                  // instanceSecret
-        .mockResolvedValueOnce("claude-opus-4-6"),        // defaultModelId
+        .mockResolvedValueOnce("s3cr3t"),                  // instanceSecret
       confirm: vi.fn()
         .mockResolvedValueOnce(true)     // instance secret: yes
         .mockResolvedValueOnce(false),   // restart: no
-      multiselect: vi.fn().mockResolvedValue([]),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])  // models
+        .mockResolvedValueOnce([]), // agents
     });
 
     const cfg = createMinimalConfig();
@@ -219,12 +251,13 @@ describe("runSetupWizard", () => {
   it("returns shouldRestart true when user confirms", async () => {
     const prompter = createMockPrompter({
       text: vi.fn()
-        .mockResolvedValueOnce("http://localhost:3000")
-        .mockResolvedValueOnce("claude-opus-4-6"),
+        .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn()
         .mockResolvedValueOnce(false)    // instance secret: no
         .mockResolvedValueOnce(true),    // restart: yes
-      multiselect: vi.fn().mockResolvedValue([]),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])  // models
+        .mockResolvedValueOnce([]), // agents
     });
 
     const cfg = createMinimalConfig();
@@ -235,10 +268,11 @@ describe("runSetupWizard", () => {
   it("calls intro and outro", async () => {
     const prompter = createMockPrompter({
       text: vi.fn()
-        .mockResolvedValueOnce("http://localhost:3000")
-        .mockResolvedValueOnce("claude-opus-4-6"),
+        .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
-      multiselect: vi.fn().mockResolvedValue([]),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
     });
 
     const cfg = createMinimalConfig();
@@ -251,16 +285,13 @@ describe("runSetupWizard", () => {
   it("skips agent selection when no agents in config", async () => {
     const prompter = createMockPrompter({
       text: vi.fn()
-        .mockResolvedValueOnce("http://localhost:3000")
-        .mockResolvedValueOnce("claude-opus-4-6"),
+        .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
     });
 
     const cfg = { channels: {} } as unknown as OpenClawConfig;
     const result = await runSetupWizard(prompter, cfg);
 
-    // multiselect should NOT have been called
-    expect(prompter.multiselect).not.toHaveBeenCalled();
     // note should have been called with the "no agents" message
     expect(prompter.note).toHaveBeenCalledWith(
       expect.stringContaining("No agents found"),
@@ -271,15 +302,114 @@ describe("runSetupWizard", () => {
     expect(section.agents).toEqual([]);
   });
 
+  it("shows model selection from cfg.agents.defaults.models", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models selected
+        .mockResolvedValueOnce(["agent-1"]),                      // agents selected
+    });
+
+    const cfg = createMinimalConfig();
+    await runSetupWizard(prompter, cfg);
+
+    // First multiselect should be models
+    const firstMultiselectCall = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(firstMultiselectCall.message).toMatch(/model/i);
+    expect(firstMultiselectCall.options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "anthropic/claude-sonnet-4-6" }),
+        expect.objectContaining({ value: "anthropic/claude-opus-4-6" }),
+      ]),
+    );
+  });
+
+  it("imports agents with model from agent.model in openclaw config", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])             // no models selected
+        .mockResolvedValueOnce(["agent-1"]),   // agent-1 selected
+    });
+
+    const cfg = createMinimalConfig();
+    await runSetupWizard(prompter, cfg);
+
+    const fetchCall = mockFetch.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/v1/config/admin"),
+    );
+    expect(fetchCall).toBeDefined();
+    if (fetchCall) {
+      const body = JSON.parse(fetchCall[1].body as string);
+      expect(body.agents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "agent-1",
+            defaultModelId: "anthropic/claude-sonnet-4-6",
+          }),
+        ]),
+      );
+    }
+  });
+
+  it("calls PATCH /api/v1/config/admin with selected models", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models
+        .mockResolvedValueOnce([]),                               // no agents
+    });
+
+    const cfg = createMinimalConfig();
+    await runSetupWizard(prompter, cfg);
+
+    const fetchCall = mockFetch.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/v1/config/admin"),
+    );
+    expect(fetchCall).toBeDefined();
+    if (fetchCall) {
+      const body = JSON.parse(fetchCall[1].body as string);
+      expect(body.models).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "anthropic/claude-sonnet-4-6" }),
+        ]),
+      );
+    }
+  });
+
+  it("skips push when no models and no agents selected", async () => {
+    mockFetch.mockClear();
+
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])   // no models
+        .mockResolvedValueOnce([]),  // no agents
+    });
+
+    const cfg = createMinimalConfig();
+    await runSetupWizard(prompter, cfg);
+
+    const adminCall = mockFetch.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/v1/config/admin"),
+    );
+    expect(adminCall).toBeUndefined();
+  });
+
   it("uses Tailscale URL suggestion when available", async () => {
     vi.mocked(detectTailscaleUrl).mockReturnValue("https://myhost.tail1234.ts.net");
 
     const prompter = createMockPrompter({
       text: vi.fn()
-        .mockResolvedValueOnce("https://myhost.tail1234.ts.net")
-        .mockResolvedValueOnce("claude-opus-4-6"),
+        .mockResolvedValueOnce("https://myhost.tail1234.ts.net"),
       confirm: vi.fn().mockResolvedValue(false),
-      multiselect: vi.fn().mockResolvedValue([]),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
     });
 
     const cfg = createMinimalConfig();
@@ -296,10 +426,11 @@ describe("runSetupWizard", () => {
   it("strips trailing slash from baseUrl", async () => {
     const prompter = createMockPrompter({
       text: vi.fn()
-        .mockResolvedValueOnce("http://localhost:3000///")
-        .mockResolvedValueOnce("claude-opus-4-6"),
+        .mockResolvedValueOnce("http://localhost:3000///"),
       confirm: vi.fn().mockResolvedValue(false),
-      multiselect: vi.fn().mockResolvedValue([]),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
     });
 
     const cfg = createMinimalConfig();

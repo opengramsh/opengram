@@ -6,7 +6,6 @@ export const OpenGramConfigSchema = z.object({
   baseUrl: z.string().optional().default("http://localhost:3000").describe("OpenGram instance URL"),
   instanceSecret: z.string().optional().describe("API auth secret"),
   agents: z.array(z.string()).optional().describe("Linked agent IDs"),
-  defaultModelId: z.string().optional().describe("Default model for new chats"),
   reconnectDelayMs: z.number().optional().default(3000).describe("SSE reconnect delay (ms)"),
 });
 
@@ -35,7 +34,6 @@ export function resolveOpenGramAccount(
       baseUrl: section?.baseUrl ?? "http://localhost:3000",
       instanceSecret: process.env.OPENGRAM_INSTANCE_SECRET ?? section?.instanceSecret,
       agents: section?.agents ?? [],
-      defaultModelId: section?.defaultModelId,
       reconnectDelayMs: section?.reconnectDelayMs ?? 3000,
     },
   };

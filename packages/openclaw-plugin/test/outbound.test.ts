@@ -11,7 +11,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     sendChunk: vi.fn().mockResolvedValue(undefined),
     completeMessage: vi.fn().mockResolvedValue(undefined),
     cancelMessage: vi.fn().mockResolvedValue(undefined),
-    getChat: vi.fn().mockResolvedValue({ id: "chat-1", agentIds: ["grami"] } as Chat),
+    getChat: vi.fn().mockResolvedValue({ id: "chat-1", agent_ids: ["grami"] } as Chat),
     listChats: vi.fn().mockResolvedValue({ data: [], cursor: { hasMore: false } } as ListChatsResponse),
     connectSSE: vi.fn(),
     health: vi.fn().mockResolvedValue({ status: "ok", version: "1.0.0", uptime: 100 }),
@@ -53,7 +53,7 @@ describe("outbound", () => {
     it("resolves agent from chat when not cached", async () => {
       (client.getChat as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: "chat-new",
-        agentIds: ["agent-x"],
+        agent_ids: ["agent-x"],
       });
 
       const result = await sendText({ to: "chat-new", text: "Hi" });

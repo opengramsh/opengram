@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 
 import { toErrorResponse } from '@/src/api/http';
-import { applyReadMiddlewares } from '@/src/api/write-controls';
-import { loadOpengramConfig } from '@/src/config/opengram-config';
+import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
+import { loadOpengramConfig, saveOpengramConfig } from '@/src/config/opengram-config';
 
 const config = new Hono();
 
@@ -43,6 +43,20 @@ config.get('/', (c) => {
         maxRetries: hook.maxRetries,
       })),
     });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+});
+
+config.patch('/admin', async (c) => {
+  try {
+    applyWriteMiddlewares(c.req.raw);
+    const body = (await c.req.json()) as { agents?: unknown; models?: unknown };
+    saveOpengramConfig({
+      agents: Array.isArray(body.agents) ? body.agents : undefined,
+      models: Array.isArray(body.models) ? body.models : undefined,
+    });
+    return c.json({ ok: true });
   } catch (error) {
     return toErrorResponse(error);
   }

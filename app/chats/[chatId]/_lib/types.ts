@@ -3,6 +3,7 @@ export type Agent = {
   name: string;
   description: string;
   avatarUrl?: string;
+  defaultModelId?: string;
 };
 
 export type Model = {
