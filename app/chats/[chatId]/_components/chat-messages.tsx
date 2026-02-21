@@ -1,7 +1,4 @@
-'use client';
-
 import { type RefObject } from 'react';
-import Image from 'next/image';
 
 import { formatBytes, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
@@ -61,12 +58,11 @@ export function ChatMessages({
                         aria-label={`Open image ${item.filename || item.id}`}
                         onClick={() => setViewerMediaId(item.id)}
                       >
-                        <Image
+                        <img
                           src={`/api/v1/files/${item.id}/thumbnail`}
                           alt={item.filename || 'Image attachment'}
                           width={220}
                           height={160}
-                          unoptimized
                           className="h-28 w-full object-cover"
                         />
                       </button>

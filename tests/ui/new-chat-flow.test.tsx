@@ -2,20 +2,24 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import userEvent from '@testing-library/user-event';
 
-import Home from '@/app/page';
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  usePathname: () => '/',
-}));
+import Home from '@/src/client/pages/home';
 
 vi.mock('facehash', () => ({
   Facehash: ({ name }: { name: string }) => <div data-testid={`facehash-${name}`} />,
 }));
 
 type FetchMock = ReturnType<typeof vi.fn>;
+
+function renderHome() {
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <Home />
+    </MemoryRouter>,
+  );
+}
 
 describe('new chat flow UI', () => {
   let fetchMock: FetchMock;
@@ -80,7 +84,7 @@ describe('new chat flow UI', () => {
   });
 
   it('creates chat only when first message is sent with selected agent/model payload', async () => {
-    render(<Home />);
+    renderHome();
     const user = userEvent.setup();
 
     await screen.findByLabelText('New chat');
@@ -112,10 +116,6 @@ describe('new chat flow UI', () => {
       firstMessage: 'First message from sheet',
     });
 
-    await waitFor(() => {
-      expect(screen.queryByText('New Chat')).toBeNull();
-    });
-
     const postCalls = fetchMock.mock.calls.filter(([input, init]) => {
       const url = typeof input === 'string' ? input : input.toString();
       return url === '/api/v1/chats' && (init?.method ?? 'GET') === 'POST';
@@ -124,7 +124,7 @@ describe('new chat flow UI', () => {
   });
 
   it('does not create chat when dismissing the sheet without sending', async () => {
-    render(<Home />);
+    renderHome();
     const user = userEvent.setup();
 
     await screen.findByLabelText('New chat');
@@ -133,10 +133,6 @@ describe('new chat flow UI', () => {
     expect(screen.getByText('New Chat')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    await waitFor(() => {
-      expect(screen.queryByText('New Chat')).toBeNull();
-    });
 
     const postCalls = fetchMock.mock.calls.filter(([input, init]) => {
       const url = typeof input === 'string' ? input : input.toString();

@@ -1,7 +1,3 @@
-'use client';
-
-import Image from 'next/image';
-
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
 import { formatBytes } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaFilter, MediaItem } from '@/app/chats/[chatId]/_lib/types';
@@ -84,12 +80,11 @@ export function ChatMediaGallery({
                       aria-label={`View image ${item.filename || item.id}`}
                       onClick={() => setViewerMediaId(item.id)}
                     >
-                      <Image
+                      <img
                         src={`/api/v1/files/${item.id}/thumbnail`}
                         alt={item.filename || 'Image attachment'}
                         width={240}
                         height={240}
-                        unoptimized
                         className="h-24 w-full rounded-lg border border-border/70 object-cover"
                       />
                     </button>
@@ -160,12 +155,10 @@ export function ChatMediaGallery({
                 </div>
               </div>
               <div className="relative min-h-0 flex-1 overflow-auto rounded-2xl border border-white/20 bg-black/40">
-                <Image
+                <img
                   src={`/api/v1/files/${viewerMedia.id}`}
                   alt={viewerMedia.filename || 'Image viewer'}
-                  fill
-                  unoptimized
-                  className="object-contain"
+                  className="absolute inset-0 h-full w-full object-contain"
                 />
               </div>
             </div>

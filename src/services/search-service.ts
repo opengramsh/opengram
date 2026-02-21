@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 
 import { validationError } from '@/src/api/http';
 import { encodeSearchCursor, parseSearchPagination, type SearchCursor } from '@/src/api/pagination';
-import { createSqliteConnection } from '@/src/db/client';
+import { getDb } from '@/src/db/client';
 
 type SearchScope = 'all' | 'titles' | 'messages';
 type ResultType = 'chat' | 'message';
@@ -62,15 +62,6 @@ type SearchResult = {
 
 const SEARCH_HIGHLIGHT_OPEN = '__opengram_search_mark_open__';
 const SEARCH_HIGHLIGHT_CLOSE = '__opengram_search_mark_close__';
-
-function withDb<T>(callback: (db: Database.Database) => T): T {
-  const db = createSqliteConnection();
-  try {
-    return callback(db);
-  } finally {
-    db.close();
-  }
-}
 
 function normalizeScope(value: string | null): SearchScope {
   if (value === null || value === '') {
@@ -278,36 +269,35 @@ export function search(url: URL): SearchResult {
   const query = normalizeQuery(url.searchParams.get('q'));
   const { limit, cursor } = parseSearchPagination(url.searchParams);
 
-  return withDb((db) => {
-    const candidates: CombinedSearchRow[] = [];
+  const db = getDb();
+  const candidates: CombinedSearchRow[] = [];
 
-    if (scope === 'all' || scope === 'titles') {
-      candidates.push(...queryTitleMatches(db, query, limit, cursor));
-    }
+  if (scope === 'all' || scope === 'titles') {
+    candidates.push(...queryTitleMatches(db, query, limit, cursor));
+  }
 
-    if (scope === 'all' || scope === 'messages') {
-      candidates.push(...queryMessageMatches(db, query, limit, cursor));
-    }
+  if (scope === 'all' || scope === 'messages') {
+    candidates.push(...queryMessageMatches(db, query, limit, cursor));
+  }
 
-    candidates.sort(compareResults);
+  candidates.sort(compareResults);
 
-    const hasMore = candidates.length > limit;
-    const page = hasMore ? candidates.slice(0, limit) : candidates;
-    const last = page.at(-1);
+  const hasMore = candidates.length > limit;
+  const page = hasMore ? candidates.slice(0, limit) : candidates;
+  const last = page.at(-1);
 
-    const nextCursor = hasMore && last
-      ? encodeSearchCursor({
-          sortAt: last.sortAt,
-          resultType: last.resultType,
-          id: last.id,
-        })
-      : null;
+  const nextCursor = hasMore && last
+    ? encodeSearchCursor({
+        sortAt: last.sortAt,
+        resultType: last.resultType,
+        id: last.id,
+      })
+    : null;
 
-    return {
-      chats: page.filter((item) => item.resultType === 'chat').map((item) => item.chat),
-      messages: page.filter((item) => item.resultType === 'message').map((item) => item.message),
-      nextCursor,
-      hasMore,
-    };
-  });
+  return {
+    chats: page.filter((item) => item.resultType === 'chat').map((item) => item.chat),
+    messages: page.filter((item) => item.resultType === 'message').map((item) => item.message),
+    nextCursor,
+    hasMore,
+  };
 }

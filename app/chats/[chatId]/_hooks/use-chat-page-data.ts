@@ -1,7 +1,5 @@
-'use client';
-
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 
 import { buildInlineMessageMedia, mediaSortAsc, normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type {
@@ -28,7 +26,7 @@ type UseChatPageDataArgs = {
 };
 
 export function useChatPageData({ chatId }: UseChatPageDataArgs) {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -230,12 +228,12 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
-      router.back();
+      navigate(-1);
       return;
     }
 
-    router.push('/');
-  }, [router]);
+    navigate('/');
+  }, [navigate]);
 
   const settings = useChatSettingsActions({ chat, setChat, setError, goBack });
 

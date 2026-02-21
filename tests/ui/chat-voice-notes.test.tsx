@@ -2,25 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
-import ChatPage from '@/app/chats/[chatId]/page';
+import ChatPage from '@/src/client/pages/chat';
 import type { FrontendStreamEvent } from '@/src/lib/events-stream';
 
 const streamMock = vi.hoisted(() => ({
   listener: null as ((event: FrontendStreamEvent) => void) | null,
   unsubscribe: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
-  useParams: () => ({ chatId: 'chat-1' }),
-}));
-
-vi.mock('next/image', () => ({
-  default: ({ src, alt, unoptimized: _unoptimized, fill: _fill, ...rest }: { src: string; alt: string }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} {...rest} />
-  ),
 }));
 
 vi.mock('facehash', () => ({
@@ -35,6 +24,16 @@ vi.mock('@/src/lib/events-stream', () => ({
 }));
 
 type FetchMock = ReturnType<typeof vi.fn>;
+
+function renderChatPage() {
+  return render(
+    <MemoryRouter initialEntries={['/chats/chat-1']}>
+      <Routes>
+        <Route path="/chats/:chatId" element={<ChatPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 type MockTrack = { stop: ReturnType<typeof vi.fn> };
 
@@ -188,7 +187,7 @@ describe('chat voice notes', () => {
   });
 
   it('records then uploads voice note and creates media-referenced user message', async () => {
-    render(<ChatPage />);
+    renderChatPage();
 
     await screen.findByText('Chat 1');
 
@@ -221,7 +220,7 @@ describe('chat voice notes', () => {
   });
 
   it('uploads voice notes even when recording is stopped before one second', async () => {
-    render(<ChatPage />);
+    renderChatPage();
     await screen.findByText('Chat 1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
@@ -237,7 +236,7 @@ describe('chat voice notes', () => {
   it('deletes uploaded media if voice message creation fails', async () => {
     messageCreateStatus = 500;
 
-    render(<ChatPage />);
+    renderChatPage();
     await screen.findByText('Chat 1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
@@ -254,7 +253,7 @@ describe('chat voice notes', () => {
   });
 
   it('supports inline audio playback controls and seek', async () => {
-    render(<ChatPage />);
+    renderChatPage();
     await screen.findByText('Chat 1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
@@ -326,7 +325,7 @@ describe('chat voice notes', () => {
       },
     });
 
-    render(<ChatPage />);
+    renderChatPage();
     await screen.findByText('Chat 1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));

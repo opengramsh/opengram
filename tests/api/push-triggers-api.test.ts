@@ -5,45 +5,24 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sendNotificationMock, setVapidDetailsMock } = vi.hoisted(() => ({
-  sendNotificationMock: vi.fn(),
-  setVapidDetailsMock: vi.fn(),
+const { sendWebPushNotificationMock } = vi.hoisted(() => ({
+  sendWebPushNotificationMock: vi.fn(),
 }));
 
-vi.mock('web-push', () => ({
-  default: {
-    sendNotification: sendNotificationMock,
-    setVapidDetails: setVapidDetailsMock,
-  },
+vi.mock('@/src/services/push-crypto', () => ({
+  sendWebPushNotification: sendWebPushNotificationMock,
 }));
 
-import { POST as chatsPost } from '@/app/api/v1/chats/route';
-import { POST as messagesPost } from '@/app/api/v1/chats/[chatId]/messages/route';
-import { POST as chatRequestsPost } from '@/app/api/v1/chats/[chatId]/requests/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 import { resetPushServiceForTests } from '@/src/services/push-service';
 
-type ChatContext = {
-  params: Promise<{ chatId: string }>;
-};
-
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-
-function chatContext(chatId: string): ChatContext {
-  return { params: Promise.resolve({ chatId }) };
-}
-
-function createJsonRequest(url: string, method: string, body?: unknown) {
-  return new Request(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
 
 function writePushEnabledConfig(agentName = 'Agent Default') {
   const tempDir = mkdtempSync(join(tmpdir(), 'opengram-push-trigger-config-'));
@@ -85,13 +64,15 @@ function writePushEnabledConfig(agentName = 'Agent Default') {
 }
 
 async function createChat() {
-  const response = await chatsPost(
-    createJsonRequest('http://localhost/api/v1/chats', 'POST', {
+  const response = await app.request('/api/v1/chats', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
       title: 'push trigger chat',
       agentIds: ['agent-default'],
       modelId: 'model-default',
     }),
-  );
+  });
   return response.json() as Promise<{ id: string }>;
 }
 
@@ -103,6 +84,7 @@ beforeEach(() => {
 
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
 
   db.prepare(
     [
@@ -111,20 +93,19 @@ beforeEach(() => {
     ].join(' '),
   ).run('111111111111111111111', 'https://example.com/sub/live', 'k1', 'a1', null, Date.now());
 
-  sendNotificationMock.mockReset();
-  sendNotificationMock.mockResolvedValue(undefined);
-  setVapidDetailsMock.mockReset();
+  sendWebPushNotificationMock.mockReset();
+  sendWebPushNotificationMock.mockResolvedValue({ statusCode: 201 });
   consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   resetPushServiceForTests();
   resetWriteRateLimitForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   delete process.env.OPENGRAM_CONFIG_PATH;
-  sendNotificationMock.mockReset();
-  setVapidDetailsMock.mockReset();
+  sendWebPushNotificationMock.mockReset();
   consoleErrorSpy.mockRestore();
   resetPushServiceForTests();
   resetWriteRateLimitForTests();
@@ -134,20 +115,21 @@ describe('push triggers', () => {
   it('sends push for agent messages only', async () => {
     const chat = await createChat();
 
-    const response = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/messages`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chat.id + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         content: 'Agent says hello from push path',
       }),
-      chatContext(chat.id),
-    );
+    });
     expect(response.status).toBe(201);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(sendNotificationMock).toHaveBeenCalledTimes(1);
-    const payload = JSON.parse(String(sendNotificationMock.mock.calls[0][1])) as {
+    expect(sendWebPushNotificationMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(sendWebPushNotificationMock.mock.calls[0][1])) as {
       title: string;
       body: string;
       data: {
@@ -167,28 +149,31 @@ describe('push triggers', () => {
     });
     expect(payload.body).toContain('Agent says hello');
 
-    sendNotificationMock.mockClear();
+    sendWebPushNotificationMock.mockClear();
 
-    const userMessageResponse = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/messages`, 'POST', {
+    const userMessageResponse = await app.request('/api/v1/chats/' + chat.id + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'user',
         senderId: 'user:primary',
         content: 'User message should not push',
       }),
-      chatContext(chat.id),
-    );
+    });
     expect(userMessageResponse.status).toBe(201);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(sendWebPushNotificationMock).not.toHaveBeenCalled();
   });
 
   it('sends push for request.created events', async () => {
     const chat = await createChat();
 
-    const response = await chatRequestsPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/requests`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chat.id + '/requests', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         type: 'choice',
         title: 'Approve deployment?',
         config: {
@@ -200,15 +185,14 @@ describe('push triggers', () => {
           maxSelections: 1,
         },
       }),
-      chatContext(chat.id),
-    );
+    });
 
     expect(response.status).toBe(201);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(sendNotificationMock).toHaveBeenCalledTimes(1);
-    const payload = JSON.parse(String(sendNotificationMock.mock.calls[0][1])) as {
+    expect(sendWebPushNotificationMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(sendWebPushNotificationMock.mock.calls[0][1])) as {
       title: string;
       body: string;
       data: {
@@ -234,14 +218,15 @@ describe('push triggers', () => {
     resetPushServiceForTests();
     const chat = await createChat();
 
-    const response = await messagesPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/messages`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chat.id + '/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         role: 'agent',
         senderId: 'agent-default',
         content: 'Agent message that fails push',
       }),
-      chatContext(chat.id),
-    );
+    });
     expect(response.status).toBe(201);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -250,7 +235,7 @@ describe('push triggers', () => {
       'Failed to send message.created push notification.',
       expect.any(Error),
     );
-    expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(sendWebPushNotificationMock).not.toHaveBeenCalled();
   });
 
   it('contains push failures for request-created notifications', async () => {
@@ -258,8 +243,10 @@ describe('push triggers', () => {
     resetPushServiceForTests();
     const chat = await createChat();
 
-    const response = await chatRequestsPost(
-      createJsonRequest(`http://localhost/api/v1/chats/${chat.id}/requests`, 'POST', {
+    const response = await app.request('/api/v1/chats/' + chat.id + '/requests', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         type: 'choice',
         title: 'Request that fails push',
         config: {
@@ -271,8 +258,7 @@ describe('push triggers', () => {
           maxSelections: 1,
         },
       }),
-      chatContext(chat.id),
-    );
+    });
     expect(response.status).toBe(201);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -281,6 +267,6 @@ describe('push triggers', () => {
       'Failed to send request.created push notification.',
       expect.any(Error),
     );
-    expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(sendWebPushNotificationMock).not.toHaveBeenCalled();
   });
 });

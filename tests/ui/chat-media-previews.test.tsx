@@ -2,25 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
-import ChatPage from '@/app/chats/[chatId]/page';
+import ChatPage from '@/src/client/pages/chat';
 import type { FrontendStreamEvent } from '@/src/lib/events-stream';
 
 const streamMock = vi.hoisted(() => ({
   listener: null as ((event: FrontendStreamEvent) => void) | null,
   unsubscribe: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
-  useParams: () => ({ chatId: 'chat-1' }),
-}));
-
-vi.mock('next/image', () => ({
-  default: ({ src, alt, unoptimized: _unoptimized, fill: _fill, ...rest }: { src: string; alt: string }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} {...rest} />
-  ),
 }));
 
 vi.mock('facehash', () => ({
@@ -35,6 +24,16 @@ vi.mock('@/src/lib/events-stream', () => ({
 }));
 
 type FetchMock = ReturnType<typeof vi.fn>;
+
+function renderChatPage() {
+  return render(
+    <MemoryRouter initialEntries={['/chats/chat-1']}>
+      <Routes>
+        <Route path="/chats/:chatId" element={<ChatPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 describe('chat media previews', () => {
   let fetchMock: FetchMock;
@@ -143,7 +142,7 @@ describe('chat media previews', () => {
   });
 
   it('renders inline image/file/audio previews and opens full image viewer', async () => {
-    const { container } = render(<ChatPage />);
+    const { container } = renderChatPage();
 
     await screen.findByText('Chat 1');
     await screen.findByText('Media message');
@@ -161,7 +160,7 @@ describe('chat media previews', () => {
   });
 
   it('applies gallery filters and supports image view + file download links', async () => {
-    render(<ChatPage />);
+    renderChatPage();
 
     await screen.findByText('Chat 1');
 
@@ -192,7 +191,7 @@ describe('chat media previews', () => {
     const downloadLink = within(viewer).getByRole('link', { name: 'Download image-1.png' });
     expect(downloadLink.getAttribute('href')).toBe('/api/v1/files/img-1');
 
-    const reportDownloads = within(gallery).getAllByRole('link', { name: 'Download report.pdf' });
+    const reportDownloads = within(gallery).getAllByRole('link', { name: 'Download report.pdf', hidden: true });
     expect(reportDownloads.some((link) => link.getAttribute('href') === '/api/v1/files/file-1')).toBe(true);
     expect(reportDownloads.some((link) => link.hasAttribute('download'))).toBe(true);
   });

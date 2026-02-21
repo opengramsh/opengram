@@ -2,20 +2,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import userEvent from '@testing-library/user-event';
 
-import Home from '@/app/page';
+import Home from '@/src/client/pages/home';
 import type { Chat } from '@/src/components/chats/types';
 import type { FrontendStreamEvent } from '@/src/lib/events-stream';
 
 const streamMock = vi.hoisted(() => ({
   listener: null as ((event: FrontendStreamEvent) => void) | null,
   unsubscribe: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  usePathname: () => '/',
 }));
 
 vi.mock('facehash', () => ({
@@ -32,6 +28,14 @@ vi.mock('@/src/lib/events-stream', () => ({
 type FetchMock = ReturnType<typeof vi.fn>;
 
 let eventId = 0;
+
+function renderHome() {
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <Home />
+    </MemoryRouter>,
+  );
+}
 
 async function emitEvent(type: FrontendStreamEvent['type'], payload: Record<string, unknown>) {
   await act(async () => {
@@ -142,7 +146,7 @@ describe('inbox event subscriptions', () => {
       return new Response('not found', { status: 404 });
     });
 
-    render(<Home />);
+    renderHome();
     await screen.findByText('All states');
 
     const pendingSummaryCallCount = () =>
@@ -217,7 +221,7 @@ describe('inbox event subscriptions', () => {
       return new Response('not found', { status: 404 });
     });
 
-    render(<Home />);
+    renderHome();
     const user = userEvent.setup();
 
     await screen.findByText('All states');
@@ -303,7 +307,7 @@ describe('inbox event subscriptions', () => {
       return new Response('not found', { status: 404 });
     });
 
-    render(<Home />);
+    renderHome();
 
     await screen.findByText('Live chat');
 

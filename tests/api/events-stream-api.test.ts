@@ -5,11 +5,12 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { GET as eventsStreamGet } from '@/app/api/v1/events/stream/route';
+import { app } from '@/src/server';
+import { closeDb, resetDbForTests } from '@/src/db/client';
 import { emitEvent, getEventSubscriberCountForTests, resetEventSubscribersForTests } from '@/src/services/events-service';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 let previousConfigPath: string | undefined;
@@ -84,10 +85,12 @@ beforeEach(() => {
   process.env.DATABASE_URL = dbPath;
   db = new Database(dbPath);
   db.exec(migrationSql);
+  resetDbForTests();
   resetEventSubscribersForTests();
 });
 
 afterEach(() => {
+  closeDb();
   db.close();
   delete process.env.DATABASE_URL;
   resetEventSubscribersForTests();
@@ -104,7 +107,7 @@ describe('events stream API', () => {
     insertPersistedEvent('222222222222222222222', 'chat.updated', 2000);
 
     const abort = new AbortController();
-    const response = await eventsStreamGet(
+    const response = await app.request(
       new Request('http://localhost/api/v1/events/stream?ephemeral=true', { signal: abort.signal }),
     );
 
@@ -129,7 +132,7 @@ describe('events stream API', () => {
     insertPersistedEvent('333333333333333333333', 'message.created', 3000);
 
     const abort = new AbortController();
-    const response = await eventsStreamGet(
+    const response = await app.request(
       new Request('http://localhost/api/v1/events/stream?cursor=111111111111111111111&ephemeral=true', { signal: abort.signal }),
     );
 
@@ -157,10 +160,10 @@ describe('events stream API', () => {
     const trueAbort = new AbortController();
     const falseAbort = new AbortController();
 
-    const ephemeralTrueResponse = await eventsStreamGet(
+    const ephemeralTrueResponse = await app.request(
       new Request('http://localhost/api/v1/events/stream?ephemeral=true', { signal: trueAbort.signal }),
     );
-    const ephemeralFalseResponse = await eventsStreamGet(
+    const ephemeralFalseResponse = await app.request(
       new Request('http://localhost/api/v1/events/stream?ephemeral=false', { signal: falseAbort.signal }),
     );
 
@@ -196,7 +199,7 @@ describe('events stream API', () => {
   });
 
   it('returns validation error when cursor does not exist', async () => {
-    const response = await eventsStreamGet(
+    const response = await app.request(
       new Request('http://localhost/api/v1/events/stream?cursor=missing-cursor-id'),
     );
 
@@ -215,7 +218,7 @@ describe('events stream API', () => {
   it('enforces stream auth when instance secret is enabled', async () => {
     setInstanceSecretConfig('stream-secret');
 
-    const unauthorized = await eventsStreamGet(
+    const unauthorized = await app.request(
       new Request('http://localhost/api/v1/events/stream?ephemeral=true'),
     );
     expect(unauthorized.status).toBe(401);
@@ -228,7 +231,7 @@ describe('events stream API', () => {
     });
 
     const abort = new AbortController();
-    const authorized = await eventsStreamGet(
+    const authorized = await app.request(
       new Request('http://localhost/api/v1/events/stream?ephemeral=true', {
         signal: abort.signal,
         headers: {
@@ -247,7 +250,7 @@ describe('events stream API', () => {
     const abort = new AbortController();
     abort.abort();
 
-    const response = await eventsStreamGet(
+    const response = await app.request(
       new Request('http://localhost/api/v1/events/stream?ephemeral=true', {
         signal: abort.signal,
       }),
@@ -255,5 +258,49 @@ describe('events stream API', () => {
 
     expect(response.status).toBe(200);
     expect(getEventSubscriberCountForTests()).toBe(0);
+  });
+
+  it('returns SSE-specific response headers', async () => {
+    const abort = new AbortController();
+    const response = await app.request(
+      new Request('http://localhost/api/v1/events/stream?ephemeral=true', { signal: abort.signal }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('text/event-stream');
+    expect(response.headers.get('Cache-Control')).toBe('no-cache, no-transform');
+    expect(response.headers.get('Connection')).toBe('keep-alive');
+    expect(response.headers.get('X-Accel-Buffering')).toBe('no');
+
+    abort.abort();
+    await response.body?.cancel();
+  });
+
+  it('does not apply compression to SSE stream responses', async () => {
+    const abort = new AbortController();
+    const response = await app.request(
+      new Request('http://localhost/api/v1/events/stream?ephemeral=true', {
+        signal: abort.signal,
+        headers: {
+          'accept-encoding': 'gzip',
+        },
+      }),
+    );
+
+    emitEvent(
+      'chat.updated',
+      { chatId: 'chat-1', note: 'x'.repeat(5000) },
+      { id: '777777777777777777777', timestampMs: 7000 },
+    );
+
+    const output = await readSseOutput(
+      response,
+      abort,
+      (value) => value.includes('id: 777777777777777777777'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Encoding')).toBeNull();
+    expect(output).toContain('id: 777777777777777777777');
   });
 });

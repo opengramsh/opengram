@@ -36,7 +36,7 @@ vi.mock('@/src/components/navigation/hamburger-menu', () => ({
   HamburgerMenu: () => <button type="button" aria-label="menu" />,
 }));
 
-import SettingsPage from '@/app/settings/page';
+import SettingsPage from '@/src/client/pages/settings';
 
 describe('settings push notifications', () => {
   beforeEach(() => {

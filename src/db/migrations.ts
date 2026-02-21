@@ -1,13 +1,7 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
-
-type MigrationEntry = {
-  idx: number;
-  tag: string;
-  when: number;
-};
 
 const ensuredDbPaths = new Set<string>();
 
@@ -16,24 +10,7 @@ function resolveMigrationsDir() {
     return path.resolve(process.env.OPENGRAM_MIGRATIONS_DIR);
   }
 
-  return path.resolve(process.cwd(), 'drizzle');
-}
-
-function getMigrationEntries(journalPath: string) {
-  const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries?: unknown };
-  const entries = Array.isArray(journal.entries) ? journal.entries : [];
-
-  return entries
-    .filter(
-      (entry): entry is MigrationEntry => (
-        typeof entry === 'object'
-        && entry !== null
-        && typeof (entry as { idx?: unknown }).idx === 'number'
-        && typeof (entry as { tag?: unknown }).tag === 'string'
-        && typeof (entry as { when?: unknown }).when === 'number'
-      ),
-    )
-    .sort((left, right) => left.idx - right.idx);
+  return path.resolve(process.cwd(), 'migrations');
 }
 
 function tableExists(db: Database.Database, tableName: string) {
@@ -43,55 +20,85 @@ function tableExists(db: Database.Database, tableName: string) {
   return Boolean(row);
 }
 
-function getDrizzleCreatedAtColumn(db: Database.Database) {
-  const columns = db.prepare('PRAGMA table_info(__drizzle_migrations)').all() as Array<{ name: string }>;
-  const knownColumn = columns.find((column) => column.name === 'created_at' || column.name === 'createdAt');
-  return knownColumn?.name ?? null;
+function listMigrationFiles(migrationsDir: string) {
+  if (!existsSync(migrationsDir)) {
+    return [];
+  }
+
+  return readdirSync(migrationsDir)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
 }
 
-function getAppliedTags(db: Database.Database, entries: MigrationEntry[]) {
-  const appliedTags = new Set<string>();
+function resolveMigrationTrackingColumn(db: Database.Database) {
+  const columns = db.prepare('PRAGMA table_info(__opengram_migrations)').all() as Array<{ name: string }>;
+  const columnNames = new Set(columns.map((column) => column.name));
+  if (columnNames.has('name')) {
+    return 'name';
+  }
 
-  const trackedRows = db.prepare('SELECT tag FROM __opengram_migrations').all() as Array<{ tag: string }>;
-  for (const row of trackedRows) {
-    if (typeof row.tag === 'string') {
-      appliedTags.add(row.tag);
+  if (columnNames.has('tag')) {
+    return 'tag';
+  }
+
+  if (columnNames.has('hash')) {
+    return 'hash';
+  }
+
+  return null;
+}
+
+function getAppliedNames(db: Database.Database, migrationFiles: string[], trackingColumn: string | null) {
+  const appliedNames = new Set<string>();
+
+  if (trackingColumn) {
+    const trackedRows = db
+      .prepare(`SELECT "${trackingColumn}" AS name FROM __opengram_migrations`)
+      .all() as Array<{ name: string }>;
+    for (const row of trackedRows) {
+      if (typeof row.name === 'string') {
+        appliedNames.add(row.name);
+      }
     }
   }
 
   if (tableExists(db, '__drizzle_migrations')) {
-    const drizzleCreatedAtColumn = getDrizzleCreatedAtColumn(db);
-    if (drizzleCreatedAtColumn) {
-      const drizzleRows = db
-        .prepare(`SELECT "${drizzleCreatedAtColumn}" AS created_at FROM __drizzle_migrations`)
-        .all() as Array<{ created_at: number }>;
-      const tagByWhen = new Map(entries.map((entry) => [Number(entry.when), entry.tag]));
-      for (const row of drizzleRows) {
-        const tag = tagByWhen.get(Number(row.created_at));
-        if (tag) {
-          appliedTags.add(tag);
+    const columns = db.prepare('PRAGMA table_info(__drizzle_migrations)').all() as Array<{ name: string }>;
+    const legacyNameColumn = columns.find((column) => column.name === 'hash' || column.name === 'tag');
+    if (legacyNameColumn) {
+      const legacyRows = db
+        .prepare(`SELECT "${legacyNameColumn.name}" AS name FROM __drizzle_migrations`)
+        .all() as Array<{ name: string | null }>;
+      const knownFiles = new Set(migrationFiles);
+      for (const row of legacyRows) {
+        if (typeof row.name !== 'string' || !row.name) {
+          continue;
+        }
+
+        const directMatch = row.name;
+        const sqlMatch = `${row.name}.sql`;
+
+        if (knownFiles.has(directMatch)) {
+          appliedNames.add(directMatch);
+        } else if (knownFiles.has(sqlMatch)) {
+          appliedNames.add(sqlMatch);
         }
       }
     }
   }
 
-  if (appliedTags.size === 0 && entries[0] && tableExists(db, 'chats')) {
-    // Legacy/test databases may have schema applied without migration bookkeeping.
-    appliedTags.add(entries[0].tag);
+  if (migrationFiles[0] && tableExists(db, 'chats')) {
+    // Existing databases with baseline schema should never replay initial migration.
+    appliedNames.add(migrationFiles[0]);
   }
 
-  return appliedTags;
+  return appliedNames;
 }
 
 function applyMigrations(dbPath: string) {
   const migrationsDir = resolveMigrationsDir();
-  const journalPath = path.join(migrationsDir, 'meta', '_journal.json');
-  if (!existsSync(journalPath)) {
-    return;
-  }
-
-  const entries = getMigrationEntries(journalPath);
-  if (!entries.length) {
+  const migrationFiles = listMigrationFiles(migrationsDir);
+  if (!migrationFiles.length) {
     return;
   }
 
@@ -101,32 +108,33 @@ function applyMigrations(dbPath: string) {
     db.pragma('journal_mode = WAL');
     db.exec(`
       CREATE TABLE IF NOT EXISTS __opengram_migrations (
-        tag TEXT PRIMARY KEY,
+        name TEXT PRIMARY KEY,
         applied_at INTEGER NOT NULL
       )
     `);
 
-    const appliedTags = getAppliedTags(db, entries);
-    for (const entry of entries) {
-      if (appliedTags.has(entry.tag)) {
+    const trackingColumn = resolveMigrationTrackingColumn(db);
+    if (!trackingColumn) {
+      throw new Error('Unable to resolve migration tracking column for __opengram_migrations');
+    }
+
+    const appliedNames = getAppliedNames(db, migrationFiles, trackingColumn);
+    for (const fileName of migrationFiles) {
+      if (appliedNames.has(fileName)) {
         continue;
       }
 
-      const migrationPath = path.join(migrationsDir, `${entry.tag}.sql`);
-      if (!existsSync(migrationPath)) {
-        throw new Error(`Migration file not found: ${migrationPath}`);
-      }
-
+      const migrationPath = path.join(migrationsDir, fileName);
       const migrationSql = readFileSync(migrationPath, 'utf8');
       const applyMigration = db.transaction(() => {
         db.exec(migrationSql);
-        db.prepare('INSERT INTO __opengram_migrations (tag, applied_at) VALUES (?, ?)').run(
-          entry.tag,
+        db.prepare(`INSERT INTO __opengram_migrations ("${trackingColumn}", applied_at) VALUES (?, ?)`).run(
+          fileName,
           Date.now(),
         );
       });
       applyMigration();
-      appliedTags.add(entry.tag);
+      appliedNames.add(fileName);
     }
   } finally {
     db.close();

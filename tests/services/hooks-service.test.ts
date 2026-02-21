@@ -6,18 +6,21 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { closeDb, resetDbForTests } from '@/src/db/client';
+import { resetSqliteReadyForTests } from '@/src/db/migrations';
 import { resetEventSubscribersForTests } from '@/src/services/events-service';
 import {
   buildEnrichedPayloadForTests,
   matchesHookForTests,
   processEventForTests,
+  resetHooksServiceForTests,
   runRetentionCleanup,
   signPayload,
 } from '@/src/services/hooks-service';
 import type { EventEnvelope } from '@/src/services/events-service';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
-const migrationSql = readFileSync(join(repoRoot, 'drizzle', '0000_initial.sql'), 'utf8');
+const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 let db: Database.Database;
 let configPath: string;
@@ -100,11 +103,19 @@ beforeEach(() => {
   db.pragma('foreign_keys = ON');
   db.exec(migrationSql);
 
+  closeDb();
+  resetDbForTests();
+  resetSqliteReadyForTests();
+  resetHooksServiceForTests();
   resetEventSubscribersForTests();
   writeConfig([]);
 });
 
 afterEach(() => {
+  closeDb();
+  resetDbForTests();
+  resetSqliteReadyForTests();
+  resetHooksServiceForTests();
   db.close();
   rmSync(tempDir, { recursive: true });
   delete process.env.DATABASE_URL;

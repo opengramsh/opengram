@@ -4,18 +4,7 @@ const path = require("node:path");
 const Database = require("better-sqlite3");
 
 const DEFAULT_DB_PATH = "/opt/opengram/data/opengram.db";
-const DEFAULT_MIGRATIONS_DIR = "/opt/opengram/web/drizzle";
-
-function getMigrationEntries(journalPath) {
-  const journal = JSON.parse(fs.readFileSync(journalPath, "utf8"));
-  if (!Array.isArray(journal.entries)) {
-    throw new Error(`Invalid migration journal: ${journalPath}`);
-  }
-
-  return journal.entries
-    .filter((entry) => typeof entry.tag === "string" && typeof entry.idx === "number")
-    .sort((a, b) => a.idx - b.idx);
-}
+const DEFAULT_MIGRATIONS_DIR = "/opt/opengram/web/migrations";
 
 function tableExists(db, tableName) {
   const row = db
@@ -24,70 +13,98 @@ function tableExists(db, tableName) {
   return Boolean(row);
 }
 
-function getDrizzleCreatedAtColumn(db) {
-  const columns = db.prepare("PRAGMA table_info(__drizzle_migrations)").all();
-  const knownColumn = columns.find(
-    (column) => column.name === "created_at" || column.name === "createdAt",
-  );
-  return knownColumn ? knownColumn.name : null;
+function listMigrationFiles(migrationsDir) {
+  if (!fs.existsSync(migrationsDir)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(migrationsDir)
+    .filter((entry) => entry.endsWith(".sql"))
+    .sort();
 }
 
-function getAppliedTags(db, entries) {
-  const appliedTags = new Set();
+function resolveMigrationTrackingColumn(db) {
+  const columns = db.prepare("PRAGMA table_info(__opengram_migrations)").all();
+  const columnNames = new Set(columns.map((column) => column.name));
+  if (columnNames.has("name")) {
+    return "name";
+  }
 
-  const opengramRows = db.prepare("SELECT tag FROM __opengram_migrations").all();
-  for (const row of opengramRows) {
-    if (typeof row.tag === "string") {
-      appliedTags.add(row.tag);
+  if (columnNames.has("tag")) {
+    return "tag";
+  }
+
+  if (columnNames.has("hash")) {
+    return "hash";
+  }
+
+  return null;
+}
+
+function getAppliedNames(db, migrationFiles, trackingColumn) {
+  const appliedNames = new Set();
+  const knownFiles = new Set(migrationFiles);
+
+  if (trackingColumn) {
+    const trackedRows = db
+      .prepare(`SELECT "${trackingColumn}" AS name FROM __opengram_migrations`)
+      .all();
+    for (const row of trackedRows) {
+      if (typeof row.name === "string") {
+        appliedNames.add(row.name);
+      }
     }
   }
 
   if (!tableExists(db, "__drizzle_migrations")) {
-    return appliedTags;
-  }
-
-  const drizzleCreatedAtColumn = getDrizzleCreatedAtColumn(db);
-  if (!drizzleCreatedAtColumn) {
-    console.log(
-      "[opengram-docker] __drizzle_migrations exists but has no created_at column; skipping drizzle reconciliation.",
-    );
-    return appliedTags;
-  }
-
-  const drizzleRows = db
-    .prepare(`SELECT "${drizzleCreatedAtColumn}" AS created_at FROM __drizzle_migrations`)
-    .all();
-  const tagByWhen = new Map(entries.map((entry) => [Number(entry.when), entry.tag]));
-  for (const row of drizzleRows) {
-    const numericCreatedAt = Number(row.created_at);
-    if (!Number.isFinite(numericCreatedAt)) {
-      continue;
+    // Existing databases with baseline schema should never replay initial migration.
+    if (migrationFiles[0] && tableExists(db, "chats")) {
+      appliedNames.add(migrationFiles[0]);
     }
-
-    const tag = tagByWhen.get(numericCreatedAt);
-    if (tag) {
-      appliedTags.add(tag);
-      continue;
-    }
-
-    console.log(
-      `[opengram-docker] Could not reconcile __drizzle_migrations created_at=${numericCreatedAt} to a journal entry.`,
-    );
+    return appliedNames;
   }
 
-  return appliedTags;
+  const columns = db.prepare("PRAGMA table_info(__drizzle_migrations)").all();
+  const legacyNameColumn = columns.find((column) => column.name === "hash" || column.name === "tag");
+  if (legacyNameColumn) {
+    const legacyRows = db
+      .prepare(`SELECT "${legacyNameColumn.name}" AS name FROM __drizzle_migrations`)
+      .all();
+    for (const row of legacyRows) {
+      if (typeof row.name !== "string" || !row.name) {
+        continue;
+      }
+
+      const directMatch = row.name;
+      const sqlMatch = `${row.name}.sql`;
+
+      if (knownFiles.has(directMatch)) {
+        appliedNames.add(directMatch);
+      } else if (knownFiles.has(sqlMatch)) {
+        appliedNames.add(sqlMatch);
+      }
+    }
+  }
+
+  // Existing databases with baseline schema should never replay initial migration.
+  if (migrationFiles[0] && tableExists(db, "chats")) {
+    appliedNames.add(migrationFiles[0]);
+  }
+
+  return appliedNames;
 }
 
 function main() {
   const dbPath = process.env.DATABASE_URL || DEFAULT_DB_PATH;
   const migrationsDir = process.env.OPENGRAM_MIGRATIONS_DIR || DEFAULT_MIGRATIONS_DIR;
-  const journalPath = path.join(migrationsDir, "meta", "_journal.json");
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   fs.mkdirSync(path.join(path.dirname(dbPath), "uploads"), { recursive: true });
 
-  if (!fs.existsSync(journalPath)) {
-    throw new Error(`Migration journal not found: ${journalPath}`);
+  const migrationFiles = listMigrationFiles(migrationsDir);
+  if (!migrationFiles.length) {
+    throw new Error(`No SQL migrations found in: ${migrationsDir}`);
   }
 
   const db = new Database(dbPath);
@@ -96,35 +113,35 @@ function main() {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS __opengram_migrations (
-      tag TEXT PRIMARY KEY,
+      name TEXT PRIMARY KEY,
       applied_at INTEGER NOT NULL
     )
   `);
 
-  const entries = getMigrationEntries(journalPath);
-  const appliedTags = getAppliedTags(db, entries);
-  for (const entry of entries) {
-    if (appliedTags.has(entry.tag)) {
+  const trackingColumn = resolveMigrationTrackingColumn(db);
+  if (!trackingColumn) {
+    throw new Error("Unable to resolve migration tracking column for __opengram_migrations");
+  }
+
+  const appliedNames = getAppliedNames(db, migrationFiles, trackingColumn);
+  for (const fileName of migrationFiles) {
+    if (appliedNames.has(fileName)) {
       continue;
     }
 
-    const migrationPath = path.join(migrationsDir, `${entry.tag}.sql`);
-    if (!fs.existsSync(migrationPath)) {
-      throw new Error(`Migration file not found: ${migrationPath}`);
-    }
-
+    const migrationPath = path.join(migrationsDir, fileName);
     const migrationSql = fs.readFileSync(migrationPath, "utf8");
     const applyMigration = db.transaction(() => {
       db.exec(migrationSql);
-      db.prepare("INSERT INTO __opengram_migrations (tag, applied_at) VALUES (?, ?)").run(
-        entry.tag,
+      db.prepare(`INSERT INTO __opengram_migrations ("${trackingColumn}", applied_at) VALUES (?, ?)`).run(
+        fileName,
         Date.now(),
       );
     });
 
     applyMigration();
-    appliedTags.add(entry.tag);
-    console.log(`[opengram-docker] Applied migration ${entry.tag}`);
+    appliedNames.add(fileName);
+    console.log(`[opengram-docker] Applied migration ${fileName}`);
   }
 
   db.close();

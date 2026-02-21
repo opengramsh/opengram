@@ -1,11 +1,11 @@
 import type Database from 'better-sqlite3';
 import { isIP } from 'node:net';
 import { nanoid } from 'nanoid';
-import webpush from 'web-push';
 
 import { internalError, validationError } from '@/src/api/http';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
-import { createSqliteConnection } from '@/src/db/client';
+import { getDb } from '@/src/db/client';
+import { sendWebPushNotification } from '@/src/services/push-crypto';
 
 type PushSubscriptionKeys = {
   p256dh: string;
@@ -49,7 +49,6 @@ const ALLOWED_PUSH_ENDPOINT_HOSTS = [
   'updates.push.services.mozilla.com',
   'web.push.apple.com',
 ];
-let vapidConfigured = false;
 
 function isAllowedPushEndpointHost(hostname: string) {
   const normalized = hostname.trim().toLowerCase();
@@ -154,15 +153,6 @@ function normalizeSubscriptionEndpoint(value: unknown) {
   return parsed.toString();
 }
 
-function withDb<T>(callback: (db: Database.Database) => T): T {
-  const db = createSqliteConnection();
-  try {
-    return callback(db);
-  } finally {
-    db.close();
-  }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -176,14 +166,13 @@ function requirePushEnabled() {
   return config;
 }
 
-function ensureVapidConfigured() {
+function getVapidDetails() {
   const config = requirePushEnabled();
-  if (vapidConfigured) {
-    return;
-  }
-
-  webpush.setVapidDetails(config.push.subject, config.push.vapidPublicKey, config.push.vapidPrivateKey);
-  vapidConfigured = true;
+  return {
+    subject: config.push.subject,
+    publicKey: config.push.vapidPublicKey,
+    privateKey: config.push.vapidPrivateKey,
+  };
 }
 
 function parseSubscriptionKeys(value: unknown): PushSubscriptionKeys {
@@ -281,10 +270,10 @@ async function sendPayloadToAll(payload: PushNotificationPayload) {
     return { sent: 0, failed: 0, removed: 0 };
   }
 
-  ensureVapidConfigured();
-
+  const vapid = getVapidDetails();
   const encodedPayload = buildPayload(payload);
-  const subscriptions = withDb((db) => listSubscriptions(db));
+  const db = getDb();
+  const subscriptions = listSubscriptions(db);
 
   let sent = 0;
   let failed = 0;
@@ -292,15 +281,14 @@ async function sendPayloadToAll(payload: PushNotificationPayload) {
 
   for (const record of subscriptions) {
     try {
-      await webpush.sendNotification(toWebPushSubscription(record), encodedPayload);
+      await sendWebPushNotification(toWebPushSubscription(record), encodedPayload, vapid);
       sent += 1;
     } catch (error) {
       failed += 1;
       const statusCode = isRecord(error) && typeof error.statusCode === 'number' ? error.statusCode : null;
       if (statusCode === 404 || statusCode === 410) {
-        withDb((db) => {
-          removeSubscriptionByEndpoint(db, record.endpoint);
-        });
+        const dbInner = getDb();
+        removeSubscriptionByEndpoint(dbInner, record.endpoint);
         removed += 1;
       }
     }
@@ -320,74 +308,71 @@ function resolveAgentNameById(agentId: string | null) {
 }
 
 function resolvePrimaryAgentForChat(chatId: string) {
-  return withDb((db) => {
-    const row = db.prepare('SELECT agent_ids FROM chats WHERE id = ?').get(chatId) as { agent_ids: string } | undefined;
-    if (!row) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(row.agent_ids) as unknown;
-      if (Array.isArray(parsed)) {
-        const first = parsed.find((value) => typeof value === 'string');
-        return typeof first === 'string' ? first : null;
-      }
-    } catch {
-      return null;
-    }
-
+  const db = getDb();
+  const row = db.prepare('SELECT agent_ids FROM chats WHERE id = ?').get(chatId) as { agent_ids: string } | undefined;
+  if (!row) {
     return null;
-  });
+  }
+
+  try {
+    const parsed = JSON.parse(row.agent_ids) as unknown;
+    if (Array.isArray(parsed)) {
+      const first = parsed.find((value) => typeof value === 'string');
+      return typeof first === 'string' ? first : null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export function upsertPushSubscription(input: PushSubscriptionInput, userAgent: string | null = null) {
   requirePushEnabled();
   const subscription = normalizeSubscription(input);
 
-  return withDb((db) => {
-    const existing = db
-      .prepare('SELECT id FROM push_subscriptions WHERE endpoint = ?')
-      .get(subscription.endpoint) as { id: string } | undefined;
+  const db = getDb();
+  const existing = db
+    .prepare('SELECT id FROM push_subscriptions WHERE endpoint = ?')
+    .get(subscription.endpoint) as { id: string } | undefined;
 
-    const now = Date.now();
-    if (existing) {
-      db.prepare(
-        [
-          'UPDATE push_subscriptions',
-          'SET keys_p256dh = ?, keys_auth = ?, user_agent = ?, created_at = ?',
-          'WHERE endpoint = ?',
-        ].join(' '),
-      ).run(subscription.keys.p256dh, subscription.keys.auth, userAgent, now, subscription.endpoint);
-
-      return {
-        id: existing.id,
-        endpoint: subscription.endpoint,
-      };
-    }
-
-    const id = nanoid();
+  const now = Date.now();
+  if (existing) {
     db.prepare(
       [
-        'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
-        'VALUES (?, ?, ?, ?, ?, ?)',
+        'UPDATE push_subscriptions',
+        'SET keys_p256dh = ?, keys_auth = ?, user_agent = ?, created_at = ?',
+        'WHERE endpoint = ?',
       ].join(' '),
-    ).run(id, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, userAgent, now);
+    ).run(subscription.keys.p256dh, subscription.keys.auth, userAgent, now, subscription.endpoint);
 
     return {
-      id,
+      id: existing.id,
       endpoint: subscription.endpoint,
     };
-  });
+  }
+
+  const id = nanoid();
+  db.prepare(
+    [
+      'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
+      'VALUES (?, ?, ?, ?, ?, ?)',
+    ].join(' '),
+  ).run(id, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, userAgent, now);
+
+  return {
+    id,
+    endpoint: subscription.endpoint,
+  };
 }
 
 export function deletePushSubscription(endpoint: unknown) {
   requirePushEnabled();
   const normalizedEndpoint = normalizeEndpoint(endpoint);
 
-  return withDb((db) => {
-    const result = db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(normalizedEndpoint);
-    return result.changes > 0;
-  });
+  const db = getDb();
+  const result = db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(normalizedEndpoint);
+  return result.changes > 0;
 }
 
 export async function sendTestPushNotification(input: {
@@ -463,5 +448,5 @@ export async function notifyRequestCreated(input: {
 }
 
 export function resetPushServiceForTests() {
-  vapidConfigured = false;
+  // No-op: VAPID details are now read fresh from config on each send.
 }

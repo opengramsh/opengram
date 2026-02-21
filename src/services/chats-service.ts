@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 
 import { loadOpengramConfig } from '@/src/config/opengram-config';
-import { createSqliteConnection } from '@/src/db/client';
+import { getDb } from '@/src/db/client';
 
 import { encodeCursor, parsePagination } from '@/src/api/pagination';
 import { notFoundError, validationError } from '@/src/api/http';
@@ -349,15 +349,6 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
   );
 }
 
-function withDb<T>(callback: (db: Database.Database) => T): T {
-  const db = createSqliteConnection();
-  try {
-    return callback(db);
-  } finally {
-    db.close();
-  }
-}
-
 export function createChat(input: CreateChatInput) {
   const config = loadOpengramConfig();
 
@@ -401,63 +392,62 @@ export function createChat(input: CreateChatInput) {
   const tags = normalizeTags(input.tags ?? []);
   const customState = input.customState ?? config.defaultCustomState;
 
-  const result = withDb((db) => {
-    let firstMessageId: string | null = null;
+  const db = getDb();
+  let firstMessageId: string | null = null;
 
+  db.prepare(
+    [
+      'INSERT INTO chats (',
+      'id, is_archived, custom_state, title, tags, pinned, agent_ids, model_id,',
+      'pending_requests_count, last_read_at, unread_count, created_at, updated_at',
+      ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ].join(' '),
+  ).run(
+    chatId,
+    0,
+    customState,
+    title,
+    JSON.stringify(tags),
+    0,
+    JSON.stringify(input.agentIds),
+    input.modelId,
+    0,
+    now,
+    0,
+    now,
+    now,
+  );
+
+  if (firstMessageContent !== null) {
+    firstMessageId = nanoid();
     db.prepare(
       [
-        'INSERT INTO chats (',
-        'id, is_archived, custom_state, title, tags, pinned, agent_ids, model_id,',
-        'pending_requests_count, last_read_at, unread_count, created_at, updated_at',
-        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (',
+        'id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial,',
+        'stream_state, model_id, trace',
+        ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ].join(' '),
     ).run(
-      chatId,
-      0,
-      customState,
-      title,
-      JSON.stringify(tags),
-      0,
-      JSON.stringify(input.agentIds),
-      input.modelId,
-      0,
-      now,
-      0,
-      now,
-      now,
-    );
-
-    if (firstMessageContent !== null) {
-      firstMessageId = nanoid();
-      db.prepare(
-        [
-          'INSERT INTO messages (',
-          'id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial,',
-          'stream_state, model_id, trace',
-          ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        ].join(' '),
-      ).run(
-        firstMessageId,
-        chatId,
-        'user',
-        USER_SENDER_ID,
-        now,
-        now,
-        firstMessageContent,
-        null,
-        'complete',
-        input.modelId,
-        null,
-      );
-    }
-
-    syncTagsCatalogUsage(db, [], tags);
-    updateDenormalizedFields(db, chatId);
-    return {
-      chat: serializeChat(getChatRecord(db, chatId)),
       firstMessageId,
-    };
-  });
+      chatId,
+      'user',
+      USER_SENDER_ID,
+      now,
+      now,
+      firstMessageContent,
+      null,
+      'complete',
+      input.modelId,
+      null,
+    );
+  }
+
+  syncTagsCatalogUsage(db, [], tags);
+  updateDenormalizedFields(db, chatId);
+  const result = {
+    chat: serializeChat(getChatRecord(db, chatId)),
+    firstMessageId,
+  };
 
   emitEvent('chat.created', {
     chatId: result.chat.id,
@@ -538,18 +528,17 @@ export function listChats(url: URL): ListChatsResult {
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const rows = withDb((db) => {
-    return db
-      .prepare(
-        [
-          'SELECT * FROM chats',
-          where,
-          'ORDER BY pinned DESC, COALESCE(last_message_at, 0) DESC, id DESC',
-          'LIMIT ?',
-        ].join(' '),
-      )
-      .all(...queryParams, limit + 1) as ChatRecord[];
-  });
+  const db = getDb();
+  const rows = db
+    .prepare(
+      [
+        'SELECT * FROM chats',
+        where,
+        'ORDER BY pinned DESC, COALESCE(last_message_at, 0) DESC, id DESC',
+        'LIMIT ?',
+      ].join(' '),
+    )
+    .all(...queryParams, limit + 1) as ChatRecord[];
 
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
@@ -585,18 +574,18 @@ export function getPendingSummary(url: URL): PendingSummaryResult {
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const total = withDb((db) => {
-    const row = db
-      .prepare(`SELECT COALESCE(SUM(pending_requests_count), 0) as total FROM chats ${where}`)
-      .get(...queryParams) as { total: number | null };
-    return row.total ?? 0;
-  });
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT COALESCE(SUM(pending_requests_count), 0) as total FROM chats ${where}`)
+    .get(...queryParams) as { total: number | null };
+  const total = row.total ?? 0;
 
   return { pendingRequestsTotal: Math.max(0, total) };
 }
 
 export function getChat(chatId: string) {
-  return withDb((db) => serializeChat(getChatRecord(db, chatId)));
+  const db = getDb();
+  return serializeChat(getChatRecord(db, chatId));
 }
 
 export function updateChat(chatId: string, input: UpdateChatInput) {
@@ -662,16 +651,15 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
   updates.push('updated_at = ?');
   values.push(now);
 
-  const updated = withDb((db) => {
-    const current = getChatRecord(db, chatId);
-    const previousTags = parseJsonArray(current.tags, 'tags');
-    db.prepare(`UPDATE chats SET ${updates.join(', ')} WHERE id = ?`).run(...values, chatId);
-    const updatedRecord = getChatRecord(db, chatId);
-    const nextTags = parseJsonArray(updatedRecord.tags, 'tags');
-    syncTagsCatalogUsage(db, previousTags, nextTags);
-    updateDenormalizedFields(db, chatId);
-    return serializeChat(getChatRecord(db, chatId));
-  });
+  const db = getDb();
+  const current = getChatRecord(db, chatId);
+  const previousTags = parseJsonArray(current.tags, 'tags');
+  db.prepare(`UPDATE chats SET ${updates.join(', ')} WHERE id = ?`).run(...values, chatId);
+  const updatedRecord = getChatRecord(db, chatId);
+  const nextTags = parseJsonArray(updatedRecord.tags, 'tags');
+  syncTagsCatalogUsage(db, previousTags, nextTags);
+  updateDenormalizedFields(db, chatId);
+  const updated = serializeChat(getChatRecord(db, chatId));
 
   emitEvent('chat.updated', {
     chatId: updated.id,
@@ -681,14 +669,13 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
 }
 
 function setArchiveState(chatId: string, archived: boolean) {
-  withDb((db) => {
-    getChatRecord(db, chatId);
-    db.prepare('UPDATE chats SET is_archived = ?, updated_at = ? WHERE id = ?').run(
-      archived ? 1 : 0,
-      Date.now(),
-      chatId,
-    );
-  });
+  const db = getDb();
+  getChatRecord(db, chatId);
+  db.prepare('UPDATE chats SET is_archived = ?, updated_at = ? WHERE id = ?').run(
+    archived ? 1 : 0,
+    Date.now(),
+    chatId,
+  );
 
   emitEvent(archived ? 'chat.archived' : 'chat.unarchived', {
     chatId,
@@ -704,15 +691,14 @@ export function unarchiveChat(chatId: string) {
 }
 
 export function markChatRead(chatId: string) {
-  withDb((db) => {
-    getChatRecord(db, chatId);
-    db.prepare('UPDATE chats SET last_read_at = ?, updated_at = ? WHERE id = ?').run(
-      Date.now(),
-      Date.now(),
-      chatId,
-    );
-    updateDenormalizedFields(db, chatId);
-  });
+  const db = getDb();
+  getChatRecord(db, chatId);
+  db.prepare('UPDATE chats SET last_read_at = ?, updated_at = ? WHERE id = ?').run(
+    Date.now(),
+    Date.now(),
+    chatId,
+  );
+  updateDenormalizedFields(db, chatId);
 
   emitEvent('chat.read', {
     chatId,
@@ -720,14 +706,13 @@ export function markChatRead(chatId: string) {
 }
 
 export function markChatUnread(chatId: string) {
-  withDb((db) => {
-    getChatRecord(db, chatId);
-    db.prepare('UPDATE chats SET last_read_at = NULL, updated_at = ? WHERE id = ?').run(
-      Date.now(),
-      chatId,
-    );
-    updateDenormalizedFields(db, chatId);
-  });
+  const db = getDb();
+  getChatRecord(db, chatId);
+  db.prepare('UPDATE chats SET last_read_at = NULL, updated_at = ? WHERE id = ?').run(
+    Date.now(),
+    chatId,
+  );
+  updateDenormalizedFields(db, chatId);
 
   emitEvent('chat.unread', {
     chatId,
@@ -735,11 +720,10 @@ export function markChatUnread(chatId: string) {
 }
 
 export function recalculateChatDenormalized(chatId: string) {
-  return withDb((db) => {
-    getChatRecord(db, chatId);
-    updateDenormalizedFields(db, chatId);
-    return serializeChat(getChatRecord(db, chatId));
-  });
+  const db = getDb();
+  getChatRecord(db, chatId);
+  updateDenormalizedFields(db, chatId);
+  return serializeChat(getChatRecord(db, chatId));
 }
 
 export function listTagSuggestions(query: string, limit = 10) {
@@ -751,19 +735,18 @@ export function listTagSuggestions(query: string, limit = 10) {
   const cappedLimit = Math.max(1, Math.min(50, Math.trunc(limit)));
   const pattern = `${escapeLikePattern(normalizedQuery)}%`;
 
-  return withDb((db) => {
-    const rows = db
-      .prepare(
-        [
-          'SELECT name, usage_count',
-          'FROM tags_catalog',
-          "WHERE name LIKE ? ESCAPE '\\'",
-          'ORDER BY usage_count DESC, name ASC',
-          'LIMIT ?',
-        ].join(' '),
-      )
-      .all(pattern, cappedLimit) as TagSuggestion[];
+  const db = getDb();
+  const rows = db
+    .prepare(
+      [
+        'SELECT name, usage_count',
+        'FROM tags_catalog',
+        "WHERE name LIKE ? ESCAPE '\\'",
+        'ORDER BY usage_count DESC, name ASC',
+        'LIMIT ?',
+      ].join(' '),
+    )
+    .all(pattern, cappedLimit) as TagSuggestion[];
 
-    return rows;
-  });
+  return rows;
 }

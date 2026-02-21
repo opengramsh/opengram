@@ -14,9 +14,11 @@ Environment=PORT=3000
 Environment=DATABASE_URL=/opt/opengram/data/opengram.db
 Environment=OPENGRAM_CONFIG_PATH=/opt/opengram/config/opengram.config.json
 EnvironmentFile=-/opt/opengram/config/opengram.env
-ExecStart=/usr/bin/env node /opt/opengram/web/server.js
+ExecStart=/usr/bin/env node /opt/opengram/web/dist/server/server.mjs
 Restart=always
 RestartSec=2
+MemoryHigh=256M
+MemoryMax=384M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

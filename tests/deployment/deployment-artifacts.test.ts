@@ -13,6 +13,7 @@ describe("deployment artifacts", () => {
     expect(script).toContain('CONFIG_DIR="${INSTALL_ROOT}/config"');
     expect(script).toContain("npm run build");
     expect(script).toContain("npm run db:migrate");
+    expect(script).toContain('rsync -a --delete node_modules/ "${WEB_DIR}/node_modules/"');
     expect(script).toContain('if [[ -f "${ENV_FILE}" ]]; then');
     expect(script).toContain('systemctl enable "${SERVICE_NAME}"');
     expect(script).toContain('systemctl is-active --quiet "${SERVICE_NAME}"');
@@ -26,7 +27,7 @@ describe("deployment artifacts", () => {
     const unit = readFileSync("deploy/systemd/opengram-web.service", "utf8");
 
     expect(unit).toContain("WorkingDirectory=/opt/opengram/web");
-    expect(unit).toContain("ExecStart=/usr/bin/env node /opt/opengram/web/server.js");
+    expect(unit).toContain("ExecStart=/usr/bin/env node /opt/opengram/web/dist/server/server.mjs");
     expect(unit).toContain("Environment=DATABASE_URL=/opt/opengram/data/opengram.db");
   });
 
@@ -34,11 +35,23 @@ describe("deployment artifacts", () => {
     expect(existsSync("Dockerfile")).toBe(true);
     const dockerfile = readFileSync("Dockerfile", "utf8");
 
-    expect(dockerfile).toContain(".next/standalone/");
+    expect(dockerfile).toContain("dist/server/");
+    expect(dockerfile).toContain("dist/client/");
+    expect(dockerfile).toContain("node_modules/");
     expect(dockerfile).toContain("COPY --from=builder /app/deploy/docker/");
     expect(dockerfile).toContain("entrypoint.sh");
     expect(dockerfile).toContain('VOLUME ["/opt/opengram/data"]');
     expect(dockerfile).toContain("/api/v1/health");
+  });
+
+  it("aligns startup commands on the server.mjs artifact", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts?: Record<string, string> };
+    const unit = readFileSync("deploy/systemd/opengram-web.service", "utf8");
+    const entrypoint = readFileSync("deploy/docker/entrypoint.sh", "utf8");
+
+    expect(pkg.scripts?.start).toBe("node dist/server/server.mjs");
+    expect(unit).toContain("/dist/server/server.mjs");
+    expect(entrypoint).toContain("dist/server/server.mjs");
   });
 
   it("documents tailscale TLS and reverse proxy setup", () => {

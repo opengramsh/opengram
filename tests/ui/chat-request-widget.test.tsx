@@ -2,23 +2,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import userEvent from '@testing-library/user-event';
 
-import ChatPage from '@/app/chats/[chatId]/page';
+import ChatPage from '@/src/client/pages/chat';
 import type { FrontendStreamEvent } from '@/src/lib/events-stream';
 
 const streamMock = vi.hoisted(() => ({
   listener: null as ((event: FrontendStreamEvent) => void) | null,
   unsubscribe: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
-  useParams: () => ({ chatId: 'chat-1' }),
-}));
-
-vi.mock('next/image', () => ({
-  default: () => <div data-testid="next-image" />,
 }));
 
 vi.mock('facehash', () => ({
@@ -33,6 +25,16 @@ vi.mock('@/src/lib/events-stream', () => ({
 }));
 
 type FetchMock = ReturnType<typeof vi.fn>;
+
+function renderChatPage() {
+  return render(
+    <MemoryRouter initialEntries={['/chats/chat-1']}>
+      <Routes>
+        <Route path="/chats/:chatId" element={<ChatPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 describe('chat request widget', () => {
   let fetchMock: FetchMock;
@@ -141,7 +143,7 @@ describe('chat request widget', () => {
     ];
 
     const user = userEvent.setup();
-    render(<ChatPage />);
+    renderChatPage();
 
     await screen.findByText('Pending requests (2)');
     expect(screen.getByText('Pick one')).toBeTruthy();
@@ -189,7 +191,7 @@ describe('chat request widget', () => {
     ];
 
     const user = userEvent.setup();
-    render(<ChatPage />);
+    renderChatPage();
 
     const input = await screen.findByPlaceholderText('Type only a');
     await user.type(input, 'b');
@@ -245,7 +247,7 @@ describe('chat request widget', () => {
     ];
 
     const user = userEvent.setup();
-    render(<ChatPage />);
+    renderChatPage();
 
     const submitButton = await screen.findByRole('button', { name: 'Send form' });
     await user.click(submitButton);
@@ -308,7 +310,7 @@ describe('chat request widget', () => {
       });
 
     const user = userEvent.setup();
-    render(<ChatPage />);
+    renderChatPage();
 
     const inputA = await screen.findByPlaceholderText('Input A');
     const inputB = await screen.findByPlaceholderText('Input B');

@@ -2,22 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
-import ChatPage from '@/app/chats/[chatId]/page';
+import ChatPage from '@/src/client/pages/chat';
 import type { FrontendStreamEvent } from '@/src/lib/events-stream';
 
 const streamMock = vi.hoisted(() => ({
   listener: null as ((event: FrontendStreamEvent) => void) | null,
   unsubscribe: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
-  useParams: () => ({ chatId: 'chat-1' }),
-}));
-
-vi.mock('next/image', () => ({
-  default: () => <div data-testid="next-image" />,
 }));
 
 vi.mock('facehash', () => ({
@@ -32,6 +24,16 @@ vi.mock('@/src/lib/events-stream', () => ({
 }));
 
 type FetchMock = ReturnType<typeof vi.fn>;
+
+function renderChatPage() {
+  return render(
+    <MemoryRouter initialEntries={['/chats/chat-1']}>
+      <Routes>
+        <Route path="/chats/:chatId" element={<ChatPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 let eventId = 0;
 
@@ -114,7 +116,7 @@ describe('chat screen event subscriptions', () => {
   });
 
   it('renders streaming chunks and transitions to complete/cancelled states', async () => {
-    render(<ChatPage />);
+    renderChatPage();
 
     await screen.findByText('Chat 1');
     await waitFor(() => {
@@ -216,7 +218,7 @@ describe('chat screen event subscriptions', () => {
   });
 
   it('patches non-streaming message into state without full refetch', async () => {
-    render(<ChatPage />);
+    renderChatPage();
 
     await screen.findByText('Chat 1');
     await waitFor(() => {
@@ -244,7 +246,7 @@ describe('chat screen event subscriptions', () => {
   });
 
   it('refreshes pending requests on request lifecycle events', async () => {
-    render(<ChatPage />);
+    renderChatPage();
 
     await screen.findByText('Chat 1');
 

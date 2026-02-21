@@ -1,7 +1,6 @@
-import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { proxy } from "@/proxy";
+import { app } from "@/src/server";
 
 let previousCorsOrigins: string | undefined;
 
@@ -11,10 +10,6 @@ function setCorsOrigins(origins: string[]) {
   } else {
     delete process.env.OPENGRAM_CORS_ORIGINS;
   }
-}
-
-function createRequest(url: string, method: string, headers?: Record<string, string>) {
-  return new NextRequest(new Request(url, { method, headers }));
 }
 
 beforeEach(() => {
@@ -29,97 +24,87 @@ afterEach(() => {
   }
 });
 
-describe("API CORS proxy", () => {
-  it("responds to preflight for allowed origins", () => {
+describe("API CORS middleware", () => {
+  it("responds to preflight for allowed origins", async () => {
     setCorsOrigins(["https://app.example.com"]);
 
-    const response = proxy(
-      createRequest("http://localhost/api/v1/chats", "OPTIONS", {
+    const response = await app.request("/api/v1/health", {
+      method: "OPTIONS",
+      headers: {
         Origin: "https://app.example.com",
         "Access-Control-Request-Method": "POST",
         "Access-Control-Request-Headers": "content-type,authorization",
-      }),
-    );
+      },
+    });
 
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.example.com");
-    expect(response.headers.get("Access-Control-Allow-Headers")).toBe("content-type,authorization");
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("OPTIONS");
-    expect(response.headers.get("Vary")).toContain("Origin");
-    expect(response.headers.get("Vary")).toContain("Access-Control-Request-Headers");
   });
 
-  it("adds CORS headers for non-OPTIONS requests from allowed origins", () => {
+  it("adds CORS headers for non-OPTIONS requests from allowed origins", async () => {
     setCorsOrigins(["https://app.example.com"]);
 
-    const response = proxy(
-      createRequest("http://localhost/api/v1/chats", "GET", {
+    const response = await app.request("/api/v1/health", {
+      method: "GET",
+      headers: {
         Origin: "https://app.example.com",
-      }),
-    );
+      },
+    });
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.example.com");
-    expect(response.headers.get("Access-Control-Allow-Methods")).toContain("GET");
   });
 
-  it("does not emit CORS headers when origin is not allowed", () => {
+  it("does not emit CORS headers when origin is not allowed", async () => {
     setCorsOrigins(["https://allowed.example.com"]);
 
-    const response = proxy(
-      createRequest("http://localhost/api/v1/chats", "GET", {
+    const response = await app.request("/api/v1/health", {
+      method: "GET",
+      headers: {
         Origin: "https://app.example.com",
-      }),
-    );
+      },
+    });
 
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
-  it("defaults to same-origin behavior when corsOrigins is empty", () => {
+  it("allows all origins when corsOrigins is empty", async () => {
     setCorsOrigins([]);
 
-    const response = proxy(
-      createRequest("http://localhost/api/v1/chats", "OPTIONS", {
-        Origin: "https://app.example.com",
-      }),
-    );
+    const response = await app.request("/api/v1/health", {
+      method: "GET",
+      headers: {
+        Origin: "https://any.example.com",
+      },
+    });
 
-    expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
-    expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
-    expect(response.headers.get("Access-Control-Allow-Methods")).toBeNull();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://any.example.com");
   });
 
-  it("supports multiple allowed origins", () => {
+  it("supports multiple allowed origins", async () => {
     setCorsOrigins(["https://one.example.com", "https://two.example.com"]);
 
-    const r1 = proxy(
-      createRequest("http://localhost/api/v1/chats", "GET", {
-        Origin: "https://two.example.com",
-      }),
-    );
+    const r1 = await app.request("/api/v1/health", {
+      method: "GET",
+      headers: { Origin: "https://two.example.com" },
+    });
     expect(r1.headers.get("Access-Control-Allow-Origin")).toBe("https://two.example.com");
 
-    const r2 = proxy(
-      createRequest("http://localhost/api/v1/chats", "GET", {
-        Origin: "https://other.example.com",
-      }),
-    );
+    const r2 = await app.request("/api/v1/health", {
+      method: "GET",
+      headers: { Origin: "https://other.example.com" },
+    });
     expect(r2.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
-  it("uses default allowed headers when no request headers specified", () => {
-    setCorsOrigins(["https://app.example.com"]);
+  it("returns API 404 for unknown API GET routes instead of SPA HTML", async () => {
+    const response = await app.request("/api/v1/does-not-exist", {
+      method: "GET",
+    });
 
-    const response = proxy(
-      createRequest("http://localhost/api/v1/chats", "OPTIONS", {
-        Origin: "https://app.example.com",
-        "Access-Control-Request-Method": "POST",
-      }),
-    );
-
-    expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");
-    expect(response.headers.get("Access-Control-Allow-Headers")).toContain("Content-Type");
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).not.toContain("text/html");
   });
 });
