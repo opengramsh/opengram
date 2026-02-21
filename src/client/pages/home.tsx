@@ -125,7 +125,7 @@ export default function HomePage() {
       headerContent={
         <>
           <div className="flex items-center justify-center gap-1.5">
-            <img src="/opengram-logo.png" alt="" width={20} height={20} className="shrink-0" />
+            <img src="/opengram-logo-sm.webp" alt="" width={20} height={20} className="shrink-0" />
             <h1 className="text-sm font-semibold tracking-wide text-foreground">{chatList.appName}</h1>
           </div>
           <p className="text-xs text-muted-foreground">{pendingLabel(pendingRequestsTotal)}</p>

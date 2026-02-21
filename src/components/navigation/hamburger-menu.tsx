@@ -35,7 +35,7 @@ export function HamburgerMenu() {
       </SheetTrigger>
       <SheetContent side="left" showCloseButton={false} className="w-72 border-r border-border bg-card p-4" aria-describedby={undefined}>
         <div className="mb-4 flex items-center gap-2 px-3">
-          <img src="/opengram-logo.png" alt="" width={28} height={28} className="shrink-0" />
+          <img src="/opengram-logo-sm.webp" alt="" width={28} height={28} className="shrink-0" />
           <SheetTitle className="text-base font-semibold text-foreground">OpenGram</SheetTitle>
         </div>
         <nav className="space-y-1">
