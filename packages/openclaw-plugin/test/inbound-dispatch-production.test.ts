@@ -402,4 +402,109 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
 
     abortController.abort();
   });
+
+  it("should prefer payload.contentFinal for message.created body", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-contentfinal-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-contentfinal-1",
+        role: "user",
+        content: "legacy content",
+        contentFinal: "final content",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "final content",
+        MessageSid: "user-msg-contentfinal-1",
+      }),
+    );
+
+    abortController.abort();
+  });
+
+  it("should fallback from payload.content_final to payload.content", async () => {
+    const { runtime, dispatchSpy, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const client = createMockClient();
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-content-snake-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-content-snake-1",
+        role: "user",
+        content_final: "snake final",
+        senderId: "user:primary",
+      },
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-content-legacy-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-content-legacy-1",
+        role: "user",
+        content: "legacy only",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalledTimes(2));
+
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "snake final",
+        MessageSid: "user-msg-content-snake-1",
+      }),
+    );
+    expect(finalizeInboundContextSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Body: "legacy only",
+        MessageSid: "user-msg-content-legacy-1",
+      }),
+    );
+
+    abortController.abort();
+  });
 });
