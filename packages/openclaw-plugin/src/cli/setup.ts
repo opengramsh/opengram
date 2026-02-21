@@ -232,8 +232,8 @@ export function applyOpenGramConfig(
       ...plugins,
       entries: {
         ...entries,
-        "openclaw-plugin-opengram": {
-          ...entries["openclaw-plugin-opengram"],
+        "opengram": {
+          ...entries["opengram"],
           enabled: true,
         },
       },
