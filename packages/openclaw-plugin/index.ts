@@ -1,6 +1,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 import { opengramPlugin } from "./src/channel.js";
+import { registerOpengramCli } from "./src/cli/register.js";
 import { setOpenGramRuntime } from "./src/runtime.js";
 
 const plugin = {
@@ -11,6 +12,7 @@ const plugin = {
   register(api: OpenClawPluginApi) {
     setOpenGramRuntime(api.runtime);
     api.registerChannel(opengramPlugin);
+    registerOpengramCli(api);
     api.logger.info("OpenGram channel plugin loaded");
   },
 };
