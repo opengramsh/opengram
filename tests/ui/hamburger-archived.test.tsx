@@ -193,7 +193,7 @@ describe('hamburger + archived chats UI', () => {
     });
   });
 
-  it('shows the global + action on archived and opens new chat sheet', async () => {
+  it('shows the global + action on archived and navigates to new chat page', async () => {
     renderRoute(<ArchivedPage />, '/archived');
     const user = userEvent.setup();
 
@@ -201,6 +201,6 @@ describe('hamburger + archived chats UI', () => {
     const newChatButton = screen.getByRole('button', { name: 'New chat' });
     await user.click(newChatButton);
 
-    expect(screen.getByText('New Chat')).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toBe('/chats/new');
   });
 });

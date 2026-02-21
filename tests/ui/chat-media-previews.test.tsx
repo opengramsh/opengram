@@ -164,8 +164,9 @@ describe('chat media previews', () => {
 
     await screen.findByText('Chat 1');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open composer menu' }));
-    fireEvent.click(screen.getByRole('button', { name: /Media gallery/i }));
+    fireEvent.click(screen.getByText('Chat 1'));
+    const chatMenu = await screen.findByRole('dialog', { name: 'Chat menu' });
+    fireEvent.click(within(chatMenu).getByRole('button', { name: /Media/i }));
 
     const gallery = await screen.findByRole('dialog', { name: 'Media gallery' });
     expect(within(gallery).getByText('voice-1.webm')).toBeTruthy();

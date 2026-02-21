@@ -72,6 +72,7 @@ describe("docker startup migrations", () => {
     expect(appliedNames.map((row) => row.name)).toEqual([
       "0001_messages_fts_trigger_upgrade.sql",
       "0002_messages_stream_sweep_index.sql",
+      "0003_add_notifications_muted.sql",
     ]);
 
     const upgradedIndex = migratedDb
@@ -101,6 +102,7 @@ describe("docker startup migrations", () => {
     expect(appliedNames.map((row) => row.name)).toEqual([
       "0001_messages_fts_trigger_upgrade.sql",
       "0002_messages_stream_sweep_index.sql",
+      "0003_add_notifications_muted.sql",
     ]);
 
     const upgradedIndex = migratedDb

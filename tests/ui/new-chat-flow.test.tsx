@@ -2,10 +2,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import userEvent from '@testing-library/user-event';
 
-import Home from '@/src/client/pages/home';
+import NewChatPage from '@/src/client/pages/new-chat';
 
 vi.mock('facehash', () => ({
   Facehash: ({ name }: { name: string }) => <div data-testid={`facehash-${name}`} />,
@@ -13,10 +13,12 @@ vi.mock('facehash', () => ({
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-function renderHome() {
+function renderNewChatPage(initialPath = '/chats/new') {
   return render(
-    <MemoryRouter initialEntries={['/']}>
-      <Home />
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/chats/new" element={<NewChatPage />} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -50,16 +52,6 @@ describe('new chat flow UI', () => {
         );
       }
 
-      if (url.startsWith('/api/v1/chats/pending-summary')) {
-        return new Response(JSON.stringify({ pending_requests_total: 0 }), { status: 200 });
-      }
-
-      if (url.startsWith('/api/v1/chats') && method === 'GET') {
-        return new Response(JSON.stringify({ data: [], cursor: { next: null, hasMore: false } }), {
-          status: 200,
-        });
-      }
-
       if (url === '/api/v1/chats' && method === 'POST') {
         if (init?.body) {
           createChatBodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
@@ -84,26 +76,16 @@ describe('new chat flow UI', () => {
   });
 
   it('creates chat only when first message is sent with selected agent/model payload', async () => {
-    renderHome();
+    renderNewChatPage('/chats/new?agentId=agent-b&modelId=model-b');
     const user = userEvent.setup();
 
-    await screen.findByLabelText('New chat');
-
-    await user.click(screen.getByLabelText('New chat'));
-
-    expect(screen.getByText('New Chat')).toBeTruthy();
+    await screen.findByText(/send a message to start a new chat/i);
     expect(createChatBodies).toHaveLength(0);
 
-    await user.click(screen.getByRole('button', { name: /Agent B.*Beta agent/ }));
+    const firstMessage = screen.getByPlaceholderText('Message');
+    await user.type(firstMessage, 'First message from sheet');
 
-    const modelSelect = screen.getByRole('combobox') as HTMLSelectElement;
-    await user.selectOptions(modelSelect, 'model-b');
-    expect(modelSelect.value).toBe('model-b');
-
-    const firstMessage = screen.getByPlaceholderText('Start with a message...');
-    await user.type(firstMessage, '  First message from sheet   ');
-
-    const sendButton = screen.getByRole('button', { name: 'Send' });
+    const sendButton = screen.getByRole('button', { name: 'Send message' });
     await user.click(sendButton);
 
     await waitFor(() => {
@@ -123,16 +105,12 @@ describe('new chat flow UI', () => {
     expect(postCalls).toHaveLength(1);
   });
 
-  it('does not create chat when dismissing the sheet without sending', async () => {
-    renderHome();
+  it('does not create chat when navigating back without sending', async () => {
+    renderNewChatPage();
     const user = userEvent.setup();
 
-    await screen.findByLabelText('New chat');
-
-    await user.click(screen.getByLabelText('New chat'));
-    expect(screen.getByText('New Chat')).toBeTruthy();
-
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await screen.findByRole('button', { name: 'Back' });
+    await user.click(screen.getByRole('button', { name: 'Back' }));
 
     const postCalls = fetchMock.mock.calls.filter(([input, init]) => {
       const url = typeof input === 'string' ? input : input.toString();
