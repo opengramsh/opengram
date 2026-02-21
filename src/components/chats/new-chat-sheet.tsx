@@ -71,7 +71,7 @@ export function NewChatSheet({
                   <button
                     key={agent.id}
                     type="button"
-                    className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                    className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
                       selected ? 'border-primary/70 bg-primary/10' : 'border-border bg-card hover:border-primary/40'
                     }`}
                     onClick={() => onSelectAgent(agent.id)}

@@ -80,6 +80,7 @@ export function ChatMediaGallery({
                     <button
                       key={item.id}
                       type="button"
+                      className="cursor-pointer"
                       aria-label={`View image ${item.filename || item.id}`}
                       onClick={() => setViewerMediaId(item.id)}
                     >

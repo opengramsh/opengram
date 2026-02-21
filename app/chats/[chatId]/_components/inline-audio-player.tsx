@@ -80,7 +80,7 @@ export function InlineAudioPlayer({ item }: { item: MediaItem }) {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-muted/50 text-foreground"
+          className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full border border-border bg-muted/50 text-foreground"
           aria-label={isPlaying ? `Pause ${item.filename || 'audio'}` : `Play ${item.filename || 'audio'}`}
           onClick={() => void togglePlayback()}
         >

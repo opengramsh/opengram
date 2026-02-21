@@ -36,7 +36,7 @@ export function ChatHeader({
           <ArrowLeft size={16} />
         </Button>
 
-        <button type="button" onClick={onTitleClick} className="shrink-0">
+        <button type="button" onClick={onTitleClick} className="shrink-0 cursor-pointer">
           <Facehash
             name={primaryAgent?.name ?? 'Unknown Agent'}
             size={36}
@@ -51,7 +51,7 @@ export function ChatHeader({
 
         <button
           type="button"
-          className="min-w-0 flex-1 text-left"
+          className="min-w-0 flex-1 cursor-pointer text-left"
           onClick={onTitleClick}
         >
           <p className="truncate text-sm font-semibold leading-5 text-foreground">

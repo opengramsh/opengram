@@ -250,7 +250,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenu
     <div className="relative mb-2 overflow-hidden rounded-2xl">
       <button
         type="button"
-        className="absolute inset-y-1 right-1 z-0 rounded-xl bg-red-500/90 px-4 text-xs font-semibold text-white"
+        className="absolute inset-y-1 right-1 z-0 cursor-pointer rounded-xl bg-red-500/90 px-4 text-xs font-semibold text-white"
         onClick={onAction}
       >
         {actionLabel}
@@ -258,7 +258,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenu
       <button
         type="button"
         className={cn(
-          'facehash-hover-group relative z-10 flex w-full cursor-default items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-150',
+          'facehash-hover-group relative z-10 flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-150',
           isActive
             ? 'border-primary/40 bg-muted'
             : 'border-border/80 bg-card',

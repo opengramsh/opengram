@@ -102,7 +102,7 @@ export function ChatMenu({
           {/* Media */}
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5 text-left transition active:scale-[0.98]"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5 text-left transition active:scale-[0.98]"
             onClick={() => {
               setIsOpen(false);
               setIsMediaGalleryOpen(true);
@@ -116,7 +116,7 @@ export function ChatMenu({
           {/* Mute / Unmute */}
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5 text-left transition active:scale-[0.98] disabled:opacity-50"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5 text-left transition active:scale-[0.98] disabled:opacity-50"
             disabled={isUpdatingChatSettings}
             onClick={() => {
               void patchChatSettings({ notificationsMuted: !chat.notifications_muted });
@@ -135,7 +135,7 @@ export function ChatMenu({
           {/* Archive */}
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5 text-left transition active:scale-[0.98] disabled:opacity-50"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5 text-left transition active:scale-[0.98] disabled:opacity-50"
             disabled={isUpdatingChatSettings}
             onClick={() => {
               setIsOpen(false);
