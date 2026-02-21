@@ -1,6 +1,6 @@
 {
   "id": "opengram",
-  "name": "openclaw-plugin-opengram",
+  "name": "opengram",
   "version": "0.1.0",
   "description": "OpenGram channel plugin for OpenClaw — mobile-first AI agent chat interface",
   "author": "Brice Ventures",
@@ -13,6 +13,7 @@
     "properties": {
       "baseUrl": {
         "type": "string",
+        "default": "http://localhost:3000",
         "description": "OpenGram instance URL (e.g., http://localhost:3000)"
       },
       "instanceSecret": {
@@ -34,7 +35,7 @@
         "description": "Linked OpenClaw agent IDs"
       }
     },
-    "required": ["baseUrl"]
+    "required": []
   },
   "uiHints": {
     "baseUrl": {
