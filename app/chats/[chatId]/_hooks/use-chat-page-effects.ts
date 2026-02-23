@@ -178,10 +178,22 @@ export function useChatPageEffects(data: ChatPageData) {
               stream_state: streamState,
             }),
           );
-          return;
+        } else {
+          void refreshMessages();
         }
 
-        void refreshMessages();
+        // If the message is from an agent/system (not user), mark chat as read
+        // since the user is actively viewing this chat.
+        if (role !== 'user' && markReadInFlightRef.current !== chatId) {
+          markReadInFlightRef.current = chatId;
+          void fetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
+            .catch(() => {})
+            .finally(() => {
+              if (markReadInFlightRef.current === chatId) {
+                markReadInFlightRef.current = null;
+              }
+            });
+        }
         return;
       }
 
