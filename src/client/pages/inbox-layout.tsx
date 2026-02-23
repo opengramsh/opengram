@@ -18,6 +18,7 @@ function pendingLabel(total: number) {
 
 export default function InboxLayout() {
   const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
+  const [streamingChatIds, setStreamingChatIds] = useState<Set<string>>(new Set());
   const isChatSelected = !useMatch("/");
   const chatMatch = useMatch("/chats/:chatId");
   const activeChatId = chatMatch?.params.chatId;
@@ -87,6 +88,19 @@ export default function InboxLayout() {
           event.type === "request.created" ||
           event.type === "request.resolved" ||
           event.type === "request.cancelled";
+
+        if (event.type === "message.created" && chatIdFromEvent) {
+          if (event.payload.role === "user") {
+            // User sent a message → agent reply is expected; show typing immediately (mirrors pendingReply in chat header).
+            setStreamingChatIds((prev) => { const next = new Set(prev); next.add(chatIdFromEvent); return next; });
+          } else if (event.payload.streamState !== "streaming") {
+            // Non-streaming agent/system message arrived → no pending reply for this chat.
+            setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
+          }
+        }
+        if (event.type === "message.streaming.complete" && chatIdFromEvent) {
+          setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
+        }
 
         if (
           event.type === "chat.created" ||
@@ -162,6 +176,7 @@ export default function InboxLayout() {
         <ChatListPage
           chatList={chatList}
           activeChatId={activeChatId}
+          streamingChatIds={streamingChatIds}
           headerContent={
             <div className="flex items-center justify-center gap-3">
               <img src={logoSm} alt="" className="h-10 w-10 shrink-0" />

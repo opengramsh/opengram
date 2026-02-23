@@ -43,6 +43,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   const [titleError, setTitleError] = useState<string | null>(null);
   const [composerText, setComposerText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [pendingReply, setPendingReply] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
   const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
@@ -161,7 +162,16 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     }
 
     const payload = (await response.json()) as MessagesResponse;
-    setMessages(sortMessagesForFeed(payload.data ?? []));
+    setMessages((current) => {
+      const fetched = sortMessagesForFeed(payload.data ?? []);
+      const fetchedIds = new Set(fetched.map((m) => m.id));
+      const streamingToKeep = current.filter(
+        (m) => m.stream_state === 'streaming' && !fetchedIds.has(m.id),
+      );
+      return streamingToKeep.length > 0
+        ? sortMessagesForFeed([...fetched, ...streamingToKeep])
+        : fetched;
+    });
   }, [chatId]);
 
   const refreshPendingRequests = useCallback(async () => {
@@ -224,7 +234,16 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       setModels(config.models ?? []);
       setChat(chatPayload);
       setTitleInput(chatPayload.title);
-      setMessages(sortMessagesForFeed(messagesPayload.data ?? []));
+      setMessages((current) => {
+        const fetched = sortMessagesForFeed(messagesPayload.data ?? []);
+        const fetchedIds = new Set(fetched.map((m) => m.id));
+        const streamingToKeep = current.filter(
+          (m) => m.stream_state === 'streaming' && !fetchedIds.has(m.id),
+        );
+        return streamingToKeep.length > 0
+          ? sortMessagesForFeed([...fetched, ...streamingToKeep])
+          : fetched;
+      });
       setPendingRequests(requestsPayload.data ?? []);
       setMedia(mediaPayload.data ?? []);
     } catch {
@@ -304,6 +323,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       const message = (await response.json()) as Message;
       setComposerText('');
       setMessages((current) => upsertFeedMessage(current, message));
+      setPendingReply(true);
     } catch {
       setError('Failed to send message.');
     } finally {
@@ -407,6 +427,8 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     composerText,
     setComposerText,
     isSending,
+    pendingReply,
+    setPendingReply,
     isComposerMenuOpen,
     isUploadingAttachment,
     isMediaGalleryOpen,

@@ -18,6 +18,21 @@ import {
 } from '@/src/components/ui/dropdown-menu';
 import { cn } from '@/src/lib/utils';
 
+function Spinner() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      style={{ animation: 'spin 0.8s linear infinite' }}
+    >
+      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+      <path d="M12.5 7a5.5 5.5 0 0 0-5.5-5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 type ChatListProps = {
   chats: Chat[];
   agentsById: Map<string, Agent>;
@@ -31,6 +46,7 @@ type ChatListProps = {
   onToggleArchive: (chat: Chat) => Promise<void>;
   rowActionLabel: 'Archive' | 'Unarchive';
   activeChatId?: string;
+  streamingChatIds?: Set<string>;
 };
 
 export function ChatList({
@@ -46,6 +62,7 @@ export function ChatList({
   onToggleArchive,
   rowActionLabel,
   activeChatId,
+  streamingChatIds,
 }: ChatListProps) {
   const [activeContextChatId, setActiveContextChatId] = useState<string | null>(null);
 
@@ -66,6 +83,7 @@ export function ChatList({
               agentName={agent?.name ?? 'Unknown Agent'}
               actionLabel={rowActionLabel}
               isActive={activeChatId === chat.id}
+              isStreaming={streamingChatIds?.has(chat.id) ?? false}
               isContextMenuOpen={activeContextChatId === chat.id}
               onOpen={() => onOpenChat(chat)}
               onAction={() => void onToggleArchive(chat)}
@@ -88,6 +106,7 @@ type ChatRowProps = {
   agentName: string;
   actionLabel: 'Archive' | 'Unarchive';
   isActive?: boolean;
+  isStreaming?: boolean;
   isContextMenuOpen: boolean;
   onOpen: () => void;
   onAction: () => void;
@@ -97,7 +116,7 @@ type ChatRowProps = {
   onTogglePin: () => void;
 };
 
-function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenuOpen, onOpen, onAction, onLongPress, onContextMenuOpenChange, onMarkReadToggle, onTogglePin }: ChatRowProps) {
+function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming = false, isContextMenuOpen, onOpen, onAction, onLongPress, onContextMenuOpenChange, onMarkReadToggle, onTogglePin }: ChatRowProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartXRef = useRef(0);
@@ -275,7 +294,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenu
         }}
       >
         <div className="shrink-0">
-          <Facehash name={agentName} size={44} interactive colors={FACEHASH_COLORS} intensity3d="dramatic" variant="gradient" gradientOverlayClass="facehash-gradient" className="rounded-xl text-black" />
+          <Facehash name={agentName} size={44} interactive colors={FACEHASH_COLORS} intensity3d="dramatic" variant="gradient" gradientOverlayClass="facehash-gradient" className="rounded-xl text-black" enableBlink={isStreaming} onRenderMouth={isStreaming ? () => <Spinner /> : undefined} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
@@ -285,7 +304,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isContextMenu
               >
                 {chat.title}
               </p>
-              <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">{agentName}</p>
+              <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">{agentName}{isStreaming ? ' · typing...' : ''}</p>
             </div>
             <div className="flex flex-col items-end gap-1 pt-0.5">
               <p className="text-[11px] text-muted-foreground">{formatInboxTimestamp(chat.last_message_at)}</p>

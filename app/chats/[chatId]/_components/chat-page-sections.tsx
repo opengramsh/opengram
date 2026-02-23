@@ -29,7 +29,7 @@ export function ChatPageSections() {
 
 function ChatHeaderSection() {
   const chat = useChatPageContext();
-  const isStreaming = chat.messages.some((m) => m.stream_state === 'streaming');
+  const isStreaming = chat.messages.some((m) => m.stream_state === 'streaming') || chat.pendingReply;
 
   return (
     <ChatHeader
@@ -56,6 +56,7 @@ function ChatMessagesSection() {
       messages={chat.messages}
       inlineMessageMedia={chat.inlineMessageMedia}
       keyboardOffset={chat.keyboardOffset}
+      pendingReply={chat.pendingReply}
       setViewerMediaId={(id) => chat.setViewerMediaId(id)}
       setPreviewFileId={chat.setPreviewFileId}
     />

@@ -13,6 +13,7 @@ type ChatMessagesProps = {
   messages: Message[];
   inlineMessageMedia: Map<string, MediaItem[]>;
   keyboardOffset: number;
+  pendingReply: boolean;
   setViewerMediaId: (id: string) => void;
   setPreviewFileId: (id: string | null) => void;
 };
@@ -129,6 +130,7 @@ export function ChatMessages({
   messages,
   inlineMessageMedia,
   keyboardOffset,
+  pendingReply,
   setViewerMediaId,
   setPreviewFileId,
 }: ChatMessagesProps) {
@@ -263,6 +265,14 @@ export function ChatMessages({
             </div>
           );
         })}
+
+      {!loading && !error && pendingReply && !messages.some((m) => m.stream_state === 'streaming') && (
+        <div className="mb-2 flex w-full">
+          <div className={messageBubbleClass('agent')}>
+            <TypingDots />
+          </div>
+        </div>
+      )}
     </main>
   );
 }

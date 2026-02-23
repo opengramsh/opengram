@@ -33,6 +33,7 @@ export function useChatPageEffects(data: ChatPageData) {
     setKeyboardOffset,
     setMessages,
     setChat,
+    setPendingReply,
     setTagSuggestions,
     swipeRef,
     tagInput,
@@ -167,6 +168,7 @@ export function useChatPageEffects(data: ChatPageData) {
           : event.timestamp;
 
         if (messageId) {
+          knownMessageIdsRef.current.add(messageId);
           setMessages((current) =>
             upsertFeedMessage(current, {
               id: messageId,
@@ -180,6 +182,10 @@ export function useChatPageEffects(data: ChatPageData) {
           );
         } else {
           void refreshMessages();
+        }
+
+        if (role !== 'user') {
+          setPendingReply(false);
         }
 
         // If the message is from an agent/system (not user), mark chat as read
@@ -219,6 +225,8 @@ export function useChatPageEffects(data: ChatPageData) {
         const finalText = typeof event.payload.finalText === 'string' ? event.payload.finalText : undefined;
         const streamState = event.payload.streamState === 'cancelled' ? 'cancelled' : 'complete';
 
+        setPendingReply(false);
+
         if (messageId) {
           if (!knownMessageIdsRef.current.has(messageId)) {
             void refreshMessages();
@@ -245,7 +253,7 @@ export function useChatPageEffects(data: ChatPageData) {
     return () => {
       unsubscribe();
     };
-  }, [chatId, knownMessageIdsRef, refreshMedia, refreshMessages, refreshPendingRequests, setMessages]);
+  }, [chatId, knownMessageIdsRef, refreshMedia, refreshMessages, refreshPendingRequests, setMessages, setPendingReply]);
 
   useEffect(() => {
     if (!isEditingTitle) {

@@ -9,9 +9,9 @@ import { ChatList } from '@/src/components/chats/chat-list';
 import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
 import type { UseChatListReturn } from '@/src/components/chats/use-chat-list';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
-import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/src/components/ui/select';
 
 type ChatListPageProps = {
   chatList: UseChatListReturn;
@@ -21,6 +21,7 @@ type ChatListPageProps = {
   searchPlaceholder: string;
   sidebarMode?: boolean;
   activeChatId?: string;
+  streamingChatIds?: Set<string>;
 };
 
 export function ChatListPage({
@@ -31,6 +32,7 @@ export function ChatListPage({
   searchPlaceholder,
   sidebarMode = false,
   activeChatId,
+  streamingChatIds,
 }: ChatListPageProps) {
   const navigate = useNavigate();
   const {
@@ -74,49 +76,31 @@ export function ChatListPage({
         </div>
       </header>
 
-      <section className="space-y-2 border-b border-border/60 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agents</p>
-          {selectedAgentId && (
-            <Button
-              variant="link"
-              size="xs"
-              onClick={() => {
-                setSelectedAgentId('');
-              }}
-            >
-              Clear filters
-            </Button>
-          )}
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <Badge
-            variant="filter"
-            data-active={!selectedAgentId}
-            role="button"
-            tabIndex={0}
-            className="cursor-pointer"
-            onClick={() => setSelectedAgentId('')}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAgentId(''); } }}
-          >
-            All agents
-          </Badge>
-          {agents.map((agent) => (
-            <Badge
-              key={agent.id}
-              variant="filter"
-              data-active={selectedAgentId === agent.id}
-              role="button"
-              tabIndex={0}
-              className="cursor-pointer"
-              onClick={() => setSelectedAgentId((current) => (current === agent.id ? '' : agent.id))}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAgentId((current) => (current === agent.id ? '' : agent.id)); } }}
-            >
-              <Facehash name={agent.name} size={16} interactive={false} colors={FACEHASH_COLORS} intensity3d="none" variant="gradient" gradientOverlayClass="facehash-gradient" className="shrink-0 rounded-sm text-black" />
-              {agent.name}
-            </Badge>
-          ))}
-        </div>
+      <section className="border-b border-border/60 px-4 py-3">
+        <Select
+          value={selectedAgentId || 'all'}
+          onValueChange={(value) => setSelectedAgentId(value === 'all' ? '' : value)}
+        >
+          <SelectTrigger className="w-full">
+            {selectedAgentId && agentsById.get(selectedAgentId) ? (
+              <span className="flex items-center gap-2">
+                <Facehash name={agentsById.get(selectedAgentId)!.name} size={16} interactive={false} colors={FACEHASH_COLORS} intensity3d="none" variant="gradient" gradientOverlayClass="facehash-gradient" className="shrink-0 rounded-sm text-black [&_svg]:!text-black" />
+                {agentsById.get(selectedAgentId)!.name}
+              </span>
+            ) : (
+              <span>All agents</span>
+            )}
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="all">All agents</SelectItem>
+            {agents.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id} className="py-2.5">
+                <Facehash name={agent.name} size={24} interactive={false} colors={FACEHASH_COLORS} intensity3d="none" variant="gradient" gradientOverlayClass="facehash-gradient" className="shrink-0 rounded-md text-black [&_svg]:!text-black" />
+                <span className="text-base font-medium">{agent.name}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </section>
 
       <ChatList
@@ -127,6 +111,7 @@ export function ChatListPage({
         emptyLabel={emptyLabel}
         rowActionLabel={rowActionLabel}
         activeChatId={activeChatId}
+        streamingChatIds={streamingChatIds}
         onOpenChat={(chat) => navigate(`/chats/${chat.id}`)}
         onMarkRead={markChatRead}
         onMarkUnread={markChatUnread}
