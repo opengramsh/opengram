@@ -10,6 +10,7 @@ import type { Agent, Chat } from '@/src/components/chats/types';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
+import { UnreadBadge } from '@/src/components/chats/unread-badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -245,14 +246,6 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
   );
 
   const unread = chat.unread_count > 0;
-  const unreadBadge =
-    chat.unread_count > 1 ? (
-      <Badge className="text-[10px]">
-        {chat.unread_count}
-      </Badge>
-    ) : chat.unread_count === 1 ? (
-      <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-    ) : null;
   const pendingBadge = chat.pending_requests_count > 0
     ? (
       <Badge
@@ -317,7 +310,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
             </p>
             <div className="flex items-center gap-1.5">
               {pendingBadge}
-              {unreadBadge}
+              <UnreadBadge count={chat.unread_count} />
             </div>
           </div>
         </div>

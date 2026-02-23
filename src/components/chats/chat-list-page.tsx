@@ -7,6 +7,7 @@ import { cn, FACEHASH_COLORS } from '@/src/lib/utils';
 
 import { ChatList } from '@/src/components/chats/chat-list';
 import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
+import { UnreadBadge } from '@/src/components/chats/unread-badge';
 import type { UseChatListReturn } from '@/src/components/chats/use-chat-list';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 import { Button } from '@/src/components/ui/button';
@@ -22,6 +23,8 @@ type ChatListPageProps = {
   sidebarMode?: boolean;
   activeChatId?: string;
   streamingChatIds?: Set<string>;
+  totalUnread?: number;
+  unreadByAgent?: Record<string, number>;
 };
 
 export function ChatListPage({
@@ -33,6 +36,8 @@ export function ChatListPage({
   sidebarMode = false,
   activeChatId,
   streamingChatIds,
+  totalUnread,
+  unreadByAgent,
 }: ChatListPageProps) {
   const navigate = useNavigate();
   const {
@@ -92,11 +97,15 @@ export function ChatListPage({
             )}
           </SelectTrigger>
           <SelectContent position="popper">
-            <SelectItem value="all">All agents</SelectItem>
+            <SelectItem value="all" className="py-2.5">
+              <span className="flex-1 text-base font-medium">All agents</span>
+              <UnreadBadge count={totalUnread ?? 0} />
+            </SelectItem>
             {agents.map((agent) => (
               <SelectItem key={agent.id} value={agent.id} className="py-2.5">
                 <Facehash name={agent.name} size={24} interactive={false} colors={FACEHASH_COLORS} intensity3d="none" variant="gradient" gradientOverlayClass="facehash-gradient" className="shrink-0 rounded-md text-black [&_svg]:!text-black" />
-                <span className="text-base font-medium">{agent.name}</span>
+                <span className="flex-1 text-base font-medium">{agent.name}</span>
+                <UnreadBadge count={unreadByAgent?.[agent.id] ?? 0} />
               </SelectItem>
             ))}
           </SelectContent>

@@ -8,6 +8,7 @@ import {
   createChat,
   getChat,
   getPendingSummary,
+  getUnreadSummary,
   listChats,
   markChatRead,
   markChatUnread,
@@ -60,6 +61,16 @@ chats.get('/pending-summary', (c) => {
     applyReadMiddlewares(c.req.raw);
     const result = getPendingSummary(new URL(c.req.url));
     return c.json({ pending_requests_total: result.pendingRequestsTotal });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+});
+
+chats.get('/unread-summary', (c) => {
+  try {
+    applyReadMiddlewares(c.req.raw);
+    const result = getUnreadSummary(new URL(c.req.url));
+    return c.json({ total_unread: result.totalUnread, unread_by_agent: result.unreadByAgent });
   } catch (error) {
     return toErrorResponse(error);
   }

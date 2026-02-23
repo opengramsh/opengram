@@ -58,6 +58,11 @@ type PendingSummaryResult = {
   pendingRequestsTotal: number;
 };
 
+type UnreadSummaryResult = {
+  totalUnread: number;
+  unreadByAgent: Record<string, number>;
+};
+
 type TagSuggestion = {
   name: string;
   usage_count: number;
@@ -556,6 +561,49 @@ export function getPendingSummary(url: URL): PendingSummaryResult {
   const total = row.total ?? 0;
 
   return { pendingRequestsTotal: Math.max(0, total) };
+}
+
+export function getUnreadSummary(url: URL): UnreadSummaryResult {
+  const params = url.searchParams;
+  const conditions: string[] = [];
+  const queryParams: unknown[] = [];
+
+  const archived = params.get('archived');
+  if (archived !== null) {
+    if (archived !== 'true' && archived !== 'false') {
+      throw validationError('archived must be true or false.', { field: 'archived' });
+    }
+
+    conditions.push('is_archived = ?');
+    queryParams.push(archived === 'true' ? 1 : 0);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const db = getDb();
+
+  const totalRow = db
+    .prepare(`SELECT COALESCE(SUM(unread_count), 0) as total FROM chats ${where}`)
+    .get(...queryParams) as { total: number | null };
+  const totalUnread = Math.max(0, totalRow.total ?? 0);
+
+  const agentRows = db
+    .prepare(
+      [
+        'SELECT json_each.value as agent_id, COALESCE(SUM(chats.unread_count), 0) as total',
+        `FROM chats, json_each(chats.agent_ids) ${where}`,
+        'GROUP BY json_each.value',
+      ].join(' '),
+    )
+    .all(...queryParams) as Array<{ agent_id: string; total: number }>;
+
+  const unreadByAgent: Record<string, number> = {};
+  for (const row of agentRows) {
+    if (row.total > 0) {
+      unreadByAgent[row.agent_id] = row.total;
+    }
+  }
+
+  return { totalUnread, unreadByAgent };
 }
 
 export function getChat(chatId: string) {

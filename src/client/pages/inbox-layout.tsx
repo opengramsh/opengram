@@ -16,8 +16,15 @@ function pendingLabel(total: number) {
   return total === 1 ? "1 pending request" : `${total} pending requests`;
 }
 
+type UnreadSummaryPayload = {
+  total_unread?: number;
+  unread_by_agent?: Record<string, number>;
+};
+
 export default function InboxLayout() {
   const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
+  const [totalUnread, setTotalUnread] = useState(0);
+  const [unreadByAgent, setUnreadByAgent] = useState<Record<string, number>>({});
   const [streamingChatIds, setStreamingChatIds] = useState<Set<string>>(new Set());
   const isChatSelected = !useMatch("/");
   const chatMatch = useMatch("/chats/:chatId");
@@ -40,11 +47,31 @@ export default function InboxLayout() {
     setPendingRequestsTotal(Math.max(0, payload.pending_requests_total ?? 0));
   }, []);
 
+  const loadUnreadSummary = useCallback(async () => {
+    const response = await fetch(
+      "/api/v1/chats/unread-summary?archived=false",
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Unread summary request failed with status ${response.status}`,
+      );
+    }
+
+    const payload = (await response.json()) as UnreadSummaryPayload;
+    setTotalUnread(Math.max(0, payload.total_unread ?? 0));
+    setUnreadByAgent(payload.unread_by_agent ?? {});
+  }, []);
+
+  const loadExtras = useCallback(async () => {
+    await Promise.all([loadPendingSummary(), loadUnreadSummary()]);
+  }, [loadPendingSummary, loadUnreadSummary]);
+
   const chatList = useChatList({
     archived: false,
     chatsErrorMessage: "Failed to load inbox data.",
-    onRefreshExtras: loadPendingSummary,
-    onMutationSuccess: loadPendingSummary,
+    onRefreshExtras: loadExtras,
+    onMutationSuccess: loadExtras,
   });
 
   const { setChats, loadChats, refreshChats, matchesActiveFilters } = chatList;
@@ -52,7 +79,9 @@ export default function InboxLayout() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPendingSummary().catch(() => setPendingRequestsTotal(0));
-  }, [loadPendingSummary]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); });
+  }, [loadPendingSummary, loadUnreadSummary]);
 
   const refreshSingleInboxChat = useCallback(
     async (incomingChatId: string) => {
@@ -128,13 +157,15 @@ export default function InboxLayout() {
             void Promise.all([
               refreshSingleInboxChat(chatIdFromEvent).catch(loadChats),
               loadPendingSummary().catch(() => setPendingRequestsTotal(0)),
+              loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); }),
             ]);
             return;
           }
 
-          void refreshSingleInboxChat(chatIdFromEvent).catch(() => {
-            void loadChats();
-          });
+          void Promise.all([
+            refreshSingleInboxChat(chatIdFromEvent).catch(() => { void loadChats(); }),
+            loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); }),
+          ]);
           return;
         }
 
@@ -147,7 +178,10 @@ export default function InboxLayout() {
           setChats((current) =>
             current.filter((chat) => chat.id !== chatIdFromEvent),
           );
-          void loadPendingSummary().catch(() => setPendingRequestsTotal(0));
+          void Promise.all([
+            loadPendingSummary().catch(() => setPendingRequestsTotal(0)),
+            loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); }),
+          ]);
         }
       },
     );
@@ -158,6 +192,7 @@ export default function InboxLayout() {
   }, [
     loadChats,
     loadPendingSummary,
+    loadUnreadSummary,
     refreshChats,
     refreshSingleInboxChat,
     setChats,
@@ -177,6 +212,8 @@ export default function InboxLayout() {
           chatList={chatList}
           activeChatId={activeChatId}
           streamingChatIds={streamingChatIds}
+          totalUnread={totalUnread}
+          unreadByAgent={unreadByAgent}
           headerContent={
             <div className="flex items-center justify-center gap-3">
               <img src={logoSm} alt="" className="h-10 w-10 shrink-0" />
