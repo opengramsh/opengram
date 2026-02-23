@@ -231,6 +231,14 @@ export class OpenGramClient {
     return (await res.json()) as SearchResult;
   }
 
+  async sendTyping(chatId: string, agentId: string): Promise<void> {
+    fetch(`${this.baseUrl}/api/v1/chats/${chatId}/typing`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ agentId }),
+    }).catch(() => {});
+  }
+
   async health(): Promise<{ status: string; version: string; uptime: number }> {
     const res = await fetch(`${this.baseUrl}/api/v1/health`, { method: "GET" });
     if (!res.ok) {

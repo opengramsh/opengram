@@ -15,6 +15,7 @@ import {
   unarchiveChat,
   updateChat,
 } from '@/src/services/chats-service';
+import { emitEvent } from '@/src/services/events-service';
 import { createRequest, listChatRequests } from '@/src/services/requests-service';
 
 type CreateChatRequest = {
@@ -158,6 +159,19 @@ chats.get('/:chatId/requests', (c) => {
     const status = statusParam as 'pending' | 'resolved' | 'cancelled' | 'all';
     const requests = listChatRequests(chatId, status);
     return c.json({ data: requests });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+});
+
+chats.post('/:chatId/typing', async (c) => {
+  try {
+    applyWriteMiddlewares(c.req.raw);
+    const chatId = c.req.param('chatId');
+    const body = await parseJsonBody<{ agentId: string }>(c.req.raw);
+    getChat(chatId); // validate chat exists
+    emitEvent('chat.typing', { chatId, agentId: body.agentId }, { ephemeral: true });
+    return new Response(null, { status: 204 });
   } catch (error) {
     return toErrorResponse(error);
   }

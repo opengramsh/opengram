@@ -18,6 +18,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     connectSSE: vi.fn(),
     health: vi.fn().mockResolvedValue({ status: "ok", version: "1.0.0", uptime: 100 }),
     uploadMedia: vi.fn().mockResolvedValue({ id: "media-1" }),
+    sendTyping: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as OpenGramClient;
 }

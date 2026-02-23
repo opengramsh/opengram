@@ -38,6 +38,14 @@ export type DispatchFn = (opts: {
   onError: (err: unknown) => void;
 }) => void;
 
+const TYPING_HEARTBEAT_INTERVAL_MS = 5_000;
+
+function startTypingHeartbeat(client: OpenGramClient, chatId: string, agentId: string): () => void {
+  void client.sendTyping(chatId, agentId);
+  const timer = setInterval(() => { void client.sendTyping(chatId, agentId); }, TYPING_HEARTBEAT_INTERVAL_MS);
+  return () => clearInterval(timer);
+}
+
 // Track last-seen event ID for cursor-based catch-up
 let lastEventCursor: string | undefined;
 
@@ -237,9 +245,11 @@ async function handleMessageCreated(
   });
   initStream(dispatchId, chatId, streamingMsg.id);
 
+  const stopTyping = startTypingHeartbeat(client, chatId, agentId);
   const deliver = buildDeliver(client, chatId, agentId, dispatchId, log);
-  const onCleanup = () => cancelStream(client, dispatchId);
+  const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
   const onError = (err: unknown) => {
+    stopTyping();
     log?.error(`[opengram] Reply dispatch error: ${err}`);
     cancelStream(client, dispatchId);
   };
@@ -251,8 +261,11 @@ async function handleMessageCreated(
       await dispatchViaSdk({ chatId, agentId, messageId, content, cfg, deliver, onError, log });
     }
   } catch (err) {
+    stopTyping();
     cancelStream(client, dispatchId);
     throw err;
+  } finally {
+    stopTyping();
   }
 }
 
@@ -286,9 +299,11 @@ async function handleRequestResolved(
   });
   initStream(dispatchId, chatId, streamingMsg.id);
 
+  const stopTyping = startTypingHeartbeat(client, chatId, agentId);
   const deliver = buildDeliver(client, chatId, agentId, dispatchId, log);
-  const onCleanup = () => cancelStream(client, dispatchId);
+  const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
   const onError = (err: unknown) => {
+    stopTyping();
     log?.error(`[opengram] Reply dispatch error: ${err}`);
     cancelStream(client, dispatchId);
   };
@@ -313,13 +328,16 @@ async function handleRequestResolved(
         content: body,
         cfg,
         deliver,
-        onError: (err) => log?.error(`[opengram] Reply dispatch error: ${err}`),
+        onError: (err) => { stopTyping(); log?.error(`[opengram] Reply dispatch error: ${err}`); },
         log,
       });
     }
   } catch (err) {
+    stopTyping();
     cancelStream(client, dispatchId);
     throw err;
+  } finally {
+    stopTyping();
   }
 }
 

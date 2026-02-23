@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
@@ -13,8 +13,11 @@ import {
 } from '@/src/lib/chat';
 import { subscribeToEventsStream, type FrontendStreamEvent } from '@/src/lib/events-stream';
 
+const TYPING_EXPIRY_MS = 12_000;
+
 export function useChatPageEffects(data: ChatPageData) {
   const markReadInFlightRef = useRef<string | null>(null);
+  const typingExpiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
     chat,
     chatId,
@@ -146,6 +149,30 @@ export function useChatPageEffects(data: ChatPageData) {
         return;
       }
 
+      if (event.type === 'chat.typing') {
+        setPendingReply(true);
+        if (typingExpiryTimerRef.current) {
+          clearTimeout(typingExpiryTimerRef.current);
+        }
+        typingExpiryTimerRef.current = setTimeout(() => {
+          setPendingReply(false);
+          typingExpiryTimerRef.current = null;
+          // Clean up stale streaming messages so the header typing indicator
+          // and empty bubble disappear when heartbeats stop arriving.
+          // - Empty streaming messages (eager placeholder): remove entirely
+          // - Streaming messages with partial content: mark cancelled locally
+          setMessages((current) => {
+            if (!current.some((m) => m.stream_state === 'streaming')) {
+              return current;
+            }
+            return current
+              .filter((m) => !(m.stream_state === 'streaming' && !m.content_partial?.trim() && !m.content_final?.trim()))
+              .map((m) => m.stream_state === 'streaming' ? { ...m, stream_state: 'cancelled' as const } : m);
+          });
+        }, TYPING_EXPIRY_MS);
+        return;
+      }
+
       if (event.type === 'message.created') {
         const messageId = typeof event.payload.messageId === 'string' ? event.payload.messageId : null;
         const senderId = typeof event.payload.senderId === 'string' ? event.payload.senderId : 'agent:unknown';
@@ -186,6 +213,10 @@ export function useChatPageEffects(data: ChatPageData) {
 
         if (role !== 'user') {
           setPendingReply(false);
+          if (typingExpiryTimerRef.current) {
+            clearTimeout(typingExpiryTimerRef.current);
+            typingExpiryTimerRef.current = null;
+          }
         }
 
         // If the message is from an agent/system (not user), mark chat as read
@@ -226,6 +257,10 @@ export function useChatPageEffects(data: ChatPageData) {
         const streamState = event.payload.streamState === 'cancelled' ? 'cancelled' : 'complete';
 
         setPendingReply(false);
+        if (typingExpiryTimerRef.current) {
+          clearTimeout(typingExpiryTimerRef.current);
+          typingExpiryTimerRef.current = null;
+        }
 
         if (messageId) {
           if (!knownMessageIdsRef.current.has(messageId)) {
@@ -252,6 +287,10 @@ export function useChatPageEffects(data: ChatPageData) {
 
     return () => {
       unsubscribe();
+      if (typingExpiryTimerRef.current) {
+        clearTimeout(typingExpiryTimerRef.current);
+        typingExpiryTimerRef.current = null;
+      }
     };
   }, [chatId, knownMessageIdsRef, refreshMedia, refreshMessages, refreshPendingRequests, setMessages, setPendingReply]);
 

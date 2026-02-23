@@ -323,7 +323,6 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       const message = (await response.json()) as Message;
       setComposerText('');
       setMessages((current) => upsertFeedMessage(current, message));
-      setPendingReply(true);
     } catch {
       setError('Failed to send message.');
     } finally {

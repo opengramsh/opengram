@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useMatch } from "react-router";
 
 import logoSm from "/opengram-logo-sm.webp";
@@ -74,6 +74,8 @@ export default function InboxLayout() {
     onMutationSuccess: loadExtras,
   });
 
+  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   const { setChats, loadChats, refreshChats, matchesActiveFilters } = chatList;
 
   useEffect(() => {
@@ -118,16 +120,26 @@ export default function InboxLayout() {
           event.type === "request.resolved" ||
           event.type === "request.cancelled";
 
+        if (event.type === "chat.typing" && chatIdFromEvent) {
+          setStreamingChatIds((prev) => { const next = new Set(prev); next.add(chatIdFromEvent); return next; });
+          const existing = typingTimersRef.current.get(chatIdFromEvent);
+          if (existing) clearTimeout(existing);
+          typingTimersRef.current.set(chatIdFromEvent, setTimeout(() => {
+            typingTimersRef.current.delete(chatIdFromEvent);
+            setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
+          }, 12_000));
+        }
         if (event.type === "message.created" && chatIdFromEvent) {
-          if (event.payload.role === "user") {
-            // User sent a message → agent reply is expected; show typing immediately (mirrors pendingReply in chat header).
-            setStreamingChatIds((prev) => { const next = new Set(prev); next.add(chatIdFromEvent); return next; });
-          } else if (event.payload.streamState !== "streaming") {
+          if (event.payload.role !== "user" && event.payload.streamState !== "streaming") {
             // Non-streaming agent/system message arrived → no pending reply for this chat.
+            const timer = typingTimersRef.current.get(chatIdFromEvent);
+            if (timer) { clearTimeout(timer); typingTimersRef.current.delete(chatIdFromEvent); }
             setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
           }
         }
         if (event.type === "message.streaming.complete" && chatIdFromEvent) {
+          const timer = typingTimersRef.current.get(chatIdFromEvent);
+          if (timer) { clearTimeout(timer); typingTimersRef.current.delete(chatIdFromEvent); }
           setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
         }
 
@@ -188,6 +200,10 @@ export default function InboxLayout() {
 
     return () => {
       unsubscribe();
+      for (const timer of typingTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      typingTimersRef.current.clear();
     };
   }, [
     loadChats,
