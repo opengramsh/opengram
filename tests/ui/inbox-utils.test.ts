@@ -45,12 +45,11 @@ describe('inbox utils', () => {
     const query = buildChatsQuery({
       query: ' release ',
       agentId: 'agent-1',
-      state: 'Open',
       archived: false,
       limit: 50,
     });
 
-    expect(query).toBe('?archived=false&query=release&agentId=agent-1&state=Open&limit=50');
+    expect(query).toBe('?archived=false&query=release&agentId=agent-1&limit=50');
   });
 
   it('sums pending request counts defensively', () => {

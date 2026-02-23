@@ -32,7 +32,6 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<Model[]>([]);
-  const [customStates, setCustomStates] = useState<string[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -223,7 +222,6 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
 
       setAgents(config.agents ?? []);
       setModels(config.models ?? []);
-      setCustomStates(config.customStates ?? []);
       setChat(chatPayload);
       setTitleInput(chatPayload.title);
       setMessages(sortMessagesForFeed(messagesPayload.data ?? []));
@@ -393,7 +391,6 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     chatId,
     chat,
     models,
-    customStates,
     loading,
     error,
     primaryAgent,

@@ -25,13 +25,12 @@ type ChatSettingsProps = {
   chat: Chat | null;
   models: Model[];
   primaryAgent?: Agent;
-  customStates: string[];
   isUpdatingChatSettings: boolean;
   tagInput: string;
   tagSuggestions: TagSuggestion[];
   isLoadingTagSuggestions: boolean;
   setIsChatSettingsOpen: (value: boolean) => void;
-  patchChatSettings: (payload: { modelId?: string; tags?: string[]; customState?: string; pinned?: boolean }) => Promise<void>;
+  patchChatSettings: (payload: { modelId?: string; tags?: string[]; pinned?: boolean }) => Promise<void>;
   setTagInput: (value: string) => void;
   addTagToChat: (rawTag: string) => Promise<void>;
   removeTagFromChat: (tag: string) => Promise<void>;
@@ -44,7 +43,6 @@ export function ChatSettings({
   chat,
   models,
   primaryAgent,
-  customStates,
   isUpdatingChatSettings,
   tagInput,
   tagSuggestions,
@@ -152,28 +150,6 @@ export function ChatSettings({
               </div>
             )}
           </div>
-
-          {customStates.length > 0 && (
-            <div>
-              <Label className="mb-1 text-xs text-muted-foreground">State</Label>
-              <Select
-                value={chat.custom_state ?? customStates[0] ?? ''}
-                disabled={isUpdatingChatSettings}
-                onValueChange={(value) => void patchChatSettings({ customState: value })}
-              >
-                <SelectTrigger className="h-10 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {customStates.map((state) => (
-                    <SelectItem key={state} value={state}>
-                      {state}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-2 pt-1">
             <Button

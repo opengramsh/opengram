@@ -139,7 +139,6 @@ function ChatSettingsSection() {
       chat={chat.chat}
       models={chat.models}
       primaryAgent={chat.primaryAgent}
-      customStates={chat.customStates}
       isUpdatingChatSettings={chat.isUpdatingChatSettings}
       tagInput={chat.tagInput}
       tagSuggestions={chat.tagSuggestions}
@@ -163,7 +162,6 @@ function ChatMenuSection() {
       isOpen={chat.isChatMenuOpen}
       setIsOpen={chat.setIsChatMenuOpen}
       chat={chat.chat}
-      customStates={chat.customStates}
       isUpdatingChatSettings={chat.isUpdatingChatSettings}
       titleInput={chat.titleInput}
       titleInputRef={chat.titleInputRef}

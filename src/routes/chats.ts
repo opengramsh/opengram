@@ -21,14 +21,12 @@ type CreateChatRequest = {
   modelId: string;
   title?: string;
   tags?: string[];
-  customState?: string;
   firstMessage?: string;
 };
 
 type UpdateChatRequest = {
   title?: string;
   tags?: string[];
-  customState?: string;
   pinned?: boolean;
   modelId?: string;
   notificationsMuted?: boolean;

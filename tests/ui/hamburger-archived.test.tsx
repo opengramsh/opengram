@@ -17,7 +17,6 @@ type FetchMock = ReturnType<typeof vi.fn>;
 const archivedChat = {
   id: 'chat-archived',
   is_archived: true,
-  custom_state: 'Open',
   title: 'Archived chat',
   tags: [],
   pinned: false,
@@ -59,8 +58,6 @@ describe('hamburger + archived chats UI', () => {
         return new Response(
           JSON.stringify({
             appName: 'OpenGram',
-            customStates: ['Open', 'Closed'],
-            defaultCustomState: 'Open',
             defaultModelIdForNewChats: 'model-a',
             agents: [{ id: 'agent-a', name: 'Agent A', description: 'Alpha agent' }],
             models: [{ id: 'model-a', name: 'Model A', description: 'Alpha model' }],

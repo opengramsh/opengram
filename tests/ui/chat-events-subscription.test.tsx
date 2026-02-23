@@ -65,7 +65,6 @@ describe('chat screen event subscriptions', () => {
       id: 'chat-1',
       title: 'Chat 1',
       tags: [],
-      custom_state: 'Open',
       model_id: 'model-a',
       pinned: false,
       is_archived: false,
@@ -85,7 +84,6 @@ describe('chat screen event subscriptions', () => {
           JSON.stringify({
             agents: [{ id: 'agent-a', name: 'Agent A', description: 'Alpha' }],
             models: [{ id: 'model-a', name: 'Model A', description: 'Alpha' }],
-            customStates: ['Open', 'Closed'],
           }),
           { status: 200 },
         );

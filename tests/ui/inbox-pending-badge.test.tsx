@@ -26,7 +26,6 @@ describe('inbox pending badge', () => {
       return new Response(
         JSON.stringify({
           appName: 'OpenGram',
-          customStates: ['Open'],
           defaultModelIdForNewChats: 'model-a',
           agents: [{ id: 'agent-a', name: 'Agent A', description: 'Alpha' }],
           models: [{ id: 'model-a', name: 'Model A', description: 'Alpha' }],
@@ -46,7 +45,6 @@ describe('inbox pending badge', () => {
             {
               id: 'chat-1',
               is_archived: false,
-              custom_state: 'Open',
               title: 'Chat 1',
               tags: [],
               pinned: false,

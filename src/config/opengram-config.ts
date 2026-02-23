@@ -6,8 +6,6 @@ export type OpengramConfig = {
   maxUploadBytes: number;
   allowedMimeTypes: string[];
   titleMaxChars: number;
-  defaultCustomState: string;
-  customStates: string[];
   defaultModelIdForNewChats?: string;
   agents: AgentConfig[];
   models: ModelConfig[];
@@ -70,8 +68,6 @@ const defaultConfig: OpengramConfig = {
   maxUploadBytes: 50_000_000,
   allowedMimeTypes: ["*/*"],
   titleMaxChars: 48,
-  defaultCustomState: "Open",
-  customStates: ["Open"],
   defaultModelIdForNewChats: undefined,
   agents: [
     {
@@ -146,9 +142,6 @@ function mergeConfig(defaults: OpengramConfig, incoming: Record<string, unknown>
     hooks: Array.isArray(incoming.hooks) ? (incoming.hooks as HookConfig[]) : defaults.hooks,
     agents: Array.isArray(incoming.agents) ? (incoming.agents as AgentConfig[]) : defaults.agents,
     models: Array.isArray(incoming.models) ? (incoming.models as ModelConfig[]) : defaults.models,
-    customStates: Array.isArray(incoming.customStates)
-      ? (incoming.customStates as string[])
-      : defaults.customStates,
     allowedMimeTypes: Array.isArray(incoming.allowedMimeTypes)
       ? (incoming.allowedMimeTypes as string[])
       : defaults.allowedMimeTypes,
@@ -180,10 +173,6 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
         `Config validation error: agent "${agent.id}" references unknown defaultModelId "${agent.defaultModelId}".`,
       );
     }
-  }
-
-  if (!config.customStates.includes(config.defaultCustomState)) {
-    config.customStates = [...config.customStates, config.defaultCustomState];
   }
 
   if (config.security.instanceSecretEnabled && !config.security.instanceSecret) {

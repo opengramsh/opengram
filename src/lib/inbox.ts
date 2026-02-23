@@ -6,7 +6,6 @@ export type InboxQueryInput = {
   archived?: boolean;
   query?: string;
   agentId?: string | null;
-  state?: string | null;
   limit?: number;
 };
 
@@ -70,10 +69,6 @@ export function buildChatsQuery(input: InboxQueryInput): string {
 
   if (input.agentId) {
     params.set('agentId', input.agentId);
-  }
-
-  if (input.state) {
-    params.set('state', input.state);
   }
 
   if (typeof input.limit === 'number') {

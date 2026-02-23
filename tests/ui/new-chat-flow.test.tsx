@@ -37,7 +37,6 @@ describe('new chat flow UI', () => {
         return new Response(
           JSON.stringify({
             appName: 'OpenGram',
-            customStates: ['Open', 'Closed'],
             agents: [
               { id: 'agent-a', name: 'Agent A', description: 'Alpha agent' },
               { id: 'agent-b', name: 'Agent B', description: 'Beta agent' },

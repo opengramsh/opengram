@@ -15,14 +15,12 @@ export type Model = {
 export type ConfigResponse = {
   agents: Agent[];
   models: Model[];
-  customStates: string[];
 };
 
 export type Chat = {
   id: string;
   title: string;
   tags: string[];
-  custom_state: string | null;
   model_id: string;
   pinned: boolean;
   is_archived: boolean;

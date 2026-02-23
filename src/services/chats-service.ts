@@ -16,7 +16,6 @@ type MediaKind = 'image' | 'audio' | 'file';
 type ChatRecord = {
   id: string;
   is_archived: number;
-  custom_state: string | null;
   title: string;
   tags: string;
   pinned: number;
@@ -38,14 +37,12 @@ type CreateChatInput = {
   modelId: string;
   title?: string;
   tags?: string[];
-  customState?: string;
   firstMessage?: string;
 };
 
 type UpdateChatInput = {
   title?: string;
   tags?: string[];
-  customState?: string;
   pinned?: boolean;
   modelId?: string;
   notificationsMuted?: boolean;
@@ -190,7 +187,6 @@ function serializeChat(record: ChatRecord) {
   return {
     id: record.id,
     is_archived: Boolean(record.is_archived),
-    custom_state: record.custom_state,
     title: record.title,
     tags: parseJsonArray(record.tags, 'tags'),
     pinned: Boolean(record.pinned),
@@ -223,18 +219,6 @@ function ensureAgentIds(agentIds: string[], allowedAgentIds: Set<string>) {
     if (!allowedAgentIds.has(agentId)) {
       throw validationError('agentIds contains unknown id.', { field: 'agentIds', agentId });
     }
-  }
-}
-
-function ensureCustomState(customState: string | undefined, allowedStates: Set<string>) {
-  if (customState === undefined) {
-    return;
-  }
-
-  if (!allowedStates.has(customState)) {
-    throw validationError('customState must match configured customStates.', {
-      field: 'customState',
-    });
   }
 }
 
@@ -368,10 +352,6 @@ export function createChat(input: CreateChatInput) {
     assertStringArray(input.tags, 'tags');
   }
 
-  if (input.customState !== undefined && typeof input.customState !== 'string') {
-    throw validationError('customState must be a string.', { field: 'customState' });
-  }
-
   if (input.firstMessage !== undefined && typeof input.firstMessage !== 'string') {
     throw validationError('firstMessage must be a string.', { field: 'firstMessage' });
   }
@@ -382,18 +362,15 @@ export function createChat(input: CreateChatInput) {
 
   const allowedModelIds = new Set(config.models.map((model) => model.id));
   const allowedAgentIds = new Set(config.agents.map((agent) => agent.id));
-  const allowedStates = new Set(config.customStates);
 
   ensureModelExists(input.modelId, allowedModelIds);
   ensureAgentIds(input.agentIds, allowedAgentIds);
-  ensureCustomState(input.customState, allowedStates);
 
   const now = Date.now();
   const chatId = nanoid();
   const title = normalizeTitle(input.title, input.firstMessage, config.titleMaxChars);
   const firstMessageContent = normalizeFirstMessageContent(input.firstMessage);
   const tags = normalizeTags(input.tags ?? []);
-  const customState = input.customState ?? config.defaultCustomState;
 
   const db = getDb();
   let firstMessageId: string | null = null;
@@ -401,14 +378,13 @@ export function createChat(input: CreateChatInput) {
   db.prepare(
     [
       'INSERT INTO chats (',
-      'id, is_archived, custom_state, title, tags, pinned, agent_ids, model_id,',
+      'id, is_archived, title, tags, pinned, agent_ids, model_id,',
       'pending_requests_count, last_read_at, unread_count, created_at, updated_at',
-      ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ].join(' '),
   ).run(
     chatId,
     0,
-    customState,
     title,
     JSON.stringify(tags),
     0,
@@ -486,12 +462,6 @@ export function listChats(url: URL): ListChatsResult {
 
     conditions.push('is_archived = ?');
     queryParams.push(archived === 'true' ? 1 : 0);
-  }
-
-  const state = params.get('state');
-  if (state) {
-    conditions.push('custom_state = ?');
-    queryParams.push(state);
   }
 
   const tag = params.get('tag');
@@ -617,16 +587,6 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
     const normalizedTags = normalizeTags(input.tags);
     updates.push('tags = ?');
     values.push(JSON.stringify(normalizedTags));
-  }
-
-  if (input.customState !== undefined) {
-    if (typeof input.customState !== 'string') {
-      throw validationError('customState must be a string.', { field: 'customState' });
-    }
-
-    ensureCustomState(input.customState, new Set(config.customStates));
-    updates.push('custom_state = ?');
-    values.push(input.customState);
   }
 
   if (input.pinned !== undefined) {

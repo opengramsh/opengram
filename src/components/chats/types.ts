@@ -14,7 +14,6 @@ export type Model = {
 
 export type ConfigResponse = {
   appName: string;
-  customStates: string[];
   agents: Agent[];
   models: Model[];
   defaultModelIdForNewChats: string;
@@ -23,7 +22,6 @@ export type ConfigResponse = {
 export type Chat = {
   id: string;
   is_archived: boolean;
-  custom_state: string | null;
   title: string;
   tags: string[];
   pinned: boolean;

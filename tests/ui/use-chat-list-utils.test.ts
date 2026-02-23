@@ -6,7 +6,6 @@ import { chatMatchesListFilters } from '@/src/components/chats/use-chat-list';
 const baseChat: Chat = {
   id: 'chat-1',
   is_archived: false,
-  custom_state: 'Open',
   title: 'Alpha Chat',
   tags: [],
   pinned: false,
@@ -27,7 +26,7 @@ describe('chatMatchesListFilters', () => {
     expect(
       chatMatchesListFilters(
         { ...baseChat, is_archived: true },
-        { searchQuery: '', selectedAgentId: '', selectedState: '' },
+        { searchQuery: '', selectedAgentId: '' },
         false,
       ),
     ).toBe(false);
@@ -37,7 +36,7 @@ describe('chatMatchesListFilters', () => {
     expect(
       chatMatchesListFilters(
         baseChat,
-        { searchQuery: '', selectedAgentId: 'agent-b', selectedState: '' },
+        { searchQuery: '', selectedAgentId: 'agent-b' },
         false,
       ),
     ).toBe(true);
@@ -47,25 +46,7 @@ describe('chatMatchesListFilters', () => {
     expect(
       chatMatchesListFilters(
         baseChat,
-        { searchQuery: '', selectedAgentId: 'agent-z', selectedState: '' },
-        false,
-      ),
-    ).toBe(false);
-  });
-
-  it('matches only the selected state when state filter is set', () => {
-    expect(
-      chatMatchesListFilters(
-        baseChat,
-        { searchQuery: '', selectedAgentId: '', selectedState: 'Open' },
-        false,
-      ),
-    ).toBe(true);
-
-    expect(
-      chatMatchesListFilters(
-        baseChat,
-        { searchQuery: '', selectedAgentId: '', selectedState: 'Closed' },
+        { searchQuery: '', selectedAgentId: 'agent-z' },
         false,
       ),
     ).toBe(false);
@@ -75,7 +56,7 @@ describe('chatMatchesListFilters', () => {
     expect(
       chatMatchesListFilters(
         baseChat,
-        { searchQuery: 'alpha', selectedAgentId: '', selectedState: '' },
+        { searchQuery: 'alpha', selectedAgentId: '' },
         false,
       ),
     ).toBe(true);
@@ -83,7 +64,7 @@ describe('chatMatchesListFilters', () => {
     expect(
       chatMatchesListFilters(
         baseChat,
-        { searchQuery: 'missing', selectedAgentId: '', selectedState: '' },
+        { searchQuery: 'missing', selectedAgentId: '' },
         false,
       ),
     ).toBe(false);

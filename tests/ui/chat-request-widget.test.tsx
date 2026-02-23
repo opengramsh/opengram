@@ -59,7 +59,6 @@ describe('chat request widget', () => {
           JSON.stringify({
             agents: [{ id: 'agent-a', name: 'Agent A', description: 'Alpha' }],
             models: [{ id: 'model-a', name: 'Model A', description: 'Alpha' }],
-            customStates: ['Open'],
           }),
           { status: 200 },
         );
@@ -71,7 +70,6 @@ describe('chat request widget', () => {
             id: 'chat-1',
             title: 'Chat 1',
             tags: [],
-            custom_state: 'Open',
             model_id: 'model-a',
             pinned: false,
             is_archived: false,

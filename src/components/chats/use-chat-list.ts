@@ -14,7 +14,6 @@ import type { Agent, Chat, ChatsResponse, ConfigResponse, Model } from '@/src/co
 type ChatListFilters = {
   searchQuery: string;
   selectedAgentId: string;
-  selectedState: string;
 };
 
 export type UseChatListOptions = {
@@ -37,10 +36,6 @@ export function chatMatchesListFilters(chat: Chat, filters: ChatListFilters, arc
     return false;
   }
 
-  if (filters.selectedState && chat.custom_state !== filters.selectedState) {
-    return false;
-  }
-
   if (filters.searchQuery) {
     return chat.title.toLowerCase().includes(filters.searchQuery.toLowerCase());
   }
@@ -54,12 +49,10 @@ export function useChatList(options: UseChatListOptions) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [defaultModelIdForNewChats, setDefaultModelIdForNewChats] = useState('');
-  const [customStates, setCustomStates] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState('');
-  const [selectedState, setSelectedState] = useState('');
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [newChatAgentId, setNewChatAgentId] = useState('');
   const [newChatModelId, setNewChatModelId] = useState('');
@@ -72,7 +65,6 @@ export function useChatList(options: UseChatListOptions) {
   const filtersRef = useRef<ChatListFilters>({
     searchQuery: '',
     selectedAgentId: '',
-    selectedState: '',
   });
 
   const agentsById = useMemo(() => {
@@ -104,9 +96,8 @@ export function useChatList(options: UseChatListOptions) {
     filtersRef.current = {
       searchQuery,
       selectedAgentId,
-      selectedState,
     };
-  }, [searchQuery, selectedAgentId, selectedState]);
+  }, [searchQuery, selectedAgentId]);
 
   const matchesActiveFilters = useCallback(
     (chat: Chat) => chatMatchesListFilters(chat, filtersRef.current, archived),
@@ -123,7 +114,6 @@ export function useChatList(options: UseChatListOptions) {
     setAppName(config.appName || 'OpenGram');
     setAgents(config.agents ?? []);
     setModels(config.models ?? []);
-    setCustomStates(config.customStates ?? []);
     const resolvedDefaultModelId = config.defaultModelIdForNewChats || config.models[0]?.id || '';
     setDefaultModelIdForNewChats(resolvedDefaultModelId);
     setNewChatAgentId((current) => selectNewChatAgentId(config.agents ?? [], current));
@@ -142,7 +132,6 @@ export function useChatList(options: UseChatListOptions) {
         archived,
         query: searchQuery,
         agentId: selectedAgentId || null,
-        state: selectedState || null,
       });
       const response = await fetch(`/api/v1/chats${query}`, { cache: 'no-store' });
       if (!response.ok) {
@@ -164,7 +153,7 @@ export function useChatList(options: UseChatListOptions) {
         setLoading(false);
       }
     }
-  }, [archived, chatsErrorMessage, searchQuery, selectedAgentId, selectedState]);
+  }, [archived, chatsErrorMessage, searchQuery, selectedAgentId]);
 
   useEffect(() => {
     loadConfig().catch(() => setError('Failed to load app config.'));
@@ -356,7 +345,6 @@ export function useChatList(options: UseChatListOptions) {
     appName,
     agents,
     models,
-    customStates,
     chats,
     setChats,
     loading,
@@ -365,8 +353,6 @@ export function useChatList(options: UseChatListOptions) {
     setSearchInput,
     selectedAgentId,
     setSelectedAgentId,
-    selectedState,
-    setSelectedState,
     agentsById,
     loadChats,
     refreshChats,

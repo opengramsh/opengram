@@ -36,7 +36,6 @@ export function ChatListPage({
   const {
     agents,
     models,
-    customStates,
     chats,
     loading,
     error,
@@ -44,8 +43,6 @@ export function ChatListPage({
     setSearchInput,
     selectedAgentId,
     setSelectedAgentId,
-    selectedState,
-    setSelectedState,
     agentsById,
     markChatRead,
     markChatUnread,
@@ -80,13 +77,12 @@ export function ChatListPage({
       <section className="space-y-2 border-b border-border/60 px-4 py-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agents</p>
-          {(selectedAgentId || selectedState) && (
+          {selectedAgentId && (
             <Button
               variant="link"
               size="xs"
               onClick={() => {
                 setSelectedAgentId('');
-                setSelectedState('');
               }}
             >
               Clear filters
@@ -121,35 +117,6 @@ export function ChatListPage({
             </Badge>
           ))}
         </div>
-        {customStates.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            <Badge
-              variant="filter"
-              data-active={!selectedState}
-              role="button"
-              tabIndex={0}
-              className="cursor-pointer"
-              onClick={() => setSelectedState('')}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedState(''); } }}
-            >
-              All states
-            </Badge>
-            {customStates.map((state) => (
-              <Badge
-                key={state}
-                variant="filter"
-                data-active={selectedState === state}
-                role="button"
-                tabIndex={0}
-                className="cursor-pointer"
-                onClick={() => setSelectedState((current) => (current === state ? '' : state))}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedState((current) => (current === state ? '' : state)); } }}
-              >
-                {state}
-              </Badge>
-            ))}
-          </div>
-        )}
       </section>
 
       <ChatList

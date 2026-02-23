@@ -5,8 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/ca
 
 type ConfigViewerResponse = {
   appName: string;
-  defaultCustomState: string;
-  customStates: string[];
   defaultModelIdForNewChats: string;
   agents: Array<{ id: string; name: string; description: string }>;
   models: Array<{ id: string; name: string; description: string }>;
@@ -69,10 +67,6 @@ export default function ManagePage() {
                     <dt>Default model for new chats</dt>
                     <dd className="text-foreground">{config.defaultModelIdForNewChats}</dd>
                   </div>
-                  <div className="flex justify-between gap-2">
-                    <dt>Default custom state</dt>
-                    <dd className="text-foreground">{config.defaultCustomState}</dd>
-                  </div>
                 </dl>
               </CardContent>
             </Card>
@@ -108,15 +102,6 @@ export default function ManagePage() {
                     </li>
                   ))}
                 </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="p-0">
-                <CardTitle className="text-sm">States</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <p className="text-xs text-muted-foreground">{config.customStates.join(' | ')}</p>
               </CardContent>
             </Card>
 

@@ -16,8 +16,6 @@ config.get('/', (c) => {
       maxUploadBytes: cfg.maxUploadBytes,
       allowedMimeTypes: cfg.allowedMimeTypes,
       titleMaxChars: cfg.titleMaxChars,
-      defaultCustomState: cfg.defaultCustomState,
-      customStates: cfg.customStates,
       defaultModelIdForNewChats: cfg.defaultModelIdForNewChats,
       agents: cfg.agents,
       models: cfg.models,

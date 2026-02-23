@@ -24,7 +24,6 @@ export const opengramChatTool: AgentTool = {
     ),
     title: Type.Optional(Type.String({ description: "Chat title" })),
     tags: Type.Optional(Type.Array(Type.String(), { description: "Chat tags" })),
-    customState: Type.Optional(Type.String({ description: "Custom state JSON" })),
     pinned: Type.Optional(Type.Boolean({ description: "Pin/unpin the chat" })),
   }),
 
@@ -70,7 +69,6 @@ export const opengramChatTool: AgentTool = {
         const updated = await client.updateChat(params.chatId, {
           title: params.title,
           tags: params.tags,
-          customState: params.customState,
           pinned: params.pinned,
         });
         return {
