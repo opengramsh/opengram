@@ -36,6 +36,7 @@ const baseCfg = {
       enabled: true,
       baseUrl: "http://localhost:3000",
       agents: ["grami"],
+      dmPolicy: "open",
     },
   },
 };
@@ -193,13 +194,14 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
     expect(dispatchCall.dispatcherOptions.deliver).toBeTypeOf("function");
     expect(dispatchCall.dispatcherOptions.onError).toBeTypeOf("function");
 
-    // The mock runtime simulates an agent reply, which should trigger createMessage
-    const createMessageCalls = (client.createMessage as ReturnType<typeof vi.fn>).mock.calls;
-    const agentReplies = createMessageCalls.filter(
-      ([_chatId, msg]: [string, { role: string }]) => msg.role === "agent",
-    );
-    expect(agentReplies.length).toBeGreaterThanOrEqual(1);
-    expect(agentReplies[0][1].content).toBe("Agent reply from SDK");
+    // The eager streaming message is created before dispatch
+    expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
+      role: "agent",
+      senderId: "grami",
+      streaming: true,
+    });
+    // The mock runtime simulates an agent reply, which finalizes the eager stream
+    expect(client.completeMessage).toHaveBeenCalledWith("msg-1", "Agent reply from SDK");
 
     abortController.abort();
   });

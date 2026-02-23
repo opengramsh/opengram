@@ -1,7 +1,7 @@
 import type { OpenClawConfig, WizardPrompter } from "openclaw/plugin-sdk";
 
 import { OpenGramClient } from "../api-client.js";
-import { detectTailscaleUrl } from "./tailscale.js";
+import { detectOpengramUrl } from "./tailscale.js";
 
 export type SetupWizardResult = {
   cfg: OpenClawConfig;
@@ -20,20 +20,29 @@ export async function runSetupWizard(
 ): Promise<SetupWizardResult> {
   await prompter.intro("OpenGram Setup");
 
+  // Extract existing opengram config for pre-populating prompts
+  const existing =
+    ((cfg.channels as Record<string, any> | undefined)?.opengram as {
+      baseUrl?: string;
+      instanceSecret?: string;
+      agents?: string[];
+    } | undefined) ?? {};
+
   // --- Step 1: OpenGram URL ---
-  const baseUrl = await promptBaseUrl(prompter);
+  const baseUrl = await promptBaseUrl(prompter, existing.baseUrl);
 
   // --- Step 2: Connection test ---
   await testConnection(prompter, baseUrl);
 
   // --- Step 3: Instance secret (optional) ---
-  const instanceSecret = await promptInstanceSecret(prompter);
+  const instanceSecret = await promptInstanceSecret(prompter, existing.instanceSecret);
 
   // --- Step 4: Model selection (from OpenClaw config) ---
-  const selectedModels = await promptModels(prompter, cfg);
+  const existingModelIds = await fetchExistingModelIds(baseUrl, instanceSecret);
+  const selectedModels = await promptModels(prompter, cfg, existingModelIds);
 
   // --- Step 5: Agent selection (from OpenClaw config) ---
-  const { agentIds, agentConfigs } = await promptAgents(prompter, cfg);
+  const { agentIds, agentConfigs } = await promptAgents(prompter, cfg, existing.agents);
 
   // --- Step 6: Push to OpenGram ---
   if (selectedModels.length > 0 || agentConfigs.length > 0) {
@@ -80,9 +89,24 @@ export async function runSetupWizard(
 // Step helpers
 // ---------------------------------------------------------------------------
 
-async function promptBaseUrl(prompter: WizardPrompter): Promise<string> {
-  const tailscaleUrl = detectTailscaleUrl();
-  const suggestion = tailscaleUrl ?? "http://localhost:3000";
+async function promptBaseUrl(
+  prompter: WizardPrompter,
+  existingUrl?: string,
+): Promise<string> {
+  let suggestion: string;
+
+  if (existingUrl) {
+    suggestion = existingUrl;
+  } else {
+    const spin = prompter.progress("Detecting OpenGram instance…");
+    try {
+      suggestion = await detectOpengramUrl();
+      spin.stop(`Detected: ${suggestion}`);
+    } catch {
+      suggestion = "http://localhost:3000";
+      spin.stop("Auto-detection failed, using default.");
+    }
+  }
 
   const url = await prompter.text({
     message: "OpenGram instance URL",
@@ -139,16 +163,18 @@ async function testConnection(
 
 async function promptInstanceSecret(
   prompter: WizardPrompter,
+  existingSecret?: string,
 ): Promise<string | undefined> {
   const usesSecret = await prompter.confirm({
     message: "Does your OpenGram instance use an instance secret?",
-    initialValue: false,
+    initialValue: Boolean(existingSecret),
   });
 
   if (!usesSecret) return undefined;
 
   const secret = await prompter.text({
     message: "Instance secret",
+    initialValue: existingSecret,
     placeholder: "your-secret-here",
     validate(value) {
       if (!value.trim()) return "Secret cannot be empty";
@@ -159,11 +185,37 @@ async function promptInstanceSecret(
   return secret;
 }
 
+/**
+ * Fetch model IDs currently configured in the OpenGram instance.
+ * Returns an empty array on any failure (instance not reachable, etc.).
+ */
+async function fetchExistingModelIds(
+  baseUrl: string,
+  instanceSecret: string | undefined,
+): Promise<string[]> {
+  try {
+    const headers: Record<string, string> = {};
+    if (instanceSecret) {
+      headers.Authorization = `Bearer ${instanceSecret}`;
+    }
+    const res = await fetch(`${baseUrl}/api/v1/config`, {
+      method: "GET",
+      headers,
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { models?: Array<{ id: string }> };
+    return body.models?.map((m) => m.id) ?? [];
+  } catch {
+    return [];
+  }
+}
+
 type ImportedModel = { id: string; name: string; description: string };
 
 async function promptModels(
   prompter: WizardPrompter,
   cfg: OpenClawConfig,
+  existingModelIds?: string[],
 ): Promise<ImportedModel[]> {
   // Models live at agents.defaults.models as Record<id, { alias? }>
   const modelsRecord = (cfg as any).agents?.defaults?.models as
@@ -188,10 +240,17 @@ async function promptModels(
     };
   });
 
+  // Re-running setup: pre-select only models already in OpenGram.
+  // First-time: select all.
+  const validExisting =
+    existingModelIds?.filter((id) => modelIds.includes(id)) ?? [];
+  const defaultSelection =
+    validExisting.length > 0 ? validExisting : modelIds;
+
   const selected = await prompter.multiselect<string>({
     message: "Which models should be available in OpenGram?",
     options,
-    initialValues: modelIds,
+    initialValues: defaultSelection,
   });
 
   return selected.map((id) => {
@@ -209,6 +268,7 @@ type ImportedAgent = { id: string; name: string; description: string; defaultMod
 async function promptAgents(
   prompter: WizardPrompter,
   cfg: OpenClawConfig,
+  previousAgents?: string[],
 ): Promise<{ agentIds: string[]; agentConfigs: ImportedAgent[] }> {
   const agentList = (cfg as any).agents?.list as
     | Array<{ id: string; name?: string; model?: string }>
@@ -228,10 +288,19 @@ async function promptAgents(
     hint: a.name ? a.id : undefined,
   }));
 
+  // Re-running setup: pre-select only previously configured agents
+  // (filtered to those that still exist). First-time: select all.
+  const validPrevious =
+    previousAgents?.filter((id) => agentList.some((a) => a.id === id)) ?? [];
+  const defaultSelection =
+    validPrevious.length > 0
+      ? validPrevious
+      : agentList.map((a) => a.id);
+
   const selected = await prompter.multiselect<string>({
     message: "Which agents should receive messages from OpenGram?",
     options,
-    initialValues: agentList.map((a) => a.id),
+    initialValues: defaultSelection,
   });
 
   const agentConfigs: ImportedAgent[] = selected.map((id) => {
@@ -299,10 +368,22 @@ export function applyOpenGramConfig(
     enabled: true,
     baseUrl: input.baseUrl,
     agents: input.agents,
+    dmPolicy: "pairing",
   };
 
-  // Remove legacy defaultModelId if present
+  // Remove legacy fields from previous setup versions
   delete opengramSection.defaultModelId;
+
+  // Ensure user:primary is always in the config-level allowFrom so the
+  // owner is never blocked by the pairing policy, even when the pairing
+  // store lookup is unavailable at runtime.
+  const existingAllowFrom: string[] = Array.isArray(opengramSection.allowFrom)
+    ? opengramSection.allowFrom
+    : [];
+  if (!existingAllowFrom.includes("user:primary")) {
+    existingAllowFrom.push("user:primary");
+  }
+  opengramSection.allowFrom = existingAllowFrom;
 
   if (input.instanceSecret) {
     opengramSection.instanceSecret = input.instanceSecret;
@@ -323,8 +404,8 @@ export function applyOpenGramConfig(
       ...plugins,
       entries: {
         ...entries,
-        "opengram": {
-          ...entries["opengram"],
+        "openclaw-plugin-opengram": {
+          ...entries["openclaw-plugin-opengram"],
           enabled: true,
         },
       },

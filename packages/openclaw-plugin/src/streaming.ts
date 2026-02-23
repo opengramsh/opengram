@@ -86,6 +86,16 @@ export function cancelStream(client: OpenGramClient, dispatchId: string): void {
 }
 
 /**
+ * Pre-seed the activeStreams map so that handleBlockReply reuses the existing
+ * message instead of creating a new one. Called eagerly when the inbound
+ * handler starts processing, before the SDK dispatch, so the frontend sees
+ * stream_state:'streaming' immediately (typing indicator).
+ */
+export function initStream(dispatchId: string, chatId: string, messageId: string): void {
+  activeStreams.set(dispatchId, { chatId, messageId, lastSentLength: 0 });
+}
+
+/**
  * Check if a dispatch currently has an active stream.
  * Useful for testing.
  */

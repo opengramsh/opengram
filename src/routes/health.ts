@@ -11,6 +11,7 @@ health.get('/', (c) => {
   try {
     const uptime = Math.floor((Date.now() - processStartedAt) / 1000);
     return c.json({
+      service: 'opengram',
       status: 'ok',
       version: pkg.version,
       uptime,

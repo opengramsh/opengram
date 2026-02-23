@@ -1,8 +1,9 @@
 import type { OpenGramClient } from "./api-client.js";
 import { resolveAgentForChat, trackActiveChat } from "./chat-manager.js";
+import { resolveOpenGramAccount } from "./config.js";
 import { downloadMedia } from "./media.js";
 import { getOpenGramRuntime } from "./runtime.js";
-import { cancelStream, finalizeStream, handleBlockReply } from "./streaming.js";
+import { cancelStream, finalizeStream, handleBlockReply, initStream } from "./streaming.js";
 import { createReplyPrefixOptions, type OpenClawConfig } from "openclaw/plugin-sdk";
 
 export type InboundListenerParams = {
@@ -124,6 +125,69 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
   });
 }
 
+/**
+ * Check DM policy for an inbound sender. Returns true if the message should
+ * be dispatched, false if it should be dropped.
+ */
+async function checkDmPolicy(
+  senderId: string,
+  chatId: string,
+  cfg: OpenClawConfig,
+  client: OpenGramClient,
+  log?: InboundListenerParams["log"],
+): Promise<boolean> {
+  const account = resolveOpenGramAccount(cfg);
+  const policy = account.config.dmPolicy;
+
+  if (policy === "open") return true;
+  if (policy === "disabled") {
+    log?.info(`[opengram] DM policy is disabled, dropping message from ${senderId}`);
+    return false;
+  }
+
+  // For pairing/allowlist, build effective allowlist from store + config.
+  let effectiveAllowlist: string[];
+  try {
+    const core = getOpenGramRuntime();
+    const storeEntries = await core.channel.pairing.readAllowFromStore("opengram");
+    effectiveAllowlist = [...storeEntries, ...account.config.allowFrom];
+  } catch {
+    // Runtime not available (e.g. test context with injected dispatch) — config only.
+    effectiveAllowlist = [...account.config.allowFrom];
+  }
+
+  if (effectiveAllowlist.includes("*") || effectiveAllowlist.includes(senderId)) {
+    return true;
+  }
+
+  if (policy === "pairing") {
+    try {
+      const core = getOpenGramRuntime();
+      const { code } = await core.channel.pairing.upsertPairingRequest({
+        channel: "opengram",
+        id: senderId,
+      });
+      const pairingReply = core.channel.pairing.buildPairingReply({
+        channel: "opengram",
+        idLine: `Sender: ${senderId}`,
+        code,
+      });
+      await client.createMessage(chatId, {
+        role: "system",
+        senderId: "openclaw",
+        content: pairingReply,
+      });
+    } catch (err) {
+      log?.warn(`[opengram] Failed to create pairing request for ${senderId}: ${err}`);
+    }
+    return false;
+  }
+
+  // allowlist mode — sender not in list.
+  log?.info(`[opengram] Sender ${senderId} not in allowlist, dropping message`);
+  return false;
+}
+
 async function handleMessageCreated(
   data: { payload: Record<string, unknown>; timestamp?: string },
   cfg: OpenClawConfig,
@@ -148,6 +212,10 @@ async function handleMessageCreated(
   if (!chatId) return;
   trackActiveChat(chatId);
 
+  const senderId = (payload.senderId as string) ?? "user:primary";
+  const allowed = await checkDmPolicy(senderId, chatId, cfg, client, log);
+  if (!allowed) return;
+
   const agentId = await resolveAgentForChat(chatId, cfg, log);
   const content = typeof payload.contentFinal === "string"
     ? payload.contentFinal
@@ -160,6 +228,15 @@ async function handleMessageCreated(
   // Unique per dispatch to isolate concurrent stream state.
   const dispatchId = `${chatId}:${Date.now()}`;
 
+  // Eagerly create a streaming message so the frontend shows typing indicator
+  // immediately, before the SDK starts producing content.
+  const streamingMsg = await client.createMessage(chatId, {
+    role: "agent",
+    senderId: agentId,
+    streaming: true,
+  });
+  initStream(dispatchId, chatId, streamingMsg.id);
+
   const deliver = buildDeliver(client, chatId, agentId, dispatchId, log);
   const onCleanup = () => cancelStream(client, dispatchId);
   const onError = (err: unknown) => {
@@ -167,10 +244,15 @@ async function handleMessageCreated(
     cancelStream(client, dispatchId);
   };
 
-  if (dispatch) {
-    dispatch({ chatId, agentId, messageId, content, cfg, deliver, onCleanup, onError });
-  } else {
-    await dispatchViaSdk({ chatId, agentId, messageId, content, cfg, deliver, onError, log });
+  try {
+    if (dispatch) {
+      dispatch({ chatId, agentId, messageId, content, cfg, deliver, onCleanup, onError });
+    } else {
+      await dispatchViaSdk({ chatId, agentId, messageId, content, cfg, deliver, onError, log });
+    }
+  } catch (err) {
+    cancelStream(client, dispatchId);
+    throw err;
   }
 }
 
@@ -184,40 +266,60 @@ async function handleRequestResolved(
   const payload = data.payload;
   const chatId = parseChatId(payload.chatId, "request.resolved", log);
   if (!chatId) return;
+
+  const senderId = (payload.senderId as string) ?? "user:primary";
+  const allowed = await checkDmPolicy(senderId, chatId, cfg, client, log);
+  if (!allowed) return;
+
   const requestId = payload.requestId as string;
   const body = formatRequestResolution(payload);
 
   const agentId = await resolveAgentForChat(chatId, cfg, log);
   const dispatchId = `req:${requestId}`;
 
+  // Eagerly create a streaming message so the frontend shows typing indicator
+  // immediately, before the SDK starts producing content.
+  const streamingMsg = await client.createMessage(chatId, {
+    role: "agent",
+    senderId: agentId,
+    streaming: true,
+  });
+  initStream(dispatchId, chatId, streamingMsg.id);
+
   const deliver = buildDeliver(client, chatId, agentId, dispatchId, log);
   const onCleanup = () => cancelStream(client, dispatchId);
   const onError = (err: unknown) => {
     log?.error(`[opengram] Reply dispatch error: ${err}`);
+    cancelStream(client, dispatchId);
   };
 
-  if (dispatch) {
-    dispatch({
-      chatId,
-      agentId,
-      messageId: `req:${requestId}:resolved`,
-      content: body,
-      cfg,
-      deliver,
-      onCleanup,
-      onError,
-    });
-  } else {
-    await dispatchViaSdk({
-      chatId,
-      agentId,
-      messageId: `req:${requestId}:resolved`,
-      content: body,
-      cfg,
-      deliver,
-      onError: (err) => log?.error(`[opengram] Reply dispatch error: ${err}`),
-      log,
-    });
+  try {
+    if (dispatch) {
+      dispatch({
+        chatId,
+        agentId,
+        messageId: `req:${requestId}:resolved`,
+        content: body,
+        cfg,
+        deliver,
+        onCleanup,
+        onError,
+      });
+    } else {
+      await dispatchViaSdk({
+        chatId,
+        agentId,
+        messageId: `req:${requestId}:resolved`,
+        content: body,
+        cfg,
+        deliver,
+        onError: (err) => log?.error(`[opengram] Reply dispatch error: ${err}`),
+        log,
+      });
+    }
+  } catch (err) {
+    cancelStream(client, dispatchId);
+    throw err;
   }
 }
 
@@ -361,6 +463,9 @@ function buildDeliver(
             content: replyPayload.text,
           });
         }
+      } else {
+        // No text in final reply (media-only or empty) — cancel the eager stream.
+        cancelStream(client, dispatchId);
       }
       if (replyPayload.mediaUrl) {
         const { buffer, filename, contentType } = await downloadMedia(replyPayload.mediaUrl);

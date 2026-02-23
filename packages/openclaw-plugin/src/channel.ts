@@ -54,12 +54,33 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
     }),
   },
   security: {
-    resolveDmPolicy: () => ({
-      policy: "open",
-      allowFrom: [],
-      allowFromPath: "channels.opengram.",
+    resolveDmPolicy: ({ account }) => ({
+      policy: account.config.dmPolicy ?? "pairing",
+      allowFrom: account.config.allowFrom,
+      allowFromPath: "channels.opengram.allowFrom",
       approveHint: "OpenGram is designed for private access via Tailscale.",
     }),
+  },
+  pairing: {
+    idLabel: "opengramUserId",
+    notifyApproval: async ({ cfg, id }) => {
+      const section = getOpenGramSection(cfg);
+      if (!section?.baseUrl) return;
+      try {
+        const client = new OpenGramClient(section.baseUrl, section.instanceSecret);
+        const chats = await client.listChats({ limit: 1 });
+        const chatId = chats.data?.[0]?.id;
+        if (chatId) {
+          await client.createMessage(chatId, {
+            role: "system",
+            senderId: "openclaw",
+            content: `OpenClaw access approved for ${id}.`,
+          });
+        }
+      } catch {
+        // Best-effort notification — don't fail the approval flow.
+      }
+    },
   },
   messaging: {
     normalizeTarget: (raw) => raw.trim(),

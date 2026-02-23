@@ -27,6 +27,7 @@ const baseCfg = {
       enabled: true,
       baseUrl: "http://localhost:3000",
       agents: ["grami"],
+      dmPolicy: "open",
     },
   },
 };
@@ -84,13 +85,16 @@ describe("inbound deliver integration", () => {
       // Wait for async handler
       await vi.waitFor(() => expect(capturedDeliver).toBeDefined());
 
-      // Simulate block streaming
-      await capturedDeliver({ text: "Hi there" }, { kind: "block" });
+      // Eager streaming message created before any blocks
       expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
         role: "agent",
         senderId: "grami",
         streaming: true,
       });
+
+      // Simulate block streaming — should NOT call createMessage again
+      await capturedDeliver({ text: "Hi there" }, { kind: "block" });
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
       expect(client.sendChunk).toHaveBeenCalledWith("msg-1", "Hi there");
 
       await capturedDeliver({ text: "Hi there! How can I help?" }, { kind: "block" });
@@ -109,7 +113,7 @@ describe("inbound deliver integration", () => {
       abortController.abort();
     });
 
-    it("sends non-streaming final message when no blocks preceded", async () => {
+    it("finalizes eager stream on final message when no blocks preceded", async () => {
       const client = createMockClient();
       await initializeChatManager(client, baseCfg);
 
@@ -145,17 +149,20 @@ describe("inbound deliver integration", () => {
 
       await vi.waitFor(() => expect(capturedDeliver).toBeDefined());
 
-      // Final with no preceding blocks — should create a normal message
-      await capturedDeliver({ text: "Here's the answer." }, { kind: "final" });
-
-      // completeMessage should NOT have been called (no stream to finalize)
-      expect(client.completeMessage).not.toHaveBeenCalled();
-      // Should create a normal message instead
+      // Eager streaming message was created
       expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
         role: "agent",
         senderId: "grami",
-        content: "Here's the answer.",
+        streaming: true,
       });
+
+      // Final with no preceding blocks — should complete the eager stream
+      await capturedDeliver({ text: "Here's the answer." }, { kind: "final" });
+
+      // completeMessage should have been called to finalize the eager stream
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-1", "Here's the answer.");
+      // Only the eager streaming createMessage, no additional normal message
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
 
       abortController.abort();
     });
@@ -207,7 +214,7 @@ describe("inbound deliver integration", () => {
       abortController.abort();
     });
 
-    it("onCleanup cancels active stream", async () => {
+    it("onCleanup cancels active stream after blocks", async () => {
       const client = createMockClient();
       await initializeChatManager(client, baseCfg);
 
@@ -245,15 +252,69 @@ describe("inbound deliver integration", () => {
 
       await vi.waitFor(() => expect(capturedDeliver).toBeDefined());
 
-      // Start streaming
-      await capturedDeliver({ text: "Partial" }, { kind: "block" });
+      // Eager streaming message created before blocks
       expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
         role: "agent",
         senderId: "grami",
         streaming: true,
       });
 
+      // Send a block
+      await capturedDeliver({ text: "Partial" }, { kind: "block" });
+      // No additional createMessage — stream was pre-seeded
+      expect(client.createMessage).toHaveBeenCalledTimes(1);
+
       // Call onCleanup (simulates unexpected completion)
+      capturedCleanup();
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-1");
+
+      abortController.abort();
+    });
+
+    it("onCleanup cancels eager stream even without blocks", async () => {
+      const client = createMockClient();
+      await initializeChatManager(client, baseCfg);
+
+      let capturedCleanup!: () => void;
+
+      const dispatch: DispatchFn = ({ onCleanup }) => {
+        capturedCleanup = onCleanup;
+      };
+
+      const mockEs = createMockEventSource();
+      (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+      const abortController = new AbortController();
+      startInboundListener({
+        client,
+        cfg: baseCfg,
+        abortSignal: abortController.signal,
+        reconnectDelayMs: 100,
+        dispatch,
+      });
+
+      mockEs.triggerMessage({
+        id: "evt-cleanup-eager",
+        type: "message.created",
+        payload: {
+          chatId: "chat-1",
+          messageId: "user-msg-cleanup-eager",
+          role: "user",
+          content: "Hello",
+          senderId: "user:primary",
+        },
+      });
+
+      await vi.waitFor(() => expect(capturedCleanup).toBeDefined());
+
+      // Eager streaming message created
+      expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
+        role: "agent",
+        senderId: "grami",
+        streaming: true,
+      });
+
+      // Call onCleanup without any blocks — should cancel the eager stream
       capturedCleanup();
       expect(client.cancelMessage).toHaveBeenCalledWith("msg-1");
 
@@ -587,7 +648,7 @@ describe("inbound deliver integration", () => {
     it("downloads and uploads media on final with mediaUrl", async () => {
       const client = createMockClient({
         createMessage: vi.fn()
-          .mockResolvedValueOnce({ id: "msg-text" })
+          .mockResolvedValueOnce({ id: "msg-eager" })
           .mockResolvedValueOnce({ id: "msg-media" }),
       });
       await initializeChatManager(client, baseCfg);
@@ -631,11 +692,20 @@ describe("inbound deliver integration", () => {
 
       await vi.waitFor(() => expect(capturedDeliver).toBeDefined());
 
+      // First createMessage is the eager streaming message
+      expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
+        role: "agent",
+        senderId: "grami",
+        streaming: true,
+      });
+
       await capturedDeliver(
         { mediaUrl: "https://example.com/photo.jpg" },
         { kind: "final" },
       );
 
+      // Eager stream cancelled (no text), then a new message for media
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-eager");
       expect(client.createMessage).toHaveBeenCalledWith("chat-1", {
         role: "agent",
         senderId: "grami",

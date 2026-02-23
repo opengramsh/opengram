@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Mock the tailscale module to avoid running actual tailscale commands
 vi.mock("../src/cli/tailscale.js", () => ({
+  detectOpengramUrl: vi.fn(() => Promise.resolve("http://localhost:3000")),
   detectTailscaleUrl: vi.fn(() => undefined),
 }));
 
@@ -21,7 +22,7 @@ const mockFetch = vi.fn().mockResolvedValue({ ok: true });
 vi.stubGlobal("fetch", mockFetch);
 
 import { runSetupWizard, applyOpenGramConfig } from "../src/cli/setup.js";
-import { detectTailscaleUrl } from "../src/cli/tailscale.js";
+import { detectOpengramUrl } from "../src/cli/tailscale.js";
 import type { OpenClawConfig, WizardPrompter } from "openclaw/plugin-sdk";
 
 // ---------------------------------------------------------------------------
@@ -68,6 +69,7 @@ function createMinimalConfig(
 
 beforeEach(() => {
   mockFetch.mockResolvedValue({ ok: true });
+  vi.mocked(detectOpengramUrl).mockResolvedValue("http://localhost:3000");
 });
 
 // ---------------------------------------------------------------------------
@@ -86,6 +88,55 @@ describe("applyOpenGramConfig", () => {
     expect(section.enabled).toBe(true);
     expect(section.baseUrl).toBe("https://gram.example.com");
     expect(section.agents).toEqual(["agent-1"]);
+  });
+
+  it("sets dmPolicy to pairing", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    const section = (result.channels as any).opengram;
+    expect(section.dmPolicy).toBe("pairing");
+  });
+
+  it("includes user:primary in allowFrom", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    const section = (result.channels as any).opengram;
+    expect(section.allowFrom).toEqual(["user:primary"]);
+  });
+
+  it("preserves existing allowFrom entries and adds user:primary", () => {
+    const cfg = createMinimalConfig({
+      channels: { opengram: { allowFrom: ["custom-user"], baseUrl: "old" } },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    const section = (result.channels as any).opengram;
+    expect(section.allowFrom).toEqual(["custom-user", "user:primary"]);
+    expect(section.dmPolicy).toBe("pairing");
+  });
+
+  it("does not duplicate user:primary if already in allowFrom", () => {
+    const cfg = createMinimalConfig({
+      channels: { opengram: { allowFrom: ["user:primary"], baseUrl: "old" } },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    const section = (result.channels as any).opengram;
+    expect(section.allowFrom).toEqual(["user:primary"]);
   });
 
   it("does not include defaultModelId", () => {
@@ -149,14 +200,14 @@ describe("applyOpenGramConfig", () => {
     expect((result.channels as any).discord.token).toBe("abc");
   });
 
-  it("sets plugins.entries['opengram'].enabled to true", () => {
+  it("sets plugins.entries['openclaw-plugin-opengram'].enabled to true", () => {
     const cfg = createMinimalConfig();
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
     });
 
-    const entry = (result as any).plugins.entries["opengram"];
+    const entry = (result as any).plugins.entries["openclaw-plugin-opengram"];
     expect(entry.enabled).toBe(true);
   });
 
@@ -175,7 +226,7 @@ describe("applyOpenGramConfig", () => {
 
     const plugins = (result as any).plugins;
     expect(plugins.entries["some-other-plugin"]).toEqual({ enabled: true, foo: "bar" });
-    expect(plugins.entries["opengram"].enabled).toBe(true);
+    expect(plugins.entries["openclaw-plugin-opengram"].enabled).toBe(true);
   });
 
   it("preserves existing opengram fields not set by wizard", () => {
@@ -400,12 +451,12 @@ describe("runSetupWizard", () => {
     expect(adminCall).toBeUndefined();
   });
 
-  it("uses Tailscale URL suggestion when available", async () => {
-    vi.mocked(detectTailscaleUrl).mockReturnValue("https://myhost.tail1234.ts.net");
+  it("uses auto-detected URL when no existing config", async () => {
+    vi.mocked(detectOpengramUrl).mockResolvedValue("http://100.1.2.3:3333");
 
     const prompter = createMockPrompter({
       text: vi.fn()
-        .mockResolvedValueOnce("https://myhost.tail1234.ts.net"),
+        .mockResolvedValueOnce("http://100.1.2.3:3333"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
         .mockResolvedValueOnce([])
@@ -415,10 +466,9 @@ describe("runSetupWizard", () => {
     const cfg = createMinimalConfig();
     await runSetupWizard(prompter, cfg);
 
-    // First text call (baseUrl) should have used the tailscale URL as initialValue
     expect(prompter.text).toHaveBeenCalledWith(
       expect.objectContaining({
-        initialValue: "https://myhost.tail1234.ts.net",
+        initialValue: "http://100.1.2.3:3333",
       }),
     );
   });
@@ -438,5 +488,248 @@ describe("runSetupWizard", () => {
 
     const section = (result.cfg.channels as any).opengram;
     expect(section.baseUrl).toBe("http://localhost:3000");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: pre-populating from existing config
+// ---------------------------------------------------------------------------
+
+describe("pre-populating from existing config", () => {
+  it("uses existing baseUrl as initial value when re-running setup", async () => {
+    vi.mocked(detectOpengramUrl).mockClear();
+
+    const prompter = createMockPrompter({
+      text: vi.fn()
+        .mockResolvedValueOnce("http://myhost:3333"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+    });
+
+    const cfg = createMinimalConfig({
+      channels: {
+        opengram: {
+          enabled: true,
+          baseUrl: "http://myhost:3333",
+          agents: ["agent-1"],
+        },
+      },
+    });
+
+    await runSetupWizard(prompter, cfg);
+
+    // URL prompt should have the existing URL as initialValue
+    expect(prompter.text).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialValue: "http://myhost:3333",
+      }),
+    );
+
+    // Auto-detection should NOT have been called
+    expect(detectOpengramUrl).not.toHaveBeenCalled();
+  });
+
+  it("pre-selects instance secret confirm when existing secret is set", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn()
+        .mockResolvedValueOnce("http://localhost:3000")
+        .mockResolvedValueOnce("existing-secret"),
+      confirm: vi.fn()
+        .mockResolvedValueOnce(true)     // instance secret: yes (pre-selected)
+        .mockResolvedValueOnce(false),   // restart: no
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]),
+    });
+
+    const cfg = createMinimalConfig({
+      channels: {
+        opengram: {
+          enabled: true,
+          baseUrl: "http://localhost:3000",
+          instanceSecret: "existing-secret",
+          agents: [],
+        },
+      },
+    });
+
+    await runSetupWizard(prompter, cfg);
+
+    // First confirm (instance secret) should default to true
+    const confirmCalls = (prompter.confirm as ReturnType<typeof vi.fn>).mock.calls;
+    expect(confirmCalls[0][0]).toEqual(
+      expect.objectContaining({
+        message: expect.stringContaining("instance secret"),
+        initialValue: true,
+      }),
+    );
+
+    // Secret text prompt should have existing value as initialValue
+    const textCalls = (prompter.text as ReturnType<typeof vi.fn>).mock.calls;
+    const secretCall = textCalls.find(
+      (call: any) => call[0].message === "Instance secret",
+    );
+    expect(secretCall?.[0]).toEqual(
+      expect.objectContaining({
+        initialValue: "existing-secret",
+      }),
+    );
+  });
+
+  it("pre-selects previously configured agents instead of all", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn()
+        .mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])         // models
+        .mockResolvedValueOnce(["agent-1"]), // agents
+    });
+
+    const cfg = createMinimalConfig({
+      channels: {
+        opengram: {
+          enabled: true,
+          baseUrl: "http://localhost:3000",
+          agents: ["agent-1"],
+        },
+      },
+    });
+
+    await runSetupWizard(prompter, cfg);
+
+    // Agent multiselect should have only agent-1 pre-selected
+    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
+    const agentCall = multiselectCalls.find(
+      (call: any) => call[0].message.match(/agent/i),
+    );
+    expect(agentCall?.[0].initialValues).toEqual(["agent-1"]);
+  });
+
+  it("selects all agents when previous agents list is empty", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn()
+        .mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(["agent-1", "agent-2"]),
+    });
+
+    const cfg = createMinimalConfig({
+      channels: {
+        opengram: {
+          enabled: true,
+          baseUrl: "http://localhost:3000",
+          agents: [],
+        },
+      },
+    });
+
+    await runSetupWizard(prompter, cfg);
+
+    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
+    const agentCall = multiselectCalls.find(
+      (call: any) => call[0].message.match(/agent/i),
+    );
+    expect(agentCall?.[0].initialValues).toEqual(["agent-1", "agent-2"]);
+  });
+
+  it("pre-selects only models already in OpenGram instance", async () => {
+    // Simulate OpenGram instance returning only one model
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === "string" && url.includes("/api/v1/config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            models: [{ id: "anthropic/claude-sonnet-4-6", name: "sonnet" }],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    const prompter = createMockPrompter({
+      text: vi.fn()
+        .mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models
+        .mockResolvedValueOnce([]),                               // agents
+    });
+
+    const cfg = createMinimalConfig();
+    await runSetupWizard(prompter, cfg);
+
+    // Model multiselect should only pre-select the model already in OpenGram
+    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
+    const modelCall = multiselectCalls.find(
+      (call: any) => call[0].message.match(/model/i),
+    );
+    expect(modelCall?.[0].initialValues).toEqual(["anthropic/claude-sonnet-4-6"]);
+  });
+
+  it("selects all models when OpenGram config fetch fails", async () => {
+    // Simulate OpenGram instance being unreachable for config fetch
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === "string" && url.includes("/api/v1/config")) {
+        return Promise.reject(new Error("ECONNREFUSED"));
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    const prompter = createMockPrompter({
+      text: vi.fn()
+        .mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])  // models
+        .mockResolvedValueOnce([]), // agents
+    });
+
+    const cfg = createMinimalConfig();
+    await runSetupWizard(prompter, cfg);
+
+    // Model multiselect should have ALL models pre-selected (fallback)
+    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
+    const modelCall = multiselectCalls.find(
+      (call: any) => call[0].message.match(/model/i),
+    );
+    expect(modelCall?.[0].initialValues).toEqual([
+      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-opus-4-6",
+    ]);
+  });
+
+  it("filters out previously configured agents that no longer exist", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn()
+        .mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(["agent-1"]),
+    });
+
+    const cfg = createMinimalConfig({
+      channels: {
+        opengram: {
+          enabled: true,
+          baseUrl: "http://localhost:3000",
+          agents: ["agent-1", "deleted-agent"],
+        },
+      },
+    });
+
+    await runSetupWizard(prompter, cfg);
+
+    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
+    const agentCall = multiselectCalls.find(
+      (call: any) => call[0].message.match(/agent/i),
+    );
+    // Only agent-1 should be pre-selected (deleted-agent filtered out)
+    expect(agentCall?.[0].initialValues).toEqual(["agent-1"]);
   });
 });

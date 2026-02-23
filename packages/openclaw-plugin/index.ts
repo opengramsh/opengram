@@ -5,7 +5,7 @@ import { registerOpengramCli } from "./src/cli/register.js";
 import { setOpenGramRuntime } from "./src/runtime.js";
 
 const plugin = {
-  id: "opengram",
+  id: "openclaw-plugin-opengram",
   name: "opengram",
   version: "0.1.0",
   description: "OpenGram channel plugin - mobile-first AI agent chat interface",

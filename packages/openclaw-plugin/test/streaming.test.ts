@@ -7,6 +7,7 @@ import {
   finalizeStream,
   handleBlockReply,
   hasActiveStream,
+  initStream,
 } from "../src/streaming.js";
 
 function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
@@ -219,6 +220,41 @@ describe("streaming", () => {
       // finalizeStream after cancel should return false
       const result = await finalizeStream(client, "d-1", "Doesn't matter");
       expect(result).toBe(false);
+    });
+  });
+
+  describe("initStream", () => {
+    it("pre-seeded stream skips createMessage on first block", async () => {
+      const client = createMockClient();
+
+      initStream("dispatch-pre", "chat-1", "msg-eager-1");
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-pre", { text: "Hello" });
+
+      // createMessage should NOT be called — the stream was pre-seeded
+      expect(client.createMessage).not.toHaveBeenCalled();
+      expect(client.sendChunk).toHaveBeenCalledWith("msg-eager-1", "Hello");
+      expect(hasActiveStream("dispatch-pre")).toBe(true);
+    });
+
+    it("allows direct finalizeStream without any blocks", async () => {
+      const client = createMockClient();
+
+      initStream("dispatch-pre", "chat-1", "msg-eager-1");
+      const result = await finalizeStream(client, "dispatch-pre", "Final text");
+
+      expect(result).toBe(true);
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-eager-1", "Final text");
+      expect(hasActiveStream("dispatch-pre")).toBe(false);
+    });
+
+    it("allows cancelStream without any blocks", () => {
+      const client = createMockClient();
+
+      initStream("dispatch-pre", "chat-1", "msg-eager-1");
+      cancelStream(client, "dispatch-pre");
+
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-eager-1");
+      expect(hasActiveStream("dispatch-pre")).toBe(false);
     });
   });
 

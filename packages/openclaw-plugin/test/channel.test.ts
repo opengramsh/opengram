@@ -157,9 +157,36 @@ describe("channel plugin definition", () => {
   });
 
   describe("security", () => {
-    it("resolves DM policy as open", () => {
-      const policy = opengramPlugin.security.resolveDmPolicy();
-      expect(policy.policy).toBe("open");
+    it("resolves DM policy from account config", () => {
+      const account = {
+        accountId: "default",
+        enabled: true,
+        config: {
+          baseUrl: "http://localhost:3000",
+          agents: [] as string[],
+          reconnectDelayMs: 3000,
+          dmPolicy: "pairing",
+          allowFrom: [] as string[],
+        },
+      };
+      const policy = opengramPlugin.security!.resolveDmPolicy!({ cfg: {} as any, account });
+      expect(policy!.policy).toBe("pairing");
+    });
+
+    it("defaults to pairing when dmPolicy is not set", () => {
+      const account = {
+        accountId: "default",
+        enabled: true,
+        config: {
+          baseUrl: "http://localhost:3000",
+          agents: [] as string[],
+          reconnectDelayMs: 3000,
+          dmPolicy: undefined as any,
+          allowFrom: [] as string[],
+        },
+      };
+      const policy = opengramPlugin.security!.resolveDmPolicy!({ cfg: {} as any, account });
+      expect(policy!.policy).toBe("pairing");
     });
   });
 

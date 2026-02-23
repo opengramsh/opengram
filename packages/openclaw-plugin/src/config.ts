@@ -7,11 +7,15 @@ export const OpenGramConfigSchema = z.object({
   instanceSecret: z.string().optional().describe("API auth secret"),
   agents: z.array(z.string()).optional().describe("Linked agent IDs"),
   reconnectDelayMs: z.number().optional().default(3000).describe("SSE reconnect delay (ms)"),
+  dmPolicy: z.string().optional().default("pairing").describe("DM policy: open | pairing | allowlist | disabled"),
+  allowFrom: z.array(z.string()).optional().default([]).describe("Static allowFrom entries"),
 });
 
 export type OpenGramChannelConfig = z.infer<typeof OpenGramConfigSchema> & {
   agents: string[];
   reconnectDelayMs: number;
+  dmPolicy: string;
+  allowFrom: string[];
 };
 
 export type ResolvedOpenGramAccount = {
@@ -35,6 +39,8 @@ export function resolveOpenGramAccount(
       instanceSecret: process.env.OPENGRAM_INSTANCE_SECRET ?? section?.instanceSecret,
       agents: section?.agents ?? [],
       reconnectDelayMs: section?.reconnectDelayMs ?? 3000,
+      dmPolicy: section?.dmPolicy ?? "pairing",
+      allowFrom: section?.allowFrom ?? [],
     },
   };
 }

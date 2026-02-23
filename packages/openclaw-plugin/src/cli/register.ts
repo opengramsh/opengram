@@ -1,4 +1,7 @@
+import path from "node:path";
+
 import type { OpenClawPluginApi, WizardPrompter } from "openclaw/plugin-sdk";
+import { readJsonFileWithFallback, writeJsonFileAtomically } from "openclaw/plugin-sdk";
 
 import { runSetupWizard } from "./setup.js";
 
@@ -33,10 +36,25 @@ export function registerOpengramCli(api: OpenClawPluginApi): void {
           await api.runtime.config.writeConfigFile(nextCfg);
           ctx.logger.info("OpenGram configuration saved to openclaw.json");
 
+          // Auto-approve user:primary in the pairing store so all OpenGram
+          // messages pass through with zero friction.
+          try {
+            const stateDir = api.runtime.state.resolveStateDir();
+            const allowFromPath = path.join(stateDir, "credentials", "opengram-allowFrom.json");
+            const { value: existing } = await readJsonFileWithFallback<string[]>(allowFromPath, []);
+            if (!existing.includes("user:primary")) {
+              await writeJsonFileAtomically(allowFromPath, [...existing, "user:primary"]);
+            }
+            ctx.logger.info("Auto-approved user:primary for OpenGram pairing");
+          } catch (err) {
+            ctx.logger.warn?.(`Failed to auto-approve user:primary: ${err}`);
+          }
+
           if (shouldRestart) {
-            ctx.logger.info(
-              "Please restart the gateway for changes to take effect.",
-            );
+            ctx.logger.info("Restarting gateway…");
+            // SIGUSR1 is the gateway's graceful restart signal.
+            // Small delay to ensure config write is flushed.
+            setTimeout(() => process.kill(process.pid, "SIGUSR1"), 500);
           }
         });
     },

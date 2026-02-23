@@ -1,5 +1,5 @@
 {
-  "id": "opengram",
+  "id": "openclaw-plugin-opengram",
   "name": "opengram",
   "version": "0.1.0",
   "description": "OpenGram channel plugin for OpenClaw — mobile-first AI agent chat interface",
