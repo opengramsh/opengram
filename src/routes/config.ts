@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 
 import { toErrorResponse } from '@/src/api/http';
 import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
-import { loadOpengramConfig, saveOpengramConfig } from '@/src/config/opengram-config';
+import { loadOpengramConfig, saveOpengramConfig, saveRawOpengramConfig } from '@/src/config/opengram-config';
 
 const config = new Hono();
 
@@ -49,11 +49,18 @@ config.get('/', (c) => {
 config.patch('/admin', async (c) => {
   try {
     applyWriteMiddlewares(c.req.raw);
-    const body = (await c.req.json()) as { agents?: unknown; models?: unknown };
-    saveOpengramConfig({
-      agents: Array.isArray(body.agents) ? body.agents : undefined,
-      models: Array.isArray(body.models) ? body.models : undefined,
-    });
+    const body = (await c.req.json()) as { agents?: unknown; models?: unknown; rawConfig?: unknown };
+    if (body.rawConfig !== undefined) {
+      if (typeof body.rawConfig !== 'object' || body.rawConfig === null || Array.isArray(body.rawConfig)) {
+        return c.json({ error: 'rawConfig must be a JSON object' }, 400);
+      }
+      saveRawOpengramConfig(body.rawConfig as Record<string, unknown>);
+    } else {
+      saveOpengramConfig({
+        agents: Array.isArray(body.agents) ? body.agents : undefined,
+        models: Array.isArray(body.models) ? body.models : undefined,
+      });
+    }
     return c.json({ ok: true });
   } catch (error) {
     return toErrorResponse(error);

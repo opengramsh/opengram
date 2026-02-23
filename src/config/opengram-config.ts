@@ -339,6 +339,20 @@ export function saveOpengramConfig(
   configCache = null;
 }
 
+export function saveRawOpengramConfig(raw: Record<string, unknown>, configPath?: string): void {
+  const resolvedPath = resolveConfigPath(configPath);
+
+  // Validate by running through the full load pipeline
+  const merged = mergeConfig(structuredClone(defaultConfig), raw);
+  validateConfig(merged);
+
+  // Write back as pretty JSON
+  writeFileSync(resolvedPath, JSON.stringify(raw, null, 2) + "\n", "utf8");
+
+  // Invalidate cache so next read picks up the new file
+  configCache = null;
+}
+
 export function resetConfigCacheForTests() {
   configCache = null;
 }
