@@ -24,8 +24,12 @@ type UnreadSummaryPayload = {
 export default function InboxLayout() {
   const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
   const [totalUnread, setTotalUnread] = useState(0);
-  const [unreadByAgent, setUnreadByAgent] = useState<Record<string, number>>({});
-  const [streamingChatIds, setStreamingChatIds] = useState<Set<string>>(new Set());
+  const [unreadByAgent, setUnreadByAgent] = useState<Record<string, number>>(
+    {},
+  );
+  const [streamingChatIds, setStreamingChatIds] = useState<Set<string>>(
+    new Set(),
+  );
   const isChatSelected = !useMatch("/");
   const chatMatch = useMatch("/chats/:chatId");
   const activeChatId = chatMatch?.params.chatId;
@@ -74,7 +78,9 @@ export default function InboxLayout() {
     onMutationSuccess: loadExtras,
   });
 
-  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   const { setChats, loadChats, refreshChats, matchesActiveFilters } = chatList;
 
@@ -82,7 +88,10 @@ export default function InboxLayout() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPendingSummary().catch(() => setPendingRequestsTotal(0));
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); });
+    loadUnreadSummary().catch(() => {
+      setTotalUnread(0);
+      setUnreadByAgent({});
+    });
   }, [loadPendingSummary, loadUnreadSummary]);
 
   const refreshSingleInboxChat = useCallback(
@@ -121,26 +130,57 @@ export default function InboxLayout() {
           event.type === "request.cancelled";
 
         if (event.type === "chat.typing" && chatIdFromEvent) {
-          setStreamingChatIds((prev) => { const next = new Set(prev); next.add(chatIdFromEvent); return next; });
+          setStreamingChatIds((prev) => {
+            const next = new Set(prev);
+            next.add(chatIdFromEvent);
+            return next;
+          });
           const existing = typingTimersRef.current.get(chatIdFromEvent);
           if (existing) clearTimeout(existing);
-          typingTimersRef.current.set(chatIdFromEvent, setTimeout(() => {
-            typingTimersRef.current.delete(chatIdFromEvent);
-            setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
-          }, 12_000));
+          typingTimersRef.current.set(
+            chatIdFromEvent,
+            setTimeout(() => {
+              typingTimersRef.current.delete(chatIdFromEvent);
+              setStreamingChatIds((prev) => {
+                if (!prev.has(chatIdFromEvent)) return prev;
+                const next = new Set(prev);
+                next.delete(chatIdFromEvent);
+                return next;
+              });
+            }, 12_000),
+          );
         }
         if (event.type === "message.created" && chatIdFromEvent) {
-          if (event.payload.role !== "user" && event.payload.streamState !== "streaming") {
+          if (
+            event.payload.role !== "user" &&
+            event.payload.streamState !== "streaming"
+          ) {
             // Non-streaming agent/system message arrived → no pending reply for this chat.
             const timer = typingTimersRef.current.get(chatIdFromEvent);
-            if (timer) { clearTimeout(timer); typingTimersRef.current.delete(chatIdFromEvent); }
-            setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
+            if (timer) {
+              clearTimeout(timer);
+              typingTimersRef.current.delete(chatIdFromEvent);
+            }
+            setStreamingChatIds((prev) => {
+              if (!prev.has(chatIdFromEvent)) return prev;
+              const next = new Set(prev);
+              next.delete(chatIdFromEvent);
+              return next;
+            });
           }
         }
         if (event.type === "message.streaming.complete" && chatIdFromEvent) {
           const timer = typingTimersRef.current.get(chatIdFromEvent);
-          if (timer) { clearTimeout(timer); typingTimersRef.current.delete(chatIdFromEvent); }
-          setStreamingChatIds((prev) => { if (!prev.has(chatIdFromEvent)) return prev; const next = new Set(prev); next.delete(chatIdFromEvent); return next; });
+          if (timer) {
+            clearTimeout(timer);
+            typingTimersRef.current.delete(chatIdFromEvent);
+          }
+          setStreamingChatIds((prev) => {
+            if (!prev.has(chatIdFromEvent)) return prev;
+            const next = new Set(prev);
+            next.delete(chatIdFromEvent);
+            return next;
+          });
         }
 
         if (
@@ -169,14 +209,22 @@ export default function InboxLayout() {
             void Promise.all([
               refreshSingleInboxChat(chatIdFromEvent).catch(loadChats),
               loadPendingSummary().catch(() => setPendingRequestsTotal(0)),
-              loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); }),
+              loadUnreadSummary().catch(() => {
+                setTotalUnread(0);
+                setUnreadByAgent({});
+              }),
             ]);
             return;
           }
 
           void Promise.all([
-            refreshSingleInboxChat(chatIdFromEvent).catch(() => { void loadChats(); }),
-            loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); }),
+            refreshSingleInboxChat(chatIdFromEvent).catch(() => {
+              void loadChats();
+            }),
+            loadUnreadSummary().catch(() => {
+              setTotalUnread(0);
+              setUnreadByAgent({});
+            }),
           ]);
           return;
         }
@@ -192,7 +240,10 @@ export default function InboxLayout() {
           );
           void Promise.all([
             loadPendingSummary().catch(() => setPendingRequestsTotal(0)),
-            loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); }),
+            loadUnreadSummary().catch(() => {
+              setTotalUnread(0);
+              setUnreadByAgent({});
+            }),
           ]);
         }
       },
@@ -237,9 +288,9 @@ export default function InboxLayout() {
                 <h1 className="text-sm font-semibold tracking-wide text-foreground leading-tight">
                   {chatList.appName}
                 </h1>
-                <p className="text-xs text-muted-foreground leading-tight">
+                {/* <p className="text-xs text-muted-foreground leading-tight">
                   {pendingLabel(pendingRequestsTotal)}
-                </p>
+                </p> */}
               </div>
             </div>
           }
