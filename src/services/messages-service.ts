@@ -360,24 +360,41 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
       db.prepare('UPDATE media SET message_id = ? WHERE id = ?').run(messageId, linkedMedia.id);
     }
 
-    db.prepare(
-      [
-        'UPDATE chats',
-        'SET last_message_preview = ?,',
-        'last_message_role = ?,',
-        'last_message_at = ?,',
-        'unread_count = unread_count + ?,',
-        'updated_at = ?',
-        'WHERE id = ?',
-      ].join(' '),
-    ).run(
-      preview,
-      normalized.role,
-      now,
-      normalized.role === 'user' ? 0 : 1,
-      now,
-      chat.id,
-    );
+    if (preview !== null) {
+      db.prepare(
+        [
+          'UPDATE chats',
+          'SET last_message_preview = ?,',
+          'last_message_role = ?,',
+          'last_message_at = ?,',
+          'unread_count = unread_count + ?,',
+          'updated_at = ?',
+          'WHERE id = ?',
+        ].join(' '),
+      ).run(
+        preview,
+        normalized.role,
+        now,
+        normalized.role === 'user' ? 0 : 1,
+        now,
+        chat.id,
+      );
+    } else {
+      db.prepare(
+        [
+          'UPDATE chats',
+          'SET last_message_at = ?,',
+          'unread_count = unread_count + ?,',
+          'updated_at = ?',
+          'WHERE id = ?',
+        ].join(' '),
+      ).run(
+        now,
+        normalized.role === 'user' ? 0 : 1,
+        now,
+        chat.id,
+      );
+    }
   });
 
   tx();

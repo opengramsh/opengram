@@ -319,10 +319,33 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
     ).count;
   }
 
-  const previewRaw = (lastMessage?.content_final ?? lastMessage?.content_partial ?? null)?.trim() ?? null;
-  const preview = previewRaw
+  let previewMessage = lastMessage;
+  let previewRaw = (previewMessage?.content_final ?? previewMessage?.content_partial ?? null)?.trim() ?? null;
+  let preview = previewRaw
     ? previewRaw.slice(0, PREVIEW_MAX_CHARS)
-    : (lastMessage ? deriveMediaPreview(db, chatId, lastMessage.id, lastMessage.trace) : null);
+    : (previewMessage ? deriveMediaPreview(db, chatId, previewMessage.id, previewMessage.trace) : null);
+
+  // If the last message has no preview (e.g. streaming just started), fall back to the previous message.
+  if (preview === null && lastMessage) {
+    previewMessage = db
+      .prepare(
+        [
+          'SELECT id, role, created_at, content_final, content_partial, trace',
+          'FROM messages',
+          'WHERE chat_id = ? AND id != ?',
+          'ORDER BY created_at DESC, id DESC',
+          'LIMIT 1',
+        ].join(' '),
+      )
+      .get(chatId, lastMessage.id) as typeof lastMessage | undefined;
+
+    if (previewMessage) {
+      previewRaw = (previewMessage.content_final ?? previewMessage.content_partial ?? null)?.trim() ?? null;
+      preview = previewRaw
+        ? previewRaw.slice(0, PREVIEW_MAX_CHARS)
+        : deriveMediaPreview(db, chatId, previewMessage.id, previewMessage.trace);
+    }
+  }
 
   db.prepare(
     [
@@ -336,7 +359,7 @@ function updateDenormalizedFields(db: Database.Database, chatId: string) {
     ].join(' '),
   ).run(
     preview,
-    lastMessage?.role ?? null,
+    previewMessage?.role ?? lastMessage?.role ?? null,
     lastMessage?.created_at ?? null,
     pendingRequestsRow.count,
     unreadCount,
