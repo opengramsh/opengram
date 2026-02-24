@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/opengram-dev/",
+  base: "/",
   resolve: {
     alias: {
       "@": path.resolve(__dirname),
@@ -18,12 +18,6 @@ export default defineConfig({
     allowedHosts: [".ts.net"],
     proxy: {
       "/api": "http://localhost:3333",
-    },
-    hmr: {
-      protocol: "wss",
-      host: "your-server.example.com",
-      clientPort: 443,
-      path: "/opengram-dev/",
     },
   },
 });
