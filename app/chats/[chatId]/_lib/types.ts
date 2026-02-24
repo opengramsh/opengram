@@ -85,6 +85,8 @@ export type MediaItem = {
 
 export type MediaResponse = {
   data: MediaItem[];
+  nextCursor?: string;
+  hasMore?: boolean;
 };
 
 export type MediaFilter = 'all' | MediaKind;

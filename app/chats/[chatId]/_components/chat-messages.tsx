@@ -6,6 +6,7 @@ import { formatBytes, isMessageTyping, messageBubbleClass, messageText } from '@
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
+import { VoiceMessagePlayer } from '@/app/chats/[chatId]/_components/voice-message-player';
 import { MarkdownContent } from '@/app/chats/[chatId]/_components/markdown-content';
 
 type ChatMessagesProps = {
@@ -162,11 +163,15 @@ export function ChatMessages({
           const hasText = !!text.trim();
           const isImageOnly =
             imageItems.length > 0 && !hasText && audioItems.length === 0 && fileItems.length === 0;
+          const isAudioOnly =
+            audioItems.length > 0 && !hasText && imageItems.length === 0 && fileItems.length === 0;
 
           const baseBubbleClass = messageBubbleClass(message.role);
           const bubbleClass = isImageOnly
             ? baseBubbleClass.replace('px-3 py-2', 'p-0 overflow-hidden')
-            : baseBubbleClass;
+            : isAudioOnly
+              ? baseBubbleClass.replace('px-3 py-2', 'px-2.5 py-2')
+              : baseBubbleClass;
 
           return (
             <div key={message.id} className="mb-2 flex w-full">
@@ -246,13 +251,21 @@ export function ChatMessages({
                   )
                 )}
 
-                {/* Audio */}
+                {/* Audio — voice message player for audio-only, inline player otherwise */}
                 {audioItems.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    {audioItems.map((item) => (
-                      <InlineAudioPlayer key={item.id} item={item} />
-                    ))}
-                  </div>
+                  isAudioOnly ? (
+                    <div className="space-y-2">
+                      {audioItems.map((item) => (
+                        <VoiceMessagePlayer key={item.id} item={item} role={message.role} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-2">
+                      {audioItems.map((item) => (
+                        <InlineAudioPlayer key={item.id} item={item} />
+                      ))}
+                    </div>
+                  )
                 )}
 
                 {/* Files */}

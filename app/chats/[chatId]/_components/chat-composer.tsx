@@ -1,11 +1,12 @@
 'use client';
 
 import { type RefObject, useState } from 'react';
-import { Camera, FileText, Images, Mic, Plus, Send, Square, X } from 'lucide-react';
+import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
 
 import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaItem, Model } from '@/app/chats/[chatId]/_lib/types';
+import { RecordingWaveform } from '@/app/chats/[chatId]/_components/recording-waveform';
 import { Button } from '@/src/components/ui/button';
 import {
   Drawer,
@@ -26,6 +27,9 @@ type ChatComposerProps = {
   sendMessage: () => Promise<void>;
   onModelChange: (modelId: string) => Promise<void>;
   handleMicAction: () => Promise<void>;
+  stopRecording: () => void;
+  cancelRecording: () => void;
+  audioLevels: number[];
   isRecording: boolean;
   recordingSeconds: number;
   isUploadingVoiceNote: boolean;
@@ -52,6 +56,9 @@ export function ChatComposer({
   sendMessage,
   onModelChange,
   handleMicAction,
+  stopRecording,
+  cancelRecording,
+  audioLevels,
   isRecording,
   recordingSeconds,
   isUploadingVoiceNote,
@@ -65,16 +72,13 @@ export function ChatComposer({
   filesInputRef,
   onCameraCapture,
 }: ChatComposerProps) {
-  // const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  // const currentModel = models.find((m) => m.id === selectedModelId);
-
   return (
     <>
       <footer
         className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-3"
         style={{ paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)` }}
       >
-        {pendingAttachments.length > 0 && (
+        {!isRecording && pendingAttachments.length > 0 && (
           <div className="mb-2 overflow-x-auto">
             <div className="flex gap-2 pb-1">
               {pendingAttachments.map((att) => (
@@ -104,52 +108,86 @@ export function ChatComposer({
             </div>
           </div>
         )}
-        <div className="flex items-end gap-2">
-          <Button
-            variant="outline"
-            size="icon-xl"
-            aria-label="Open composer menu"
-            onClick={() => setIsComposerMenuOpen(true)}
-          >
-            <Plus size={18} />
-          </Button>
 
-          <Textarea
-            rows={1}
-            value={composerText}
-            onChange={(event) => setComposerText(event.target.value)}
-            placeholder="Message"
-            className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey && (composerText.trim() || pendingAttachments.length > 0)) {
-                event.preventDefault();
-                void sendMessage();
-              }
-            }}
-          />
+        {isRecording ? (
+          /* Recording mode: [Trash/Cancel] [Waveform + Timer] [Send] */
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon-xl"
+              aria-label="Cancel recording"
+              className="border-red-300/50 bg-red-500/20 text-red-400 hover:bg-red-500/30"
+              onClick={cancelRecording}
+            >
+              <Trash2 size={18} />
+            </Button>
 
-          <Button
-            size="icon-xl"
-            aria-label="Send message"
-            onClick={() => void sendMessage()}
-            disabled={isSending || (!composerText.trim() && pendingAttachments.length === 0)}
-          >
-            <Send size={16} />
-          </Button>
+            <div className="flex flex-1 items-center gap-2.5 overflow-hidden px-1">
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500" />
+              <RecordingWaveform levels={audioLevels} />
+              <span className="shrink-0 text-xs tabular-nums text-red-300">
+                {formatDuration(recordingSeconds)}
+              </span>
+            </div>
 
-          <Button
-            variant="outline"
-            size="icon-xl"
-            aria-label="Record voice note"
-            className={isRecording ? 'border-red-300 bg-red-500/20 text-red-50' : ''}
-            onClick={() => void handleMicAction()}
-            disabled={isUploadingVoiceNote}
-          >
-            {isRecording ? <Square size={16} /> : <Mic size={16} />}
-          </Button>
-        </div>
-        {isRecording && <p className="px-1 pt-1 text-[11px] text-red-200">Recording {formatDuration(recordingSeconds)}</p>}
-        {isUploadingVoiceNote && <p className="px-1 pt-1 text-[11px] text-muted-foreground">Uploading voice note...</p>}
+            <Button
+              size="icon-xl"
+              aria-label="Send voice note"
+              onClick={stopRecording}
+            >
+              <ArrowUp size={18} />
+            </Button>
+          </div>
+        ) : isUploadingVoiceNote ? (
+          <div className="flex items-center justify-center py-2.5">
+            <p className="text-[11px] text-muted-foreground">Sending voice note...</p>
+          </div>
+        ) : (
+          /* Normal mode: [+] [Textarea] [Send] [Mic] */
+          <div className="flex items-end gap-2">
+            <Button
+              variant="outline"
+              size="icon-xl"
+              aria-label="Open composer menu"
+              onClick={() => setIsComposerMenuOpen(true)}
+            >
+              <Plus size={18} />
+            </Button>
+
+            <Textarea
+              rows={1}
+              value={composerText}
+              onChange={(event) => setComposerText(event.target.value)}
+              placeholder="Message"
+              className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && (composerText.trim() || pendingAttachments.length > 0)) {
+                  event.preventDefault();
+                  void sendMessage();
+                }
+              }}
+            />
+
+            <Button
+              size="icon-xl"
+              aria-label="Send message"
+              onClick={() => void sendMessage()}
+              disabled={isSending || (!composerText.trim() && pendingAttachments.length === 0)}
+            >
+              <ArrowUp size={16} />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon-xl"
+              aria-label="Record voice note"
+              onClick={() => void handleMicAction()}
+              disabled={isUploadingVoiceNote}
+            >
+              <Mic size={16} />
+            </Button>
+          </div>
+        )}
         {showMicSettingsPrompt && (
           <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
             <p>Microphone access is blocked. Enable it in your browser or OS settings for this site.</p>
@@ -247,60 +285,9 @@ export function ChatComposer({
             </button>
           </div>
 
-          {/* Model selector — commented out while feature is disabled
-          <button
-            type="button"
-            className="mt-3 flex w-full items-center justify-between rounded-2xl border border-border bg-muted/60 px-4 py-3 transition active:scale-[0.98]"
-            onClick={() => {
-              setIsComposerMenuOpen(false);
-              setIsModelPickerOpen(true);
-            }}
-          >
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-muted-foreground">Model</p>
-              <p className="truncate text-sm font-semibold text-foreground">{currentModel?.name ?? 'Unknown'}</p>
-            </div>
-            <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
-          </button>
-          */}
-
           {isUploadingAttachment && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment...</p>}
         </DrawerContent>
       </Drawer>
-
-      {/* Model Picker Drawer — commented out while feature is disabled
-      <Drawer open={isModelPickerOpen} onOpenChange={setIsModelPickerOpen}>
-        <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-5 pt-3">
-          <DrawerTitle className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Choose model</DrawerTitle>
-          <div className="space-y-1">
-            {models.map((model) => {
-              const isActive = model.id === selectedModelId;
-              return (
-                <button
-                  key={model.id}
-                  type="button"
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                    isActive ? 'bg-primary/15 text-foreground' : 'text-foreground hover:bg-muted/60'
-                  }`}
-                  onClick={() => {
-                    void onModelChange(model.id);
-                    setIsModelPickerOpen(false);
-                  }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm ${isActive ? 'font-semibold' : 'font-medium'}`}>{model.name}</p>
-                    {model.description && (
-                      <p className="truncate text-xs text-muted-foreground">{model.description}</p>
-                    )}
-                  </div>
-                  {isActive && <div className="size-2 shrink-0 rounded-full bg-primary" />}
-                </button>
-              );
-            })}
-          </div>
-        </DrawerContent>
-      </Drawer>
-      */}
     </>
   );
 }

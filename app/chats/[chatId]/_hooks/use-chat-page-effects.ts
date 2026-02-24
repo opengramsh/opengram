@@ -22,6 +22,7 @@ export function useChatPageEffects(data: ChatPageData) {
   const markReadInFlightRef = useRef<string | null>(null);
   const typingExpiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTypingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshMediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
     chat,
     chatId,
@@ -324,7 +325,14 @@ export function useChatPageEffects(data: ChatPageData) {
       }
 
       if (event.type === 'media.attached') {
-        void refreshMedia();
+        // Debounce: rapid SSE events only trigger one refresh
+        if (refreshMediaTimerRef.current) {
+          clearTimeout(refreshMediaTimerRef.current);
+        }
+        refreshMediaTimerRef.current = setTimeout(() => {
+          refreshMediaTimerRef.current = null;
+          void refreshMedia();
+        }, 200);
       }
     });
 
@@ -333,6 +341,10 @@ export function useChatPageEffects(data: ChatPageData) {
       if (typingExpiryTimerRef.current) {
         clearTimeout(typingExpiryTimerRef.current);
         typingExpiryTimerRef.current = null;
+      }
+      if (refreshMediaTimerRef.current) {
+        clearTimeout(refreshMediaTimerRef.current);
+        refreshMediaTimerRef.current = null;
       }
     };
   }, [chat, chatId, knownMessageIdsRef, refreshMedia, refreshMessages, refreshPendingRequests, setChat, setMessages, setPendingReply, setTypingTitle]);

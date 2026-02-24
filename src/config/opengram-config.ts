@@ -245,15 +245,35 @@ function syncCorsOriginsEnv(corsOrigins: string[]) {
 type ConfigCache = {
   resolvedPath: string;
   mtimeMs: number | null;
+  envServerPortRaw: string | undefined;
   config: OpengramConfig;
 };
 
 let configCache: ConfigCache | null = null;
 
+function applyEnvOverrides(config: OpengramConfig): OpengramConfig {
+  const rawPort = process.env.OPENGRAM_SERVER_PORT;
+  if (rawPort === undefined) {
+    return config;
+  }
+
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error("Config validation error: OPENGRAM_SERVER_PORT must be an integer between 1 and 65535.");
+  }
+
+  config.server.port = port;
+  return config;
+}
+
 export function loadOpengramConfig(configPath?: string): OpengramConfig {
   const resolvedPath = resolveConfigPath(configPath);
+  const envServerPortRaw = process.env.OPENGRAM_SERVER_PORT;
 
   if (configCache && configCache.resolvedPath === resolvedPath) {
+    if (configCache.envServerPortRaw !== envServerPortRaw) {
+      configCache = null;
+    } else {
     if (configCache.mtimeMs === null) {
       // Cached "no file" result — re-check existence
       if (!existsSync(resolvedPath)) {
@@ -269,13 +289,14 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
         // File was removed since last cache — fall through to re-read
       }
     }
+    }
   }
 
   const hasFile = existsSync(resolvedPath);
   if (!hasFile) {
-    const config = validateConfig(structuredClone(defaultConfig));
+    const config = validateConfig(applyEnvOverrides(structuredClone(defaultConfig)));
     syncCorsOriginsEnv(config.server.corsOrigins);
-    configCache = { resolvedPath, mtimeMs: null, config };
+    configCache = { resolvedPath, mtimeMs: null, envServerPortRaw, config };
     return config;
   }
 
@@ -287,7 +308,7 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
   }
 
   const merged = mergeConfig(structuredClone(defaultConfig), parsed);
-  const config = validateConfig(merged);
+  const config = validateConfig(applyEnvOverrides(merged));
   syncCorsOriginsEnv(config.server.corsOrigins);
 
   let mtimeMs: number | null = null;
@@ -297,7 +318,7 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
     // Unlikely race — file removed between read and stat; still cache it
   }
 
-  configCache = { resolvedPath, mtimeMs, config };
+  configCache = { resolvedPath, mtimeMs, envServerPortRaw, config };
   return config;
 }
 

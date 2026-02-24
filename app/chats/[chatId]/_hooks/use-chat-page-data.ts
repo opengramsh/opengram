@@ -197,13 +197,33 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       return;
     }
 
-    const response = await apiFetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error('Failed to load media');
+    const allItems: MediaItem[] = [];
+    let cursor: string | undefined;
+
+    // Paginate to fetch all media
+    for (;;) {
+      const url = cursor
+        ? `/api/v1/chats/${chatId}/media?cursor=${encodeURIComponent(cursor)}`
+        : `/api/v1/chats/${chatId}/media`;
+      const response = await apiFetch(url, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('Failed to load media');
+      }
+
+      const payload = (await response.json()) as MediaResponse;
+      allItems.push(...(payload.data ?? []));
+
+      if (!payload.hasMore || !payload.nextCursor) break;
+      cursor = payload.nextCursor;
     }
 
-    const payload = (await response.json()) as MediaResponse;
-    setMedia(payload.data ?? []);
+    // Merge with existing state to avoid losing locally-added items
+    setMedia((current) => {
+      const byId = new Map<string, MediaItem>();
+      for (const item of current) byId.set(item.id, item);
+      for (const item of allItems) byId.set(item.id, item);
+      return Array.from(byId.values());
+    });
   }, [chatId]);
 
   const loadData = useCallback(async () => {

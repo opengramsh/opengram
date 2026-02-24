@@ -95,6 +95,9 @@ function ChatComposerSection() {
       recordingSeconds={chat.recordingSeconds}
       isUploadingVoiceNote={chat.isUploadingVoiceNote}
       showMicSettingsPrompt={chat.showMicSettingsPrompt}
+      stopRecording={chat.stopRecording}
+      cancelRecording={chat.cancelRecording}
+      audioLevels={chat.audioLevels}
       isComposerMenuOpen={chat.isComposerMenuOpen}
       isUploadingAttachment={chat.isUploadingAttachment}
       selectedModelId={''}

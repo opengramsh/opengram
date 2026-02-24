@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { extname, join, posix, resolve, sep } from 'node:path';
+import { dirname, extname, join, posix, resolve, sep } from 'node:path';
 
 import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
@@ -78,7 +78,13 @@ function serializeMedia(record: MediaRecord) {
 function resolveDataRoot() {
   const envRoot = process.env.OPENGRAM_DATA_ROOT?.trim();
   if (envRoot) return resolve(envRoot);
-  return resolve(process.env.NODE_ENV === 'production' ? '/opt/opengram/data' : './data');
+
+  // Derive from DATABASE_URL: data root is the directory containing the DB file.
+  // This ensures uploads always land next to the database regardless of NODE_ENV.
+  const dbUrl = process.env.DATABASE_URL?.trim();
+  if (dbUrl) return resolve(dirname(dbUrl));
+
+  return resolve('./data');
 }
 
 function resolveStoragePath(relativePath: string) {
