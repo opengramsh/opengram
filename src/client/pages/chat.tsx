@@ -7,7 +7,7 @@ export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>();
 
   return (
-    <ChatPageProvider chatId={chatId}>
+    <ChatPageProvider key={chatId} chatId={chatId}>
       <div className="flex h-[100dvh] w-full flex-col bg-background">
         <ChatPageSections />
       </div>
