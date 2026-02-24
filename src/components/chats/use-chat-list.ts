@@ -9,7 +9,7 @@ import {
   selectNewChatAgentId,
   selectNewChatModelId,
 } from '@/src/lib/new-chat';
-import type { Agent, Chat, ChatsResponse, ConfigResponse, Model } from '@/src/components/chats/types';
+import type { Agent, Chat, ChatsResponse, ConfigResponse, Model, SearchResponse } from '@/src/components/chats/types';
 
 type ChatListFilters = {
   searchQuery: string;
@@ -61,6 +61,8 @@ export function useChatList(options: UseChatListOptions) {
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResponse | null>(null);
+  const [isSearchResultsLoading, setIsSearchResultsLoading] = useState(false);
   const fetchIdRef = useRef(0);
   const filtersRef = useRef<ChatListFilters>({
     searchQuery: '',
@@ -99,6 +101,27 @@ export function useChatList(options: UseChatListOptions) {
     };
   }, [searchQuery, selectedAgentId]);
 
+  useEffect(() => {
+    if (!searchQuery) {
+      setSearchResults(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsSearchResultsLoading(true);
+
+    fetch(`/api/v1/search?q=${encodeURIComponent(searchQuery)}&scope=all`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data: SearchResponse) => setSearchResults(data))
+      .catch(() => {/* aborted or failed — leave existing results */})
+      .finally(() => setIsSearchResultsLoading(false));
+
+    return () => controller.abort();
+  }, [searchQuery]);
+
   const matchesActiveFilters = useCallback(
     (chat: Chat) => chatMatchesListFilters(chat, filtersRef.current, archived),
     [archived],
@@ -130,7 +153,6 @@ export function useChatList(options: UseChatListOptions) {
     try {
       const query = buildChatsQuery({
         archived,
-        query: searchQuery,
         agentId: selectedAgentId || null,
       });
       const response = await fetch(`/api/v1/chats${query}`, { cache: 'no-store' });
@@ -153,7 +175,7 @@ export function useChatList(options: UseChatListOptions) {
         setLoading(false);
       }
     }
-  }, [archived, chatsErrorMessage, searchQuery, selectedAgentId]);
+  }, [archived, chatsErrorMessage, selectedAgentId]);
 
   useEffect(() => {
     loadConfig().catch(() => setError('Failed to load app config.'));
@@ -375,6 +397,9 @@ export function useChatList(options: UseChatListOptions) {
     canSendNewChat,
     createNewChat,
     matchesActiveFilters,
+    searchQuery,
+    searchResults,
+    isSearchResultsLoading,
   };
 }
 

@@ -45,3 +45,11 @@ export type ChatsResponse = {
     hasMore: boolean;
   };
 };
+
+export type SearchChatResult = { id: string; title: string; snippet: string };
+export type SearchMessageResult = { id: string; chat_id: string; chat_title: string; snippet: string };
+export type SearchResponse = {
+  chats: SearchChatResult[];
+  messages: SearchMessageResult[];
+  cursor: { next: string | null; hasMore: boolean };
+};

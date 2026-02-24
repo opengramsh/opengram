@@ -7,6 +7,7 @@ import { cn, FACEHASH_COLORS } from '@/src/lib/utils';
 
 import { ChatList } from '@/src/components/chats/chat-list';
 import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
+import { SearchResultsList } from '@/src/components/chats/search-results-list';
 import { UnreadBadge } from '@/src/components/chats/unread-badge';
 import type { UseChatListReturn } from '@/src/components/chats/use-chat-list';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
@@ -78,6 +79,9 @@ export function ChatListPage({
     isCreatingNewChat,
     canSendNewChat,
     createNewChat,
+    searchQuery,
+    searchResults,
+    isSearchResultsLoading,
   } = chatList;
 
   return (
@@ -132,7 +136,7 @@ export function ChatListPage({
         )}
       </header>
 
-      <section className="border-b border-border/60 px-4 py-3">
+      {!isSearchOpen && <section className="border-b border-border/60 px-4 py-3">
         <Select
           value={selectedAgentId || 'all'}
           onValueChange={(value) => setSelectedAgentId(value === 'all' ? '' : value)}
@@ -161,23 +165,32 @@ export function ChatListPage({
             ))}
           </SelectContent>
         </Select>
-      </section>
+      </section>}
 
-      <ChatList
-        chats={chats}
-        agentsById={agentsById}
-        loading={loading}
-        error={error}
-        emptyLabel={emptyLabel}
-        rowActionLabel={rowActionLabel}
-        activeChatId={activeChatId}
-        streamingChatIds={streamingChatIds}
-        onOpenChat={(chat) => navigate(`/chats/${chat.id}`)}
-        onMarkRead={markChatRead}
-        onMarkUnread={markChatUnread}
-        onTogglePin={togglePin}
-        onToggleArchive={toggleArchive}
-      />
+      {searchQuery ? (
+        <SearchResultsList
+          searchResults={searchResults}
+          loading={isSearchResultsLoading}
+          query={searchQuery}
+          onOpenChat={(chatId) => navigate(`/chats/${chatId}`)}
+        />
+      ) : (
+        <ChatList
+          chats={chats}
+          agentsById={agentsById}
+          loading={loading}
+          error={error}
+          emptyLabel={emptyLabel}
+          rowActionLabel={rowActionLabel}
+          activeChatId={activeChatId}
+          streamingChatIds={streamingChatIds}
+          onOpenChat={(chat) => navigate(`/chats/${chat.id}`)}
+          onMarkRead={markChatRead}
+          onMarkUnread={markChatUnread}
+          onTogglePin={togglePin}
+          onToggleArchive={toggleArchive}
+        />
+      )}
 
       <NewChatSheet
         open={isNewChatOpen}
