@@ -225,7 +225,7 @@ export function useChatPageEffects(data: ChatPageData) {
 
         // If the message is from an agent/system (not user), mark chat as read
         // since the user is actively viewing this chat.
-        if (role !== 'user' && markReadInFlightRef.current !== chatId) {
+        if (role !== 'user' && streamState !== 'streaming' && markReadInFlightRef.current !== chatId) {
           markReadInFlightRef.current = chatId;
           void fetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
             .catch(() => {})
@@ -273,6 +273,17 @@ export function useChatPageEffects(data: ChatPageData) {
           }
 
           setMessages((current) => applyStreamingComplete(current, messageId, finalText, streamState));
+
+          if (markReadInFlightRef.current !== chatId) {
+            markReadInFlightRef.current = chatId;
+            void fetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
+              .catch(() => {})
+              .finally(() => {
+                if (markReadInFlightRef.current === chatId) {
+                  markReadInFlightRef.current = null;
+                }
+              });
+          }
         } else {
           void refreshMessages();
         }

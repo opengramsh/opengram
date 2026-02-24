@@ -183,8 +183,50 @@ export default function InboxLayout() {
           });
         }
 
+        const isStreamingStart =
+          event.type === "message.created" &&
+          event.payload.streamState === "streaming";
+
+        const isUserMessage =
+          event.type === "message.created" &&
+          event.payload.role === "user";
+
+        if (isUserMessage && chatIdFromEvent) {
+          const content =
+            typeof event.payload.contentFinal === "string"
+              ? event.payload.contentFinal
+              : null;
+          const preview = content ? content.trim().slice(0, 180) : null;
+          const createdAt =
+            typeof event.payload.createdAt === "string"
+              ? event.payload.createdAt
+              : null;
+
+          setChats((current) =>
+            sortInboxChats(
+              current.map((chat) =>
+                chat.id === chatIdFromEvent
+                  ? {
+                      ...chat,
+                      ...(preview != null && {
+                        last_message_preview: preview,
+                      }),
+                      last_message_role: "user",
+                      ...(createdAt != null && {
+                        last_message_at: createdAt,
+                      }),
+                    }
+                  : chat,
+              ),
+            ),
+          );
+          return;
+        }
+
         if (
-          event.type === "chat.created" ||
+          !isStreamingStart &&
+          !isUserMessage &&
+          (event.type === "chat.created" ||
           event.type === "chat.updated" ||
           event.type === "chat.unarchived" ||
           event.type === "chat.read" ||
@@ -193,7 +235,7 @@ export default function InboxLayout() {
           event.type === "message.streaming.complete" ||
           event.type === "request.created" ||
           event.type === "request.resolved" ||
-          event.type === "request.cancelled"
+          event.type === "request.cancelled")
         ) {
           if (!chatIdFromEvent) {
             if (refreshesPendingSummary) {

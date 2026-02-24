@@ -272,7 +272,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
     [offsetX, onAction, onOpen],
   );
 
-  const unread = chat.unread_count > 0;
+  const unread = chat.unread_count > 0 && !isActive;
   const pendingBadge = chat.pending_requests_count > 0
     ? (
       <Badge
@@ -341,7 +341,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
             </p>
             <div className="flex items-center gap-1.5">
               {pendingBadge}
-              <UnreadBadge count={chat.unread_count} />
+              {!isActive && <UnreadBadge count={chat.unread_count} />}
             </div>
           </div>
         </div>
