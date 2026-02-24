@@ -26,6 +26,7 @@ config.get('/', (c) => {
       },
       security: {
         instanceSecretEnabled: cfg.security.instanceSecretEnabled,
+        instanceSecret: cfg.security.instanceSecret,
         readEndpointsRequireInstanceSecret: cfg.security.readEndpointsRequireInstanceSecret,
       },
       server: {
@@ -49,16 +50,20 @@ config.get('/', (c) => {
 config.patch('/admin', async (c) => {
   try {
     applyWriteMiddlewares(c.req.raw);
-    const body = (await c.req.json()) as { agents?: unknown; models?: unknown; rawConfig?: unknown };
+    const body = (await c.req.json()) as { agents?: unknown; models?: unknown; security?: unknown; rawConfig?: unknown };
     if (body.rawConfig !== undefined) {
       if (typeof body.rawConfig !== 'object' || body.rawConfig === null || Array.isArray(body.rawConfig)) {
         return c.json({ error: 'rawConfig must be a JSON object' }, 400);
       }
       saveRawOpengramConfig(body.rawConfig as Record<string, unknown>);
     } else {
+      const securityUpdate = typeof body.security === 'object' && body.security !== null && !Array.isArray(body.security)
+        ? (body.security as Record<string, unknown>)
+        : undefined;
       saveOpengramConfig({
         agents: Array.isArray(body.agents) ? body.agents : undefined,
         models: Array.isArray(body.models) ? body.models : undefined,
+        security: securityUpdate,
       });
     }
     return c.json({ ok: true });

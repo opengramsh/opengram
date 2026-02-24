@@ -27,6 +27,8 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     health: vi.fn().mockResolvedValue({ status: "ok", version: "1.0.0", uptime: 100 }),
     uploadMedia: vi.fn().mockResolvedValue({ id: "media-1" }),
     sendTyping: vi.fn().mockResolvedValue(undefined),
+    getMediaUrl: vi.fn().mockImplementation((mediaId: string) => `http://localhost:3000/api/v1/files/${mediaId}`),
+    fetchMediaAsImage: vi.fn().mockResolvedValue(null),
     ...overrides,
   } as unknown as OpenGramClient;
 }
@@ -567,6 +569,100 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
         MessageSid: "user-msg-contentfinal-empty-1",
       }),
     );
+
+    abortController.abort();
+  });
+
+  it("should fetch image and pass it as images[] to dispatchReplyWithBufferedBlockDispatcher", async () => {
+    const { runtime, dispatchSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const fakeImageBase64 = Buffer.from("fake-png-data").toString("base64");
+    const fetchMediaAsImage = vi.fn().mockResolvedValue({
+      type: "image",
+      data: fakeImageBase64,
+      mimeType: "image/png",
+    });
+
+    const client = createMockClient({ fetchMediaAsImage } as any);
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-image-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-img",
+        messageId: "user-msg-image-1",
+        role: "user",
+        content: "Check this image",
+        senderId: "user:primary",
+        trace: { mediaId: "media-abc", kind: "image" },
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+
+    expect(fetchMediaAsImage).toHaveBeenCalledWith("media-abc");
+
+    const dispatchCall = dispatchSpy.mock.calls[0][0];
+    expect(dispatchCall.replyOptions.images).toEqual([
+      { type: "image", data: fakeImageBase64, mimeType: "image/png" },
+    ]);
+
+    abortController.abort();
+  });
+
+  it("should not set images[] when trace.kind is not 'image'", async () => {
+    const { runtime, dispatchSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const fetchMediaAsImage = vi.fn();
+    const client = createMockClient({ fetchMediaAsImage } as any);
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-file-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-file",
+        messageId: "user-msg-file-1",
+        role: "user",
+        content: "Here is a file",
+        senderId: "user:primary",
+        trace: { mediaId: "media-xyz", kind: "file" },
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+
+    expect(fetchMediaAsImage).not.toHaveBeenCalled();
+
+    const dispatchCall = dispatchSpy.mock.calls[0][0];
+    expect(dispatchCall.replyOptions.images).toBeUndefined();
 
     abortController.abort();
   });

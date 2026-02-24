@@ -40,6 +40,7 @@ export default function NewChatPage() {
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<{ id: string; kind: string; filename: string }[]>([]);
 
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const photosInputRef = useRef<HTMLInputElement | null>(null);
@@ -123,14 +124,41 @@ export default function NewChatPage() {
 
   const createChat = useCallback(async () => {
     const content = message.trim();
-    if (!content || !selectedAgentId || !selectedModelId || isCreating) return;
+    if ((!content && pendingAttachments.length === 0) || !selectedAgentId || !selectedModelId || isCreating) return;
 
     const resolvedModelId = resolveModelId();
     if (!resolvedModelId) return;
 
     setIsCreating(true);
     try {
-      // Reuse pending chat if one was already created (e.g. by a file upload that didn't navigate)
+      if (pendingAttachments.length > 0) {
+        // A chat was already created during upload; send attachments then text.
+        const chatId = pendingChatIdRef.current ?? await (async () => {
+          const res = await fetch('/api/v1/chats', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ agentIds: [selectedAgentId], modelId: resolvedModelId }),
+          });
+          if (!res.ok) throw new Error('Failed');
+          const c = (await res.json()) as { id: string };
+          pendingChatIdRef.current = c.id;
+          return c.id;
+        })();
+
+        // Single message with all attachments + optional text
+        const body: Record<string, unknown> = { role: 'user', senderId: 'user:primary', trace: { mediaIds: pendingAttachments.map((a) => a.id) } };
+        if (content) body.content = content;
+        const res = await fetch(`/api/v1/chats/${chatId}/messages`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error('Failed');
+        navigate(`/chats/${chatId}`, { replace: true });
+        return;
+      }
+
+      // Text-only path
       const existingChatId = pendingChatIdRef.current;
       if (existingChatId) {
         const response = await fetch(`/api/v1/chats/${existingChatId}/messages`, {
@@ -160,7 +188,7 @@ export default function NewChatPage() {
     } catch {
       setIsCreating(false);
     }
-  }, [message, selectedAgentId, selectedModelId, isCreating, resolveModelId, navigate]);
+  }, [message, pendingAttachments, selectedAgentId, selectedModelId, isCreating, resolveModelId, navigate]);
 
   const uploadComposerFiles = useCallback(async (fileList: FileList | null, forcedKind?: 'image' | 'file') => {
     if (!fileList || fileList.length === 0 || isUploadingAttachment) return;
@@ -173,6 +201,7 @@ export default function NewChatPage() {
         return;
       }
 
+      const newItems: { id: string; kind: string; filename: string }[] = [];
       for (const file of Array.from(fileList)) {
         const formData = new FormData();
         formData.append('file', file, file.name);
@@ -181,28 +210,21 @@ export default function NewChatPage() {
         const uploadResponse = await fetch(`/api/v1/chats/${chatId}/media`, { method: 'POST', body: formData });
         if (!uploadResponse.ok) throw new Error('Failed to upload media');
 
-        const media = (await uploadResponse.json()) as { id: string; kind: string };
-
-        const messageResponse = await fetch(`/api/v1/chats/${chatId}/messages`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            role: 'user',
-            senderId: 'user:primary',
-            trace: { mediaId: media.id, kind: media.kind },
-          }),
-        });
-
-        if (!messageResponse.ok) throw new Error('Failed to create message');
+        newItems.push((await uploadResponse.json()) as { id: string; kind: string; filename: string });
       }
 
-      navigate(`/chats/${chatId}`, { replace: true });
+      setPendingAttachments((prev) => [...prev, ...newItems]);
+      setIsComposerMenuOpen(false);
     } catch {
       toast.error('Failed to upload attachment.');
     } finally {
       setIsUploadingAttachment(false);
     }
-  }, [ensureChatId, isUploadingAttachment, navigate]);
+  }, [ensureChatId, isUploadingAttachment]);
+
+  const removePendingAttachment = useCallback((mediaId: string) => {
+    setPendingAttachments((prev) => prev.filter((m) => m.id !== mediaId));
+  }, []);
 
   const recorder = useChatRecorder({
     getChatId: ensureChatId,
@@ -286,6 +308,8 @@ export default function NewChatPage() {
         showMicSettingsPrompt={recorder.showMicSettingsPrompt}
         isUploadingAttachment={isUploadingAttachment}
         uploadComposerFiles={uploadComposerFiles}
+        pendingAttachments={pendingAttachments}
+        removePendingAttachment={removePendingAttachment}
         cameraInputRef={cameraInputRef}
         photosInputRef={photosInputRef}
         filesInputRef={filesInputRef}

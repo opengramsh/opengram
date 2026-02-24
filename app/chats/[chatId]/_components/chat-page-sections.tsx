@@ -107,6 +107,8 @@ function ChatComposerSection() {
       sendMessage={chat.sendMessage}
       handleMicAction={chat.handleMicAction}
       uploadComposerFiles={chat.uploadComposerFiles}
+      pendingAttachments={chat.pendingAttachments}
+      removePendingAttachment={chat.removePendingAttachment}
       onModelChange={async () => {}}
       onCameraCapture={() => chat.setIsCameraOpen(true)}
     />

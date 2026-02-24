@@ -40,6 +40,20 @@ export function mediaIdFromTrace(message: Message) {
   return message.trace && typeof message.trace.mediaId === 'string' ? message.trace.mediaId : null;
 }
 
+export function mediaIdsFromTrace(message: Message): string[] {
+  if (!message.trace) return [];
+
+  if (Array.isArray(message.trace.mediaIds)) {
+    return (message.trace.mediaIds as unknown[]).filter((id): id is string => typeof id === 'string');
+  }
+
+  if (typeof message.trace.mediaId === 'string') {
+    return [message.trace.mediaId];
+  }
+
+  return [];
+}
+
 export function normalizeTagInput(value: string) {
   return value.trim();
 }
@@ -106,10 +120,10 @@ export function buildInlineMessageMedia(messages: Message[], mediaByMessageId: M
       merged.push(item);
     }
 
-    const traceMediaId = mediaIdFromTrace(message);
-    if (traceMediaId) {
+    for (const traceMediaId of mediaIdsFromTrace(message)) {
       const traced = mediaById.get(traceMediaId);
       if (traced && !seenIds.has(traced.id)) {
+        seenIds.add(traced.id);
         merged.push(traced);
       }
     }

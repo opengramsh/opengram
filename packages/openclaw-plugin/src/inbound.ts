@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { OpenGramClient } from "./api-client.js";
 import { maybeAutoRename } from "./auto-rename.js";
 import { resolveAgentForChat, trackActiveChat } from "./chat-manager.js";
@@ -28,11 +31,15 @@ export type ReplyPayload = {
   mediaUrl?: string;
 };
 
+type ImageContent = { type: "image"; data: string; mimeType: string };
+
 export type DispatchFn = (opts: {
   chatId: string;
   agentId: string;
   messageId: string;
   content: string;
+  mediaUrl?: string;
+  images?: ImageContent[];
   cfg: OpenClawConfig;
   deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
   onCleanup: () => void;
@@ -234,6 +241,56 @@ async function handleMessageCreated(
         ? payload.content
         : "";
 
+  const trace = payload.trace as Record<string, unknown> | null | undefined;
+
+  // Support both new array format (trace.mediaIds) and legacy single (trace.mediaId)
+  const rawMediaIds: string[] = (() => {
+    if (Array.isArray(trace?.mediaIds)) {
+      return (trace.mediaIds as unknown[]).filter((id): id is string => typeof id === "string");
+    }
+    if (typeof trace?.mediaId === "string") {
+      return [trace.mediaId];
+    }
+    return [];
+  })();
+
+  log?.info(`[opengram] inbound trace: mediaIds=[${rawMediaIds.join(", ")}]`);
+
+  const collectedImages: ImageContent[] = [];
+  const tempFilePaths: string[] = [];
+  const tempFileMimes: string[] = [];
+  const tempFileUrls: string[] = [];
+
+  for (const mediaId of rawMediaIds) {
+    try {
+      const img = await client.fetchMediaAsImage(mediaId);
+      if (img) {
+        log?.info(`[opengram] fetchMediaAsImage: got ${img.mimeType} (${img.data.length} chars) for ${mediaId}`);
+        collectedImages.push(img);
+        continue;
+      }
+      // Not an image — download to temp file
+      const media = await client.fetchMediaAsBuffer(mediaId);
+      if (media) {
+        const ext = path.extname(media.fileName) || "";
+        const filePath = path.join(os.tmpdir(), `opengram-${mediaId}${ext}`);
+        await fs.writeFile(filePath, media.buffer);
+        log?.info(`[opengram] wrote temp file: ${filePath} (${media.mimeType}, ${media.buffer.length} bytes)`);
+        tempFilePaths.push(filePath);
+        tempFileMimes.push(media.mimeType);
+        tempFileUrls.push(client.getMediaUrl(mediaId));
+      }
+    } catch (err) {
+      log?.warn(`[opengram] Failed to fetch inbound media ${mediaId}: ${err}`);
+    }
+  }
+
+  // Keep legacy singular vars for the mock dispatch path (backwards-compatible)
+  const mediaUrl = tempFileUrls[0];
+  const tempFilePath = tempFilePaths[0];
+  const tempFileMime = tempFileMimes[0];
+  const images: ImageContent[] | undefined = collectedImages.length > 0 ? collectedImages : undefined;
+
   // Unique per dispatch to isolate concurrent stream state.
   const dispatchId = `${chatId}:${Date.now()}`;
 
@@ -256,11 +313,12 @@ async function handleMessageCreated(
     cancelStream(client, dispatchId);
   };
 
+  log?.info(`[opengram] dispatching: content="${content.slice(0, 40)}" images=${images?.length ?? 0}`);
   try {
     if (dispatch) {
-      dispatch({ chatId, agentId, messageId, content, cfg, deliver, onCleanup, onError });
+      dispatch({ chatId, agentId, messageId, content, mediaUrl, images, cfg, deliver, onCleanup, onError });
     } else {
-      await dispatchViaSdk({ chatId, agentId, messageId, content, cfg, deliver, onError, log });
+      await dispatchViaSdk({ chatId, agentId, messageId, content, images, tempFilePaths, tempFileMimes, tempFileUrls, cfg, deliver, onError, log });
     }
   } catch (err) {
     stopTyping();
@@ -268,6 +326,9 @@ async function handleMessageCreated(
     throw err;
   } finally {
     stopTyping();
+    for (const p of tempFilePaths) {
+      fs.unlink(p).catch(() => {});
+    }
   }
 }
 
@@ -381,12 +442,16 @@ async function dispatchViaSdk(opts: {
   agentId: string;
   messageId: string;
   content: string;
+  images?: ImageContent[];
+  tempFilePaths?: string[];
+  tempFileMimes?: string[];
+  tempFileUrls?: string[];
   cfg: OpenClawConfig;
   deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
   onError: (err: unknown) => void;
   log?: InboundListenerParams["log"];
 }): Promise<void> {
-  const { chatId, agentId, messageId, content, cfg, deliver, onError, log } = opts;
+  const { chatId, agentId, messageId, content, images, tempFilePaths = [], tempFileMimes = [], tempFileUrls = [], cfg, deliver, onError, log } = opts;
   const core = getOpenGramRuntime();
 
   const route = core.channel.routing.resolveAgentRoute({
@@ -415,6 +480,13 @@ async function dispatchViaSdk(opts: {
     OriginatingChannel: CHANNEL_ID,
     OriginatingTo: `opengram:${chatId}`,
     CommandAuthorized: true,
+    ...(tempFilePaths.length > 1
+      ? { MediaPaths: tempFilePaths, MediaUrls: tempFileUrls, MediaTypes: tempFileMimes }
+      : tempFilePaths.length === 1
+        ? { MediaPath: tempFilePaths[0], MediaUrl: tempFileUrls[0], MediaType: tempFileMimes[0] }
+        : tempFileUrls[0]
+          ? { MediaUrl: tempFileUrls[0] }
+          : {}),
   });
 
   const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
@@ -449,6 +521,7 @@ async function dispatchViaSdk(opts: {
     },
     replyOptions: {
       onModelSelected,
+      ...(images ? { images } : {}),
     },
   });
 }

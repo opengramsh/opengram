@@ -302,7 +302,7 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
 }
 
 export function saveOpengramConfig(
-  updates: { agents?: AgentConfig[]; models?: ModelConfig[] },
+  updates: { agents?: AgentConfig[]; models?: ModelConfig[]; security?: Partial<SecurityConfig> },
   configPath?: string,
 ): void {
   const resolvedPath = resolveConfigPath(configPath);
@@ -326,6 +326,10 @@ export function saveOpengramConfig(
     // Clear the deprecated defaultModelIdForNewChats — it may now reference
     // a model ID that no longer exists in the updated list.
     delete current.defaultModelIdForNewChats;
+  }
+  if (updates.security !== undefined) {
+    const existingSecurity = isRecord(current.security) ? current.security : {};
+    current.security = { ...existingSecurity, ...updates.security };
   }
 
   // Validate by running through the full load pipeline on the merged result

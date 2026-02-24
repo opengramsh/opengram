@@ -53,6 +53,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<MediaItem[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
   const [isLoadingTagSuggestions, setIsLoadingTagSuggestions] = useState(false);
@@ -305,16 +306,20 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     }
 
     const content = composerText.trim();
-    if (!content) {
+    if (!content && pendingAttachments.length === 0) {
       return;
     }
 
     setIsSending(true);
     try {
+      const body: Record<string, unknown> = { role: 'user', senderId: 'user:primary' };
+      if (content) body.content = content;
+      if (pendingAttachments.length > 0) body.trace = { mediaIds: pendingAttachments.map((a) => a.id) };
+
       const response = await fetch(`/api/v1/chats/${chat.id}/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role: 'user', senderId: 'user:primary', content }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -323,13 +328,16 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
 
       const message = (await response.json()) as Message;
       setComposerText('');
+      setPendingAttachments([]);
       setMessages((current) => upsertFeedMessage(current, message));
+      if (pendingAttachments.length > 0) await refreshMedia();
+      scrollToBottom(true);
     } catch {
       setError('Failed to send message.');
     } finally {
       setIsSending(false);
     }
-  }, [chat, composerText, isSending]);
+  }, [chat, composerText, isSending, pendingAttachments, refreshMedia, scrollToBottom]);
 
   const uploadComposerFiles = useCallback(async (fileList: FileList | null, forcedKind?: 'image' | 'file') => {
     if (!chat || !fileList || fileList.length === 0 || isUploadingAttachment) {
@@ -338,6 +346,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
 
     setIsUploadingAttachment(true);
     try {
+      const newItems: MediaItem[] = [];
       for (const file of Array.from(fileList)) {
         const formData = new FormData();
         formData.append('file', file, file.name);
@@ -350,35 +359,21 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
           throw new Error('Failed to upload media');
         }
 
-        const media = (await uploadResponse.json()) as MediaItem;
-
-        const messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            role: 'user',
-            senderId: 'user:primary',
-            trace: { mediaId: media.id, kind: media.kind },
-          }),
-        });
-
-        if (!messageResponse.ok) {
-          throw new Error('Failed to create message');
-        }
-
-        const message = (await messageResponse.json()) as Message;
-        setMessages((current) => upsertFeedMessage(current, message));
+        newItems.push((await uploadResponse.json()) as MediaItem);
       }
 
-      await refreshMedia();
+      setPendingAttachments((prev) => [...prev, ...newItems]);
       setIsComposerMenuOpen(false);
-      scrollToBottom(true);
     } catch {
       toast.error('Failed to upload attachment.');
     } finally {
       setIsUploadingAttachment(false);
     }
-  }, [chat, isUploadingAttachment, refreshMedia, scrollToBottom]);
+  }, [chat, isUploadingAttachment]);
+
+  const removePendingAttachment = useCallback((mediaId: string) => {
+    setPendingAttachments((prev) => prev.filter((m) => m.id !== mediaId));
+  }, []);
 
   const addTagToChat = useCallback(async (rawTag: string) => {
     const normalized = normalizeTagInput(rawTag);
@@ -432,6 +427,8 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     setPendingReply,
     isComposerMenuOpen,
     isUploadingAttachment,
+    pendingAttachments,
+    removePendingAttachment,
     isMediaGalleryOpen,
     mediaFilter,
     filteredGalleryMedia,

@@ -213,6 +213,42 @@ export class OpenGramClient {
     return `${this.baseUrl}/api/v1/files/${mediaId}`;
   }
 
+  async fetchMediaAsImage(mediaId: string): Promise<{
+    type: "image";
+    data: string;
+    mimeType: string;
+  } | null> {
+    const url = this.getMediaUrl(mediaId);
+    const headers: Record<string, string> = {};
+    if (this.instanceSecret) {
+      headers.Authorization = `Bearer ${this.instanceSecret}`;
+    }
+    const res = await this.fetchWithRetry(url, { headers });
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") ?? "";
+    const mimeType = contentType.split(";")[0].trim();
+    if (!mimeType.startsWith("image/")) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return { type: "image", data: buffer.toString("base64"), mimeType };
+  }
+
+  async fetchMediaAsBuffer(mediaId: string): Promise<{ buffer: Buffer; mimeType: string; fileName: string } | null> {
+    const url = this.getMediaUrl(mediaId);
+    const headers: Record<string, string> = {};
+    if (this.instanceSecret) {
+      headers.Authorization = `Bearer ${this.instanceSecret}`;
+    }
+    const res = await this.fetchWithRetry(url, { headers });
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") ?? "application/octet-stream";
+    const mimeType = contentType.split(";")[0].trim();
+    const disposition = res.headers.get("content-disposition") ?? "";
+    const nameMatch = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
+    const fileName = nameMatch ? decodeURIComponent(nameMatch[1].trim()) : mediaId;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return { buffer, mimeType, fileName };
+  }
+
   async createRequest(
     chatId: string,
     params: {

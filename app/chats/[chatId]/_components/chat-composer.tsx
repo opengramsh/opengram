@@ -1,10 +1,10 @@
 'use client';
 
 import { type RefObject, useState } from 'react';
-import { Camera, FileText, Images, Mic, Plus, Send, Square } from 'lucide-react';
+import { Camera, FileText, Images, Mic, Plus, Send, Square, X } from 'lucide-react';
 
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
-import type { Model } from '@/app/chats/[chatId]/_lib/types';
+import type { MediaItem, Model } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
 import {
   Drawer,
@@ -31,6 +31,8 @@ type ChatComposerProps = {
   showMicSettingsPrompt: boolean;
   isUploadingAttachment: boolean;
   uploadComposerFiles: (files: FileList | null, forcedKind?: 'image' | 'file') => Promise<void>;
+  pendingAttachments: MediaItem[];
+  removePendingAttachment: (mediaId: string) => void;
   cameraInputRef: RefObject<HTMLInputElement | null>;
   photosInputRef: RefObject<HTMLInputElement | null>;
   filesInputRef: RefObject<HTMLInputElement | null>;
@@ -55,6 +57,8 @@ export function ChatComposer({
   showMicSettingsPrompt,
   isUploadingAttachment,
   uploadComposerFiles,
+  pendingAttachments,
+  removePendingAttachment,
   cameraInputRef,
   photosInputRef,
   filesInputRef,
@@ -69,6 +73,36 @@ export function ChatComposer({
         className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-3"
         style={{ paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)` }}
       >
+        {pendingAttachments.length > 0 && (
+          <div className="mb-2 overflow-x-auto">
+            <div className="flex gap-2 pb-1">
+              {pendingAttachments.map((att) => (
+                <div key={att.id} className="relative shrink-0">
+                  {att.kind === 'image' ? (
+                    <img
+                      src={`/api/v1/files/${att.id}`}
+                      alt={att.filename}
+                      className="h-16 w-16 rounded-xl object-cover border border-border"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-32 items-center justify-center rounded-xl border border-border bg-muted/60 px-2">
+                      <FileText size={16} className="shrink-0 text-muted-foreground" />
+                      <span className="ml-1.5 truncate text-xs text-foreground">{att.filename}</span>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border-border bg-background p-0"
+                    onClick={() => removePendingAttachment(att.id)}
+                  >
+                    <X size={10} />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <Button
             variant="outline"
@@ -86,7 +120,7 @@ export function ChatComposer({
             placeholder="Message"
             className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
+              if (event.key === 'Enter' && !event.shiftKey && (composerText.trim() || pendingAttachments.length > 0)) {
                 event.preventDefault();
                 void sendMessage();
               }
@@ -97,7 +131,7 @@ export function ChatComposer({
             size="icon-xl"
             aria-label="Send message"
             onClick={() => void sendMessage()}
-            disabled={isSending || !composerText.trim()}
+            disabled={isSending || (!composerText.trim() && pendingAttachments.length === 0)}
           >
             <Send size={16} />
           </Button>

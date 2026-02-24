@@ -924,17 +924,17 @@ describe('system endpoints', () => {
     expect(body.uptime).toBeTypeOf('number');
   });
 
-  it('returns safe config without secrets', async () => {
+  it('returns config with security settings and without push private key', async () => {
     const response = await app.request('/api/v1/config');
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.security).toEqual({
       instanceSecretEnabled: false,
+      instanceSecret: '',
       readEndpointsRequireInstanceSecret: false,
     });
     expect(body.push.vapidPrivateKey).toBeUndefined();
-    expect(body.security.instanceSecret).toBeUndefined();
   });
 
   it('keeps health public while enforcing read bearer auth for config when read toggle is enabled', async () => {

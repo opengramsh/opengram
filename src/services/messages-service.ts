@@ -165,28 +165,41 @@ function ensureTrace(value: unknown) {
   }
 }
 
-function extractMediaReference(trace: Record<string, unknown> | null): MediaReference | null {
-  if (!trace || trace.mediaId === undefined) {
-    return null;
+function extractMediaReferences(trace: Record<string, unknown> | null): MediaReference[] {
+  if (!trace) {
+    return [];
   }
 
-  if (typeof trace.mediaId !== 'string' || !trace.mediaId.trim()) {
-    throw validationError('trace.mediaId must be a non-empty string when provided.', {
-      field: 'trace.mediaId',
+  // New array format: trace.mediaIds
+  if (trace.mediaIds !== undefined) {
+    if (!Array.isArray(trace.mediaIds)) {
+      throw validationError('trace.mediaIds must be an array when provided.', { field: 'trace.mediaIds' });
+    }
+
+    return trace.mediaIds.map((id, index) => {
+      if (typeof id !== 'string' || !id.trim()) {
+        throw validationError(`trace.mediaIds[${index}] must be a non-empty string.`, { field: 'trace.mediaIds' });
+      }
+
+      return { mediaId: id };
     });
   }
 
-  const declaredKind = trace.kind;
-  if (declaredKind !== undefined && declaredKind !== 'image' && declaredKind !== 'audio' && declaredKind !== 'file') {
-    throw validationError('trace.kind must be image, audio, or file when provided.', {
-      field: 'trace.kind',
-    });
+  // Legacy single-ID format: trace.mediaId
+  if (trace.mediaId !== undefined) {
+    if (typeof trace.mediaId !== 'string' || !trace.mediaId.trim()) {
+      throw validationError('trace.mediaId must be a non-empty string when provided.', { field: 'trace.mediaId' });
+    }
+
+    const declaredKind = trace.kind;
+    if (declaredKind !== undefined && declaredKind !== 'image' && declaredKind !== 'audio' && declaredKind !== 'file') {
+      throw validationError('trace.kind must be image, audio, or file when provided.', { field: 'trace.kind' });
+    }
+
+    return [{ mediaId: trace.mediaId, declaredKind: declaredKind as MediaKind | undefined }];
   }
 
-  return {
-    mediaId: trace.mediaId,
-    declaredKind,
-  };
+  return [];
 }
 
 function derivePreview(content: string | null, mediaKind: MediaKind | null) {
@@ -250,7 +263,7 @@ function normalizeCreateInput(input: CreateMessageInput) {
 
   ensureModelId(input.modelId);
   ensureTrace(input.trace);
-  const mediaReference = extractMediaReference(input.trace ?? null);
+  const mediaReferences = extractMediaReferences(input.trace ?? null);
 
   if (streaming) {
     if (role !== 'agent') {
@@ -269,7 +282,7 @@ function normalizeCreateInput(input: CreateMessageInput) {
       streaming,
       content: null,
       trace: input.trace ?? null,
-      mediaReference: null,
+      mediaReferences: [],
     };
   }
 
@@ -278,8 +291,8 @@ function normalizeCreateInput(input: CreateMessageInput) {
   }
 
   const trimmedContent = input.content?.trim() ?? null;
-  if (!trimmedContent && !mediaReference) {
-    throw validationError('content is required when streaming is false unless trace.mediaId is provided.', {
+  if (!trimmedContent && mediaReferences.length === 0) {
+    throw validationError('content is required when streaming is false unless trace.mediaId or trace.mediaIds is provided.', {
       field: 'content',
     });
   }
@@ -290,7 +303,7 @@ function normalizeCreateInput(input: CreateMessageInput) {
     streaming,
     content: trimmedContent,
     trace: input.trace ?? null,
-    mediaReference,
+    mediaReferences,
   };
 }
 
@@ -307,33 +320,35 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
   const contentFinal = normalized.streaming ? null : normalized.content;
 
   const tx = db.transaction(() => {
-    let linkedMedia: MediaRecord | null = null;
+    const linkedMediaList: MediaRecord[] = [];
 
-    if (normalized.mediaReference) {
-      linkedMedia = (db
+    for (const ref of normalized.mediaReferences) {
+      const linkedMedia = (db
         .prepare('SELECT id, chat_id, message_id, kind FROM media WHERE id = ? AND chat_id = ?')
-        .get(normalized.mediaReference.mediaId, chat.id) as MediaRecord | undefined) ?? null;
+        .get(ref.mediaId, chat.id) as MediaRecord | undefined) ?? null;
 
       if (!linkedMedia) {
-        throw validationError('trace.mediaId does not belong to this chat.', {
-          field: 'trace.mediaId',
+        throw validationError('A media ID in trace does not belong to this chat.', {
+          field: 'trace.mediaIds',
         });
       }
 
       if (linkedMedia.message_id && linkedMedia.message_id !== messageId) {
-        throw validationError('trace.mediaId is already linked to another message.', {
-          field: 'trace.mediaId',
+        throw validationError('A media ID in trace is already linked to another message.', {
+          field: 'trace.mediaIds',
         });
       }
 
-      if (normalized.mediaReference.declaredKind && normalized.mediaReference.declaredKind !== linkedMedia.kind) {
+      if (ref.declaredKind && ref.declaredKind !== linkedMedia.kind) {
         throw validationError('trace.kind does not match linked media kind.', {
           field: 'trace.kind',
         });
       }
+
+      linkedMediaList.push(linkedMedia);
     }
 
-    const preview = derivePreview(contentFinal, linkedMedia?.kind ?? null);
+    const preview = derivePreview(contentFinal, linkedMediaList[0]?.kind ?? null);
 
     db.prepare(
       [
@@ -356,7 +371,7 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
       normalized.trace ? JSON.stringify(normalized.trace) : null,
     );
 
-    if (linkedMedia) {
+    for (const linkedMedia of linkedMediaList) {
       db.prepare('UPDATE media SET message_id = ? WHERE id = ?').run(messageId, linkedMedia.id);
     }
 
@@ -409,6 +424,7 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
     streamState: serialized.stream_state,
     contentFinal: serialized.content_final,
     createdAt: serialized.created_at,
+    trace: serialized.trace,
   });
 
   if (serialized.role === 'agent') {
