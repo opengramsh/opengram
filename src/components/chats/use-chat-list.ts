@@ -60,6 +60,7 @@ export function useChatList(options: UseChatListOptions) {
   const [newChatFirstMessage, setNewChatFirstMessage] = useState('');
   const [newChatError, setNewChatError] = useState<string | null>(null);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResponse | null>(null);
@@ -145,6 +146,7 @@ export function useChatList(options: UseChatListOptions) {
     setNewChatModelId((current) =>
       selectNewChatModelId(config.models ?? [], resolvedDefaultModelId, current),
     );
+    setConfigLoaded(true);
   }, []);
 
   const loadChats = useCallback(async () => {
@@ -184,8 +186,9 @@ export function useChatList(options: UseChatListOptions) {
   }, [loadConfig]);
 
   useEffect(() => {
+    if (!configLoaded) return;
     loadChats().catch(() => setError(chatsErrorMessage));
-  }, [chatsErrorMessage, loadChats]);
+  }, [configLoaded, chatsErrorMessage, loadChats]);
 
   const refreshChats = useCallback(async () => {
     await Promise.all([loadChats(), onRefreshExtras()]);
