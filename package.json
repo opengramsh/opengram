@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -k \"tsx --watch src/server.ts\" \"vite --host 0.0.0.0 --port 5173 --strictPort\"",
-    "dev:server": "tsx --watch src/server.ts",
+    "dev": "concurrently -k \"OPENGRAM_SERVER_PORT=3334 tsx --watch src/server.ts\" \"vite --host 0.0.0.0 --port 5173 --strictPort\"",
+    "dev:server": "OPENGRAM_SERVER_PORT=3334 tsx --watch src/server.ts",
     "dev:client": "vite",
     "build": "vite build && tsup src/server.ts --format esm --outDir dist/server",
     "start": "node dist/server/server.mjs",

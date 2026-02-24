@@ -41,3 +41,4 @@ packages/openclaw-plugin/node_modules
 config/opengram.config.json
 
 migrations/*
+scripts/manage-opengram-service.local.sh

@@ -17,7 +17,7 @@ export default defineConfig({
   server: {
     allowedHosts: [".ts.net"],
     proxy: {
-      "/api": "http://localhost:3333",
+      "/api": "http://localhost:3334",
     },
   },
 });
