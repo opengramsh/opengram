@@ -1,14 +1,19 @@
 import { Hono } from 'hono';
 
 import { toErrorResponse } from '@/src/api/http';
-import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-controls';
+import { applyWriteMiddlewares } from '@/src/api/write-controls';
 import { loadOpengramConfig, saveOpengramConfig, saveRawOpengramConfig } from '@/src/config/opengram-config';
 
 const config = new Hono();
 
 config.get('/', (c) => {
   try {
-    applyReadMiddlewares(c.req.raw);
+    // NOTE: No read-auth middleware here. This endpoint is the bootstrap
+    // mechanism — the frontend calls it unauthenticated to discover the
+    // instance secret, then stores it in localStorage for all subsequent
+    // requests. Protecting it would create an unresolvable chicken-and-egg.
+    // The endpoint is safe to expose because deployments are gated by
+    // Tailscale / network perimeter.
     const cfg = loadOpengramConfig();
 
     return c.json({

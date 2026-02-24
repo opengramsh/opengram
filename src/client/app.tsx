@@ -12,7 +12,7 @@ import AboutPage from '@/src/client/pages/about';
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/opengram-dev/">
       <PushBootstrap />
       <Routes>
         <Route element={<InboxLayout />}>
