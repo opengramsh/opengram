@@ -1,15 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Braces, ChevronDown, Dices, Eye, EyeOff, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Bot,
+  Braces,
+  ChevronDown,
+  Dices,
+  Eye,
+  EyeOff,
+  Pencil,
+  Plus,
+  Settings,
+  Trash2,
+} from "lucide-react";
 
-import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
-import { Button } from '@/src/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
+import { HamburgerMenu } from "@/src/components/navigation/hamburger-menu";
+import { Button } from "@/src/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/src/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/src/components/ui/dropdown-menu';
+} from "@/src/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogClose,
@@ -19,14 +36,20 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/src/components/ui/dialog';
-import { Input } from '@/src/components/ui/input';
-import { Label } from '@/src/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs';
-import { Checkbox } from '@/src/components/ui/checkbox';
-import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
-import { cn } from '@/src/lib/utils';
-import { Textarea } from '@/src/components/ui/textarea';
+} from "@/src/components/ui/dialog";
+import { Input } from "@/src/components/ui/input";
+import { Label } from "@/src/components/ui/label";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/src/components/ui/tabs";
+import { Checkbox } from "@/src/components/ui/checkbox";
+import { apiFetch, setApiSecret } from "@/src/lib/api-fetch";
+import { cn } from "@/src/lib/utils";
+import { Textarea } from "@/src/components/ui/textarea";
+import { Switch } from "@/src/components/ui/switch";
 import {
   disablePushNotifications,
   enablePushNotifications,
@@ -36,7 +59,14 @@ import {
   isPushSupported,
   sendPushTestNotification,
   type PushPermissionState,
-} from '@/src/lib/push-client';
+} from "@/src/lib/push-client";
+import {
+  isSoundEnabled,
+  setSoundEnabled,
+  isBrowserNotificationsEnabled,
+  setBrowserNotificationsEnabled,
+} from "@/src/lib/notification-preferences";
+import { playNotificationSound } from "@/src/lib/notification-sound";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,16 +103,16 @@ type ConfigResponse = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function permissionLabel(permission: PushPermissionState) {
-  if (permission === 'unsupported') return 'Not supported in this browser';
-  if (permission === 'granted') return 'Granted';
-  if (permission === 'denied') return 'Denied';
-  return 'Not requested';
+  if (permission === "unsupported") return "Not supported in this browser";
+  if (permission === "granted") return "Granted";
+  if (permission === "denied") return "Denied";
+  return "Not requested";
 }
 
 // ─── Agent Dialog ─────────────────────────────────────────────────────────────
 
 type AgentDialogProps = {
-  mode: 'add' | 'edit';
+  mode: "add" | "edit";
   initial?: Agent;
   trigger: React.ReactNode;
   onSave: (agent: Agent) => Promise<void>;
@@ -90,18 +120,18 @@ type AgentDialogProps = {
 
 function AgentDialog({ mode, initial, trigger, onSave }: AgentDialogProps) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(initial?.name ?? '');
-  const [id, setId] = useState(initial?.id ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
+  const [name, setName] = useState(initial?.name ?? "");
+  const [id, setId] = useState(initial?.id ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const originalId = useRef(initial?.id);
-  const idChanged = mode === 'edit' && id !== originalId.current;
+  const idChanged = mode === "edit" && id !== originalId.current;
 
   function reset() {
-    setName(initial?.name ?? '');
-    setId(initial?.id ?? '');
-    setDescription(initial?.description ?? '');
+    setName(initial?.name ?? "");
+    setId(initial?.id ?? "");
+    setDescription(initial?.description ?? "");
     setError(null);
     originalId.current = initial?.id;
   }
@@ -113,16 +143,20 @@ function AgentDialog({ mode, initial, trigger, onSave }: AgentDialogProps) {
 
   async function handleSave() {
     if (!name.trim() || !id.trim()) {
-      setError('Name and ID are required.');
+      setError("Name and ID are required.");
       return;
     }
     try {
       setSaving(true);
       setError(null);
-      await onSave({ id: id.trim(), name: name.trim(), description: description.trim() });
+      await onSave({
+        id: id.trim(),
+        name: name.trim(),
+        description: description.trim(),
+      });
       setOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save agent.');
+      setError(e instanceof Error ? e.message : "Failed to save agent.");
     } finally {
       setSaving(false);
     }
@@ -133,11 +167,13 @@ function AgentDialog({ mode, initial, trigger, onSave }: AgentDialogProps) {
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{mode === 'add' ? 'Add Agent' : 'Edit Agent'}</DialogTitle>
+          <DialogTitle>
+            {mode === "add" ? "Add Agent" : "Edit Agent"}
+          </DialogTitle>
           <DialogDescription>
-            {mode === 'add'
-              ? 'Configure a new agent that will be available for chats.'
-              : 'Update the agent details. The ID must match what is configured in the source system.'}
+            {mode === "add"
+              ? "Configure a new agent that will be available for chats."
+              : "Update the agent details. The ID must match what is configured in the source system."}
           </DialogDescription>
         </DialogHeader>
 
@@ -159,14 +195,18 @@ function AgentDialog({ mode, initial, trigger, onSave }: AgentDialogProps) {
               value={id}
               onChange={(e) => setId(e.target.value)}
               placeholder="e.g. my-assistant"
-              className={idChanged ? 'border-amber-500 focus-visible:ring-amber-500/30' : ''}
+              className={
+                idChanged
+                  ? "border-amber-500 focus-visible:ring-amber-500/30"
+                  : ""
+              }
             />
             {idChanged && (
               <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
                 <span>
-                  Changing the ID will break the connection to this agent if the new ID does not
-                  match the source system (e.g., OpenClaw).
+                  Changing the ID will break the connection to this agent if the
+                  new ID does not match the source system (e.g., OpenClaw).
                 </span>
               </div>
             )}
@@ -198,7 +238,7 @@ function AgentDialog({ mode, initial, trigger, onSave }: AgentDialogProps) {
             }}
             disabled={saving}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -353,7 +393,7 @@ function DeleteDialog({ label, trigger, onConfirm }: DeleteDialogProps) {
       await onConfirm();
       setOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete.');
+      setError(e instanceof Error ? e.message : "Failed to delete.");
     } finally {
       setDeleting(false);
     }
@@ -366,7 +406,8 @@ function DeleteDialog({ label, trigger, onConfirm }: DeleteDialogProps) {
         <DialogHeader>
           <DialogTitle>Delete {label}?</DialogTitle>
           <DialogDescription>
-            This will remove <strong>{label}</strong> from the configuration. This cannot be undone.
+            This will remove <strong>{label}</strong> from the configuration.
+            This cannot be undone.
           </DialogDescription>
         </DialogHeader>
         {error && <p className="text-xs text-destructive">{error}</p>}
@@ -383,7 +424,7 @@ function DeleteDialog({ label, trigger, onConfirm }: DeleteDialogProps) {
               handleConfirm().catch(() => undefined);
             }}
           >
-            {deleting ? 'Deleting…' : 'Delete'}
+            {deleting ? "Deleting…" : "Delete"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -393,16 +434,22 @@ function DeleteDialog({ label, trigger, onConfirm }: DeleteDialogProps) {
 
 // ─── Agents Tab ───────────────────────────────────────────────────────────────
 
-function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange: (a: Agent[]) => void }) {
+function AgentsTab({
+  agents,
+  onAgentsChange,
+}: {
+  agents: Agent[];
+  onAgentsChange: (a: Agent[]) => void;
+}) {
   async function saveAgents(updated: Agent[]) {
-    const res = await apiFetch('/api/v1/config/admin', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await apiFetch("/api/v1/config/admin", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ agents: updated }),
     });
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? 'Failed to save agents.');
+      throw new Error(data.error ?? "Failed to save agents.");
     }
     onAgentsChange(updated);
   }
@@ -423,7 +470,7 @@ function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange
 
   async function handleDelete(agent: Agent) {
     if (agents.length <= 1) {
-      throw new Error('At least one agent is required.');
+      throw new Error("At least one agent is required.");
     }
     await saveAgents(agents.filter((a) => a.id !== agent.id));
   }
@@ -432,7 +479,7 @@ function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {agents.length} {agents.length === 1 ? 'agent' : 'agents'} configured
+          {agents.length} {agents.length === 1 ? "agent" : "agents"} configured
         </p>
         <AgentDialog
           mode="add"
@@ -453,10 +500,16 @@ function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange
             className="flex items-start gap-3 rounded-xl border border-border/70 bg-background/70 px-3 py-2.5"
           >
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <p className="text-sm font-medium text-foreground">{agent.name}</p>
-              <p className="font-mono text-[11px] text-muted-foreground">{agent.id}</p>
+              <p className="text-sm font-medium text-foreground">
+                {agent.name}
+              </p>
+              <p className="font-mono text-[11px] text-muted-foreground">
+                {agent.id}
+              </p>
               {agent.description && (
-                <p className="mt-0.5 text-xs text-muted-foreground">{agent.description}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {agent.description}
+                </p>
               )}
             </div>
             <div className="flex shrink-0 gap-1">
@@ -464,7 +517,11 @@ function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange
                 mode="edit"
                 initial={agent}
                 trigger={
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  >
                     <Pencil size={13} />
                   </Button>
                 }
@@ -598,13 +655,23 @@ function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange
 function generateSecret() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onConfigChange: () => void }) {
-  const [enabled, setEnabled] = useState(config.security?.instanceSecretEnabled ?? false);
-  const [secret, setSecret] = useState(config.security?.instanceSecret ?? '');
-  const [requireForReads, setRequireForReads] = useState(config.security?.readEndpointsRequireInstanceSecret ?? false);
+function SecurityCard({
+  config,
+  onConfigChange,
+}: {
+  config: ConfigResponse;
+  onConfigChange: () => void;
+}) {
+  const [enabled, setEnabled] = useState(
+    config.security?.instanceSecretEnabled ?? false,
+  );
+  const [secret, setSecret] = useState(config.security?.instanceSecret ?? "");
+  const [requireForReads, setRequireForReads] = useState(
+    config.security?.readEndpointsRequireInstanceSecret ?? false,
+  );
   const [showSecret, setShowSecret] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -613,51 +680,67 @@ function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onCo
 
   useEffect(() => {
     setEnabled(config.security?.instanceSecretEnabled ?? false);
-    setSecret(config.security?.instanceSecret ?? '');
-    setRequireForReads(config.security?.readEndpointsRequireInstanceSecret ?? false);
-  }, [config.security?.instanceSecretEnabled, config.security?.instanceSecret, config.security?.readEndpointsRequireInstanceSecret]);
+    setSecret(config.security?.instanceSecret ?? "");
+    setRequireForReads(
+      config.security?.readEndpointsRequireInstanceSecret ?? false,
+    );
+  }, [
+    config.security?.instanceSecretEnabled,
+    config.security?.instanceSecret,
+    config.security?.readEndpointsRequireInstanceSecret,
+  ]);
 
   const isDirty =
     enabled !== (config.security?.instanceSecretEnabled ?? false) ||
-    secret !== (config.security?.instanceSecret ?? '') ||
-    requireForReads !== (config.security?.readEndpointsRequireInstanceSecret ?? false);
+    secret !== (config.security?.instanceSecret ?? "") ||
+    requireForReads !==
+      (config.security?.readEndpointsRequireInstanceSecret ?? false);
 
   const hasValidationError = enabled && !secret.trim();
 
   async function handleSave() {
     if (hasValidationError) {
-      setError('Instance secret cannot be empty when enabled.');
+      setError("Instance secret cannot be empty when enabled.");
       return;
     }
     try {
       setSaving(true);
       setError(null);
       setSaved(false);
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       const currentServerSecret = config.security?.instanceSecret;
       if (currentServerSecret) {
         headers.Authorization = `Bearer ${currentServerSecret}`;
       }
-      const res = await fetch('/api/v1/config/admin', {
-        method: 'PATCH',
+      const res = await fetch("/api/v1/config/admin", {
+        method: "PATCH",
         headers,
         body: JSON.stringify({
           security: {
             instanceSecretEnabled: enabled,
-            instanceSecret: enabled ? secret.trim() : '',
+            instanceSecret: enabled ? secret.trim() : "",
             readEndpointsRequireInstanceSecret: requireForReads,
           },
         }),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-        throw new Error(data.error ?? data.message ?? 'Failed to save security settings.');
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+        };
+        throw new Error(
+          data.error ?? data.message ?? "Failed to save security settings.",
+        );
       }
       setApiSecret(enabled ? secret.trim() : null);
       setSaved(true);
       onConfigChange();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save security settings.');
+      setError(
+        e instanceof Error ? e.message : "Failed to save security settings.",
+      );
     } finally {
       setSaving(false);
     }
@@ -670,8 +753,8 @@ function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onCo
       </CardHeader>
       <CardContent className="space-y-3 p-0">
         <p className="text-xs text-muted-foreground">
-          Require a Bearer token on API requests. Protects against cross-origin attacks and
-          unauthorized access from other processes.
+          Require a Bearer token on API requests. Protects against cross-origin
+          attacks and unauthorized access from other processes.
         </p>
 
         <label className="flex items-center gap-2 cursor-pointer">
@@ -713,7 +796,7 @@ function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onCo
               <div className="relative">
                 <Input
                   id="instance-secret"
-                  type={showSecret ? 'text' : 'password'}
+                  type={showSecret ? "text" : "password"}
                   value={secret}
                   onChange={(e) => {
                     setSecret(e.target.value);
@@ -732,13 +815,17 @@ function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onCo
                 </button>
               </div>
 
-              <Dialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
+              <Dialog
+                open={showGenerateConfirm}
+                onOpenChange={setShowGenerateConfirm}
+              >
                 <DialogContent className="max-w-sm">
                   <DialogHeader>
                     <DialogTitle>Replace existing secret?</DialogTitle>
                     <DialogDescription>
-                      This will replace your current secret. Any clients using the old secret (e.g.
-                      OpenClaw) will need to be updated with the new one.
+                      This will replace your current secret. Any clients using
+                      the old secret (e.g. OpenClaw) will need to be updated
+                      with the new one.
                     </DialogDescription>
                   </DialogHeader>
                   <DialogFooter>
@@ -770,7 +857,9 @@ function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onCo
                   setError(null);
                 }}
               />
-              <span className="text-sm">Also require secret for read endpoints</span>
+              <span className="text-sm">
+                Also require secret for read endpoints
+              </span>
             </label>
           </>
         )}
@@ -782,17 +871,21 @@ function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onCo
           </div>
         )}
         {saved && !error && (
-          <p className="text-xs text-green-600 dark:text-green-400">Security settings saved.</p>
+          <p className="text-xs text-green-600 dark:text-green-400">
+            Security settings saved.
+          </p>
         )}
 
         {isDirty && (
           <div className="flex justify-end">
             <Button
               size="sm"
-              onClick={() => { handleSave().catch(() => undefined); }}
+              onClick={() => {
+                handleSave().catch(() => undefined);
+              }}
               disabled={saving || hasValidationError}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? "Saving…" : "Save"}
             </Button>
           </div>
         )}
@@ -803,11 +896,21 @@ function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onCo
 
 // ─── App Settings Tab ─────────────────────────────────────────────────────────
 
-function AppSettingsTab({ config, onConfigChange }: { config: ConfigResponse; onConfigChange: () => void }) {
-  const [permission, setPermission] = useState<PushPermissionState>('unsupported');
+function AppSettingsTab({
+  config,
+  onConfigChange,
+}: {
+  config: ConfigResponse;
+  onConfigChange: () => void;
+}) {
+  const [soundOn, setSoundOn] = useState(isSoundEnabled);
+  const [browserOn, setBrowserOn] = useState(isBrowserNotificationsEnabled);
+  const [permission, setPermission] =
+    useState<PushPermissionState>("unsupported");
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [busyBrowser, setBusyBrowser] = useState(false);
+  const [busyTest, setBusyTest] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<'enable' | 'disable' | 'test' | null>(null);
 
   const refreshPushState = useCallback(async () => {
     setPermission(getPushPermissionState());
@@ -816,117 +919,165 @@ function AppSettingsTab({ config, onConfigChange }: { config: ConfigResponse; on
       return;
     }
     const subscription = await getCurrentPushSubscription();
-    setIsSubscribed(Boolean(subscription));
+    const hasSubscription = Boolean(subscription);
+    setIsSubscribed(hasSubscription);
+    return hasSubscription;
   }, []);
 
   useEffect(() => {
-    refreshPushState().catch(() => undefined);
-  }, [refreshPushState]);
+    refreshPushState()
+      .then((hasSubscription) => {
+        if (!hasSubscription || !config.push?.enabled) {
+          setBrowserNotificationsEnabled(false);
+          setBrowserOn(false);
+        }
+      })
+      .catch(() => undefined);
+  }, [refreshPushState, config.push?.enabled]);
 
-  const handleEnable = useCallback(async () => {
-    if (!config.push?.enabled) {
-      setStatusMessage('Push is disabled in server config.');
+  function handleSoundToggle(checked: boolean) {
+    setSoundEnabled(checked);
+    setSoundOn(checked);
+    if (checked) {
+      playNotificationSound();
+    }
+  }
+
+  async function handleBrowserToggle(checked: boolean) {
+    setStatusMessage(null);
+
+    if (!checked) {
+      setBusyBrowser(true);
+      try {
+        await disablePushNotifications();
+        setBrowserNotificationsEnabled(false);
+        setBrowserOn(false);
+        await refreshPushState();
+      } catch {
+        setStatusMessage("Unable to disable notifications.");
+      } finally {
+        setBusyBrowser(false);
+      }
       return;
     }
+
+    // Turning ON
+    const perm = getPushPermissionState();
+    if (perm === "denied") {
+      setStatusMessage(
+        "Notifications are blocked. Enable them in your browser settings, then try again.",
+      );
+      return;
+    }
+    if (!config.push?.enabled) {
+      setStatusMessage("Push notifications are not enabled on the server.");
+      return;
+    }
+
+    setBusyBrowser(true);
     try {
-      setBusyAction('enable');
-      setStatusMessage(null);
       const pushConfig = await fetchPushConfig();
       await enablePushNotifications(pushConfig.vapidPublicKey);
-      setStatusMessage('Notifications enabled.');
+      setBrowserNotificationsEnabled(true);
+      setBrowserOn(true);
       await refreshPushState();
     } catch {
-      setStatusMessage('Unable to enable notifications. Check browser permission settings.');
+      setStatusMessage(
+        "Unable to enable notifications. Check browser permission settings.",
+      );
       await refreshPushState();
     } finally {
-      setBusyAction(null);
+      setBusyBrowser(false);
     }
-  }, [config.push?.enabled, refreshPushState]);
+  }
 
-  const handleDisable = useCallback(async () => {
+  async function handleSendTest() {
     try {
-      setBusyAction('disable');
-      setStatusMessage(null);
-      await disablePushNotifications();
-      setStatusMessage('Notifications disabled.');
-      await refreshPushState();
-    } catch {
-      setStatusMessage('Unable to disable notifications.');
-    } finally {
-      setBusyAction(null);
-    }
-  }, [refreshPushState]);
-
-  const handleSendTest = useCallback(async () => {
-    try {
-      setBusyAction('test');
+      setBusyTest(true);
       setStatusMessage(null);
       await sendPushTestNotification();
-      setStatusMessage('Test notification sent.');
+      setStatusMessage("Test notification sent.");
     } catch {
-      setStatusMessage('Unable to send test notification.');
+      setStatusMessage("Unable to send test notification.");
     } finally {
-      setBusyAction(null);
+      setBusyTest(false);
     }
-  }, []);
+  }
+
+  const showDeniedHint = permission === "denied" && !browserOn;
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const showIosHint = isIos && permission === "default";
+  const showTestButton = browserOn && isSubscribed && config.push?.enabled;
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="p-0">
-          <CardTitle className="text-sm">Push notifications</CardTitle>
+          <CardTitle className="text-sm">Notifications</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 p-0">
-          <p className="text-sm text-muted-foreground">
-            {config.push?.enabled ? 'Enabled in config.' : 'Disabled in config.'}
-          </p>
-          <p className="text-sm text-muted-foreground">Permission: {permissionLabel(permission)}</p>
-          <p className="text-sm text-muted-foreground">
-            Subscription: {isSubscribed ? 'Active' : 'Not active'}
-          </p>
-          {config.push?.subject && (
-            <p className="text-xs text-muted-foreground">Subject: {config.push.subject}</p>
-          )}
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleEnable().catch(() => undefined);
-              }}
-              disabled={busyAction !== null || !config.push?.enabled}
-            >
-              {busyAction === 'enable' ? 'Enabling…' : 'Enable notifications'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleDisable().catch(() => undefined);
-              }}
-              disabled={busyAction !== null || !isSubscribed}
-            >
-              {busyAction === 'disable' ? 'Disabling…' : 'Disable notifications'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                handleSendTest().catch(() => undefined);
-              }}
-              disabled={busyAction !== null || !config.push?.enabled || !isSubscribed}
-            >
-              {busyAction === 'test' ? 'Sending…' : 'Send test notification'}
-            </Button>
+        <CardContent className="space-y-0 p-0">
+          {/* Sound toggle */}
+          <div className="flex items-center justify-between py-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Sound</p>
+              <p className="text-xs text-muted-foreground">
+                Play a sound when new messages arrive
+              </p>
+            </div>
+            <Switch checked={soundOn} onCheckedChange={handleSoundToggle} />
           </div>
 
-          {statusMessage && <p className="text-xs text-muted-foreground">{statusMessage}</p>}
+          <div className="border-t border-border/50" />
 
-          <p className="text-xs text-muted-foreground">
-            iOS Safari requires installing OpenGram to Home Screen before push permissions can be
-            granted.
-          </p>
+          {/* Browser notifications toggle */}
+          <div className="flex items-center justify-between py-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Desktop notifications</p>
+              <p className="text-xs text-muted-foreground">
+                Show popup notifications for new messages
+              </p>
+            </div>
+            <Switch
+              checked={browserOn}
+              onCheckedChange={(checked) => {
+                handleBrowserToggle(checked).catch(() => undefined);
+              }}
+              disabled={busyBrowser}
+            />
+          </div>
+
+          {showDeniedHint && (
+            <p className="pb-2 text-xs text-amber-600 dark:text-amber-400">
+              Notifications are blocked by your browser. Open your
+              browser&apos;s site settings to allow notifications.
+            </p>
+          )}
+          {showIosHint && (
+            <p className="pb-2 text-xs text-muted-foreground">
+              iOS Safari requires installing OpenGram to your Home Screen before
+              notifications can be enabled.
+            </p>
+          )}
+          {statusMessage && (
+            <p className="pb-2 text-xs text-muted-foreground">
+              {statusMessage}
+            </p>
+          )}
+
+          {showTestButton && (
+            <div className="pb-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSendTest().catch(() => undefined);
+                }}
+                disabled={busyTest}
+              >
+                {busyTest ? "Sending…" : "Send test notification"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -937,7 +1088,13 @@ function AppSettingsTab({ config, onConfigChange }: { config: ConfigResponse; on
 
 // ─── Raw Config Tab ───────────────────────────────────────────────────────────
 
-function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onConfigSaved: () => void }) {
+function RawConfigTab({
+  config,
+  onConfigSaved,
+}: {
+  config: ConfigResponse;
+  onConfigSaved: () => void;
+}) {
   const [raw, setRaw] = useState(() => JSON.stringify(config, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -951,14 +1108,22 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
   function validate(): Record<string, unknown> | null {
     try {
       const parsed = JSON.parse(raw) as unknown;
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        setParseError('Config must be a JSON object.');
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        setParseError("Config must be a JSON object.");
         return null;
       }
       setParseError(null);
       return parsed as Record<string, unknown>;
     } catch (e) {
-      setParseError(e instanceof SyntaxError ? `JSON parse error: ${e.message}` : 'Invalid JSON.');
+      setParseError(
+        e instanceof SyntaxError
+          ? `JSON parse error: ${e.message}`
+          : "Invalid JSON.",
+      );
       return null;
     }
   }
@@ -971,19 +1136,22 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
       setSaving(true);
       setSaveError(null);
       setSaved(false);
-      const res = await apiFetch('/api/v1/config/admin', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await apiFetch("/api/v1/config/admin", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawConfig: parsed }),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-        throw new Error(data.error ?? data.message ?? 'Failed to save config.');
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+        };
+        throw new Error(data.error ?? data.message ?? "Failed to save config.");
       }
       setSaved(true);
       onConfigSaved();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Failed to save config.');
+      setSaveError(e instanceof Error ? e.message : "Failed to save config.");
     } finally {
       setSaving(false);
     }
@@ -994,8 +1162,8 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Edit the raw configuration JSON. The server will validate the config before saving. Invalid
-        configs will be rejected with an error message.
+        Edit the raw configuration JSON. The server will validate the config
+        before saving. Invalid configs will be rejected with an error message.
       </p>
 
       <Textarea
@@ -1023,7 +1191,9 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
         </div>
       )}
       {saved && !saveError && (
-        <p className="text-xs text-green-600 dark:text-green-400">Config saved successfully.</p>
+        <p className="text-xs text-green-600 dark:text-green-400">
+          Config saved successfully.
+        </p>
       )}
 
       <div className="flex items-center justify-end gap-2">
@@ -1044,7 +1214,7 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
           }}
           disabled={saving || hasParseError}
         >
-          {saving ? 'Saving…' : 'Save config'}
+          {saving ? "Saving…" : "Save config"}
         </Button>
       </div>
     </div>
@@ -1054,13 +1224,13 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
 // ─── Responsive Tabs Header ───────────────────────────────────────────────────
 
 const TABS = [
-  { value: 'agents', label: 'Agents', icon: Bot },
+  { value: "agents", label: "Agents", icon: Bot },
   // { value: 'models', label: 'Models', icon: Cpu },
-  { value: 'app', label: 'App', icon: Settings },
-  { value: 'raw', label: 'Raw config', icon: Braces },
+  { value: "app", label: "App", icon: Settings },
+  { value: "raw", label: "Raw config", icon: Braces },
 ] as const;
 
-type TabValue = (typeof TABS)[number]['value'];
+type TabValue = (typeof TABS)[number]["value"];
 
 function ResponsiveTabsHeader({
   value,
@@ -1077,7 +1247,8 @@ function ResponsiveTabsHeader({
     const container = containerRef.current;
     const measure = measureRef.current;
     if (!container || !measure) return;
-    const check = () => setOverflow(measure.offsetWidth > container.clientWidth);
+    const check = () =>
+      setOverflow(measure.offsetWidth > container.clientWidth);
     check();
     const ro = new ResizeObserver(check);
     ro.observe(container);
@@ -1090,7 +1261,11 @@ function ResponsiveTabsHeader({
   return (
     <div ref={containerRef} className="relative mb-4">
       {/* Hidden element that renders the tab list at its natural fit-content width for measurement */}
-      <div ref={measureRef} className="pointer-events-none invisible absolute w-fit" aria-hidden>
+      <div
+        ref={measureRef}
+        className="pointer-events-none invisible absolute w-fit"
+        aria-hidden
+      >
         <TabsList>
           {TABS.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
@@ -1104,7 +1279,11 @@ function ResponsiveTabsHeader({
       {overflow ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full justify-between gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-between gap-2"
+            >
               <span className="flex items-center gap-1.5">
                 <ActiveIcon size={13} />
                 {active.label}
@@ -1112,14 +1291,20 @@ function ResponsiveTabsHeader({
               <ChevronDown size={13} className="text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+          <DropdownMenuContent
+            align="start"
+            className="w-[--radix-dropdown-menu-trigger-width]"
+          >
             {TABS.map((tab) => {
               const Icon = tab.icon;
               return (
                 <DropdownMenuItem
                   key={tab.value}
                   onClick={() => onValueChange(tab.value)}
-                  className={cn('gap-2', tab.value === value && 'bg-accent text-accent-foreground')}
+                  className={cn(
+                    "gap-2",
+                    tab.value === value && "bg-accent text-accent-foreground",
+                  )}
                 >
                   <Icon size={13} />
                   {tab.label}
@@ -1147,17 +1332,17 @@ function ResponsiveTabsHeader({
 export default function SettingsPage() {
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabValue>('agents');
+  const [activeTab, setActiveTab] = useState<TabValue>("agents");
 
   const loadConfig = useCallback(async () => {
     try {
-      const response = await apiFetch('/api/v1/config', { cache: 'no-store' });
-      if (!response.ok) throw new Error('Failed to load config');
+      const response = await apiFetch("/api/v1/config", { cache: "no-store" });
+      if (!response.ok) throw new Error("Failed to load config");
       const loaded = (await response.json()) as ConfigResponse;
       setApiSecret(loaded.security?.instanceSecret ?? null);
       setConfig(loaded);
     } catch {
-      setError('Failed to load configuration.');
+      setError("Failed to load configuration.");
     }
   }, []);
 
@@ -1171,8 +1356,12 @@ export default function SettingsPage() {
         <div className="grid grid-cols-[36px_1fr_36px] items-center">
           <HamburgerMenu />
           <div className="text-center">
-            <h1 className="text-sm font-semibold tracking-wide text-foreground">Settings</h1>
-            <p className="text-xs text-muted-foreground">Agents &amp; app controls</p>
+            <h1 className="text-sm font-semibold tracking-wide text-foreground">
+              Settings
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Agents &amp; app controls
+            </p>
           </div>
           <div />
         </div>
@@ -1180,11 +1369,27 @@ export default function SettingsPage() {
 
       <main className="px-4 py-4">
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {!error && !config && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {!error && !config && (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        )}
 
         {config && (
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
-            <ResponsiveTabsHeader value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} />
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as TabValue)}
+            className="w-full"
+          >
+            <ResponsiveTabsHeader
+              value={activeTab}
+              onValueChange={(v) => setActiveTab(v as TabValue)}
+            />
+
+            <TabsContent value="app">
+              <AppSettingsTab
+                config={config}
+                onConfigChange={() => loadConfig()}
+              />
+            </TabsContent>
 
             <TabsContent value="agents">
               <AgentsTab
@@ -1202,12 +1407,11 @@ export default function SettingsPage() {
             </TabsContent>
             */}
 
-            <TabsContent value="app">
-              <AppSettingsTab config={config} onConfigChange={() => loadConfig()} />
-            </TabsContent>
-
             <TabsContent value="raw">
-              <RawConfigTab config={config} onConfigSaved={() => loadConfig()} />
+              <RawConfigTab
+                config={config}
+                onConfigSaved={() => loadConfig()}
+              />
             </TabsContent>
           </Tabs>
         )}
