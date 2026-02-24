@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 
 import { getPreviewKind } from '@/app/chats/[chatId]/_lib/file-preview-utils';
+import { apiFetch, buildFileUrl } from '@/src/lib/api-fetch';
 import type { MediaItem } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
 import {
@@ -46,7 +47,7 @@ export function FilePreviewSection({ previewFile, setPreviewFileId }: FilePrevie
               <div className="flex shrink-0 items-center gap-1">
                 <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" asChild>
                   <a
-                    href={`/api/v1/files/${previewFile.id}`}
+                    href={buildFileUrl(previewFile.id)}
                     download
                     aria-label={`Download ${previewFile.filename || 'file'}`}
                   >
@@ -91,7 +92,7 @@ function FilePreviewContent({ item }: { item: MediaItem }) {
 function PdfPreview({ item }: { item: MediaItem }) {
   return (
     <iframe
-      src={`/api/v1/files/${item.id}`}
+      src={buildFileUrl(item.id)}
       title={item.filename || 'PDF preview'}
       className="h-full w-full border-0"
     />
@@ -114,7 +115,7 @@ function useTextContent(itemId: string): FetchState {
     setState({ status: 'loading' });
     let cancelled = false;
 
-    fetch(`/api/v1/files/${itemId}`)
+    apiFetch(`/api/v1/files/${itemId}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();

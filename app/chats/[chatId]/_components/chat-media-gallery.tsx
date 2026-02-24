@@ -1,4 +1,5 @@
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
+import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatBytes } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaFilter, MediaItem } from '@/app/chats/[chatId]/_lib/types';
@@ -85,7 +86,7 @@ export function ChatMediaGallery({
                       onClick={() => setViewerMediaId(item.id)}
                     >
                       <img
-                        src={`/api/v1/files/${item.id}/thumbnail`}
+                        src={buildFileUrl(item.id, 'thumbnail')}
                         alt={item.filename || 'Image attachment'}
                         width={240}
                         height={240}
@@ -118,7 +119,7 @@ export function ChatMediaGallery({
                     )}
                     <Button variant="link" size="sm" asChild>
                       <a
-                        href={`/api/v1/files/${item.id}`}
+                        href={buildFileUrl(item.id)}
                         download
                         aria-label={`Download ${item.filename || 'attachment'}`}
                       >
@@ -150,7 +151,7 @@ export function ChatMediaGallery({
                 <p className="truncate text-sm text-white">{viewerMedia.filename || 'Image viewer'}</p>
                 <div className="flex items-center gap-3">
                   <a
-                    href={`/api/v1/files/${viewerMedia.id}`}
+                    href={buildFileUrl(viewerMedia.id)}
                     download
                     aria-label={`Download ${viewerMedia.filename || 'image'}`}
                     className="text-xs text-white/90"
@@ -169,7 +170,7 @@ export function ChatMediaGallery({
               </div>
               <div className="relative min-h-0 flex-1 overflow-auto rounded-2xl border border-white/20 bg-black/40">
                 <img
-                  src={`/api/v1/files/${viewerMedia.id}`}
+                  src={buildFileUrl(viewerMedia.id)}
                   alt={viewerMedia.filename || 'Image viewer'}
                   className="absolute inset-0 h-full w-full object-contain"
                 />

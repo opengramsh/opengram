@@ -3,6 +3,7 @@
 import { type RefObject, useState } from 'react';
 import { Camera, FileText, Images, Mic, Plus, Send, Square, X } from 'lucide-react';
 
+import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaItem, Model } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
@@ -80,7 +81,7 @@ export function ChatComposer({
                 <div key={att.id} className="relative shrink-0">
                   {att.kind === 'image' ? (
                     <img
-                      src={`/api/v1/files/${att.id}`}
+                      src={buildFileUrl(att.id)}
                       alt={att.filename}
                       className="h-16 w-16 rounded-xl object-cover border border-border"
                     />

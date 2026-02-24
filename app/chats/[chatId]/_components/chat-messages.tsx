@@ -1,6 +1,7 @@
 import { type RefObject } from 'react';
 import { ChevronRight, File, FileSpreadsheet, FileText, Video } from 'lucide-react';
 
+import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatBytes, isMessageTyping, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
@@ -114,7 +115,7 @@ function FileAttachmentCard({
 
   return (
     <a
-      href={`/api/v1/files/${item.id}`}
+      href={buildFileUrl(item.id)}
       download
       aria-label={`Download ${item.filename || 'attachment'}`}
       className="flex items-center gap-3 rounded-xl bg-black/10 px-3 py-2.5"
@@ -183,7 +184,7 @@ export function ChatMessages({
                         onClick={() => setViewerMediaId(imageItems[0].id)}
                       >
                         <img
-                          src={`/api/v1/files/${imageItems[0].id}/thumbnail`}
+                          src={buildFileUrl(imageItems[0].id, 'thumbnail')}
                           alt={imageItems[0].filename || 'Image attachment'}
                           className="h-auto max-h-52 w-full object-cover"
                         />
@@ -199,7 +200,7 @@ export function ChatMessages({
                             onClick={() => setViewerMediaId(item.id)}
                           >
                             <img
-                              src={`/api/v1/files/${item.id}/thumbnail`}
+                              src={buildFileUrl(item.id, 'thumbnail')}
                               alt={item.filename || 'Image attachment'}
                               className="h-36 w-full object-cover"
                             />
@@ -217,7 +218,7 @@ export function ChatMessages({
                           onClick={() => setViewerMediaId(imageItems[0].id)}
                         >
                           <img
-                            src={`/api/v1/files/${imageItems[0].id}/thumbnail`}
+                            src={buildFileUrl(imageItems[0].id, 'thumbnail')}
                             alt={imageItems[0].filename || 'Image attachment'}
                             className="h-auto max-h-48 w-full object-cover"
                           />
@@ -233,7 +234,7 @@ export function ChatMessages({
                               onClick={() => setViewerMediaId(item.id)}
                             >
                               <img
-                                src={`/api/v1/files/${item.id}/thumbnail`}
+                                src={buildFileUrl(item.id, 'thumbnail')}
                                 alt={item.filename || 'Image attachment'}
                                 className="h-36 w-full object-cover"
                               />

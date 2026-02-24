@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useMatch } from "react-router";
 
 import logoSm from "/opengram-logo-sm.webp";
+import { apiFetch } from "@/src/lib/api-fetch";
 import { sortInboxChats } from "@/src/lib/inbox";
 import { ChatListPage } from "@/src/components/chats/chat-list-page";
 import type { Chat } from "@/src/components/chats/types";
@@ -35,7 +36,7 @@ export default function InboxLayout() {
   const activeChatId = chatMatch?.params.chatId;
 
   const loadPendingSummary = useCallback(async () => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/api/v1/chats/pending-summary?archived=false",
       { cache: "no-store" },
     );
@@ -52,7 +53,7 @@ export default function InboxLayout() {
   }, []);
 
   const loadUnreadSummary = useCallback(async () => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/api/v1/chats/unread-summary?archived=false",
       { cache: "no-store" },
     );
@@ -96,7 +97,7 @@ export default function InboxLayout() {
 
   const refreshSingleInboxChat = useCallback(
     async (incomingChatId: string) => {
-      const response = await fetch(`/api/v1/chats/${incomingChatId}`, {
+      const response = await apiFetch(`/api/v1/chats/${incomingChatId}`, {
         cache: "no-store",
       });
       if (!response.ok) {

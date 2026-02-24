@@ -8,6 +8,7 @@ import { Facehash } from 'facehash';
 
 import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
 import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
+import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
 import { Button } from '@/src/components/ui/button';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
 import {
@@ -50,9 +51,10 @@ export default function NewChatPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const response = await fetch('/api/v1/config', { cache: 'no-store' });
+        const response = await apiFetch('/api/v1/config', { cache: 'no-store' });
         if (!response.ok) return;
-        const config = (await response.json()) as { agents: Agent[]; models: Model[] };
+        const config = (await response.json()) as { agents: Agent[]; models: Model[]; security?: { instanceSecret?: string } };
+        setApiSecret(config.security?.instanceSecret ?? null);
         setAgents(config.agents ?? []);
         setRawModels(config.models ?? []);
 
@@ -103,7 +105,7 @@ export default function NewChatPage() {
     if (!resolvedModelId) return null;
 
     try {
-      const response = await fetch('/api/v1/chats', {
+      const response = await apiFetch('/api/v1/chats', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -134,7 +136,7 @@ export default function NewChatPage() {
       if (pendingAttachments.length > 0) {
         // A chat was already created during upload; send attachments then text.
         const chatId = pendingChatIdRef.current ?? await (async () => {
-          const res = await fetch('/api/v1/chats', {
+          const res = await apiFetch('/api/v1/chats', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ agentIds: [selectedAgentId], modelId: resolvedModelId }),
@@ -148,7 +150,7 @@ export default function NewChatPage() {
         // Single message with all attachments + optional text
         const body: Record<string, unknown> = { role: 'user', senderId: 'user:primary', trace: { mediaIds: pendingAttachments.map((a) => a.id) } };
         if (content) body.content = content;
-        const res = await fetch(`/api/v1/chats/${chatId}/messages`, {
+        const res = await apiFetch(`/api/v1/chats/${chatId}/messages`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
@@ -161,7 +163,7 @@ export default function NewChatPage() {
       // Text-only path
       const existingChatId = pendingChatIdRef.current;
       if (existingChatId) {
-        const response = await fetch(`/api/v1/chats/${existingChatId}/messages`, {
+        const response = await apiFetch(`/api/v1/chats/${existingChatId}/messages`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ role: 'user', senderId: 'user:primary', content }),
@@ -171,7 +173,7 @@ export default function NewChatPage() {
         return;
       }
 
-      const response = await fetch('/api/v1/chats', {
+      const response = await apiFetch('/api/v1/chats', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -207,7 +209,7 @@ export default function NewChatPage() {
         formData.append('file', file, file.name);
         if (forcedKind) formData.append('kind', forcedKind);
 
-        const uploadResponse = await fetch(`/api/v1/chats/${chatId}/media`, { method: 'POST', body: formData });
+        const uploadResponse = await apiFetch(`/api/v1/chats/${chatId}/media`, { method: 'POST', body: formData });
         if (!uploadResponse.ok) throw new Error('Failed to upload media');
 
         newItems.push((await uploadResponse.json()) as { id: string; kind: string; filename: string });

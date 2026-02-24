@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Braces, ChevronDown, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
+import { AlertTriangle, Bot, Braces, ChevronDown, Dices, Eye, EyeOff, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
 
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 import { Button } from '@/src/components/ui/button';
@@ -23,6 +23,8 @@ import {
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs';
+import { Checkbox } from '@/src/components/ui/checkbox';
+import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
 import { cn } from '@/src/lib/utils';
 import { Textarea } from '@/src/components/ui/textarea';
 import {
@@ -63,6 +65,7 @@ type ConfigResponse = {
   };
   security?: {
     instanceSecretEnabled?: boolean;
+    instanceSecret?: string;
     readEndpointsRequireInstanceSecret?: boolean;
   };
 };
@@ -392,7 +395,7 @@ function DeleteDialog({ label, trigger, onConfirm }: DeleteDialogProps) {
 
 function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange: (a: Agent[]) => void }) {
   async function saveAgents(updated: Agent[]) {
-    const res = await fetch('/api/v1/config/admin', {
+    const res = await apiFetch('/api/v1/config/admin', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agents: updated }),
@@ -590,9 +593,217 @@ function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange
 //   );
 // }
 
+// ─── Security Card ────────────────────────────────────────────────────────────
+
+function generateSecret() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function SecurityCard({ config, onConfigChange }: { config: ConfigResponse; onConfigChange: () => void }) {
+  const [enabled, setEnabled] = useState(config.security?.instanceSecretEnabled ?? false);
+  const [secret, setSecret] = useState(config.security?.instanceSecret ?? '');
+  const [requireForReads, setRequireForReads] = useState(config.security?.readEndpointsRequireInstanceSecret ?? false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
+
+  useEffect(() => {
+    setEnabled(config.security?.instanceSecretEnabled ?? false);
+    setSecret(config.security?.instanceSecret ?? '');
+    setRequireForReads(config.security?.readEndpointsRequireInstanceSecret ?? false);
+  }, [config.security?.instanceSecretEnabled, config.security?.instanceSecret, config.security?.readEndpointsRequireInstanceSecret]);
+
+  const isDirty =
+    enabled !== (config.security?.instanceSecretEnabled ?? false) ||
+    secret !== (config.security?.instanceSecret ?? '') ||
+    requireForReads !== (config.security?.readEndpointsRequireInstanceSecret ?? false);
+
+  const hasValidationError = enabled && !secret.trim();
+
+  async function handleSave() {
+    if (hasValidationError) {
+      setError('Instance secret cannot be empty when enabled.');
+      return;
+    }
+    try {
+      setSaving(true);
+      setError(null);
+      setSaved(false);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const currentServerSecret = config.security?.instanceSecret;
+      if (currentServerSecret) {
+        headers.Authorization = `Bearer ${currentServerSecret}`;
+      }
+      const res = await fetch('/api/v1/config/admin', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          security: {
+            instanceSecretEnabled: enabled,
+            instanceSecret: enabled ? secret.trim() : '',
+            readEndpointsRequireInstanceSecret: requireForReads,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+        throw new Error(data.error ?? data.message ?? 'Failed to save security settings.');
+      }
+      setApiSecret(enabled ? secret.trim() : null);
+      setSaved(true);
+      onConfigChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save security settings.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="p-0">
+        <CardTitle className="text-sm">Instance secret</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-0">
+        <p className="text-xs text-muted-foreground">
+          Require a Bearer token on API requests. Protects against cross-origin attacks and
+          unauthorized access from other processes.
+        </p>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={(checked) => {
+              setEnabled(checked === true);
+              setSaved(false);
+              setError(null);
+            }}
+          />
+          <span className="text-sm">Enable instance secret</span>
+        </label>
+
+        {enabled && (
+          <>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="instance-secret">Secret</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
+                  onClick={() => {
+                    if (secret.trim()) {
+                      setShowGenerateConfirm(true);
+                    } else {
+                      setSecret(generateSecret());
+                      setShowSecret(true);
+                      setSaved(false);
+                      setError(null);
+                    }
+                  }}
+                >
+                  <Dices size={12} />
+                  Generate
+                </Button>
+              </div>
+              <div className="relative">
+                <Input
+                  id="instance-secret"
+                  type={showSecret ? 'text' : 'password'}
+                  value={secret}
+                  onChange={(e) => {
+                    setSecret(e.target.value);
+                    setSaved(false);
+                    setError(null);
+                  }}
+                  placeholder="your-secret-here"
+                  className="pr-9 font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecret((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+
+              <Dialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>Replace existing secret?</DialogTitle>
+                    <DialogDescription>
+                      This will replace your current secret. Any clients using the old secret (e.g.
+                      OpenClaw) will need to be updated with the new one.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button
+                      onClick={() => {
+                        setSecret(generateSecret());
+                        setShowSecret(true);
+                        setSaved(false);
+                        setError(null);
+                        setShowGenerateConfirm(false);
+                      }}
+                    >
+                      Replace
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox
+                checked={requireForReads}
+                onCheckedChange={(checked) => {
+                  setRequireForReads(checked === true);
+                  setSaved(false);
+                  setError(null);
+                }}
+              />
+              <span className="text-sm">Also require secret for read endpoints</span>
+            </label>
+          </>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+        {saved && !error && (
+          <p className="text-xs text-green-600 dark:text-green-400">Security settings saved.</p>
+        )}
+
+        {isDirty && (
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => { handleSave().catch(() => undefined); }}
+              disabled={saving || hasValidationError}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── App Settings Tab ─────────────────────────────────────────────────────────
 
-function AppSettingsTab({ config }: { config: ConfigResponse }) {
+function AppSettingsTab({ config, onConfigChange }: { config: ConfigResponse; onConfigChange: () => void }) {
   const [permission, setPermission] = useState<PushPermissionState>('unsupported');
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -719,25 +930,7 @@ function AppSettingsTab({ config }: { config: ConfigResponse }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="p-0">
-          <CardTitle className="text-sm">Write security</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 p-0">
-          <p className="text-sm text-muted-foreground">
-            {config.security?.instanceSecretEnabled
-              ? 'Instance secret enforcement is enabled.'
-              : 'Instance secret enforcement is disabled.'}
-          </p>
-          {config.security?.instanceSecretEnabled && (
-            <p className="text-sm text-muted-foreground">
-              {config.security.readEndpointsRequireInstanceSecret
-                ? 'Read endpoints also require the instance secret.'
-                : 'Read endpoints do not require the instance secret.'}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <SecurityCard config={config} onConfigChange={onConfigChange} />
     </div>
   );
 }
@@ -778,7 +971,7 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
       setSaving(true);
       setSaveError(null);
       setSaved(false);
-      const res = await fetch('/api/v1/config/admin', {
+      const res = await apiFetch('/api/v1/config/admin', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawConfig: parsed }),
@@ -958,9 +1151,11 @@ export default function SettingsPage() {
 
   const loadConfig = useCallback(async () => {
     try {
-      const response = await fetch('/api/v1/config', { cache: 'no-store' });
+      const response = await apiFetch('/api/v1/config', { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load config');
-      setConfig((await response.json()) as ConfigResponse);
+      const loaded = (await response.json()) as ConfigResponse;
+      setApiSecret(loaded.security?.instanceSecret ?? null);
+      setConfig(loaded);
     } catch {
       setError('Failed to load configuration.');
     }
@@ -1008,7 +1203,7 @@ export default function SettingsPage() {
             */}
 
             <TabsContent value="app">
-              <AppSettingsTab config={config} />
+              <AppSettingsTab config={config} onConfigChange={() => loadConfig()} />
             </TabsContent>
 
             <TabsContent value="raw">

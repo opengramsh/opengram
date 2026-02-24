@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { isMicPermissionDenied } from '@/app/chats/[chatId]/_lib/chat-utils';
+import { apiFetch } from '@/src/lib/api-fetch';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 import { upsertFeedMessage } from '@/src/lib/chat';
 
@@ -43,7 +44,7 @@ export function useChatRecorder({ getChatId, setError, setMessages, setMedia, on
       formData.append('file', blob, `voice-${Date.now()}.webm`);
       formData.append('kind', 'audio');
 
-      const uploadResponse = await fetch(`/api/v1/chats/${chatId}/media`, {
+      const uploadResponse = await apiFetch(`/api/v1/chats/${chatId}/media`, {
         method: 'POST',
         body: formData,
       });
@@ -56,7 +57,7 @@ export function useChatRecorder({ getChatId, setError, setMessages, setMedia, on
 
       let messageResponse: Response;
       try {
-        messageResponse = await fetch(`/api/v1/chats/${chatId}/messages`, {
+        messageResponse = await apiFetch(`/api/v1/chats/${chatId}/messages`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -66,12 +67,12 @@ export function useChatRecorder({ getChatId, setError, setMessages, setMedia, on
           }),
         });
       } catch (error) {
-        await fetch(`/api/v1/media/${uploadedMedia.id}`, { method: 'DELETE' }).catch(() => undefined);
+        await apiFetch(`/api/v1/media/${uploadedMedia.id}`, { method: 'DELETE' }).catch(() => undefined);
         throw error;
       }
 
       if (!messageResponse.ok) {
-        await fetch(`/api/v1/media/${uploadedMedia.id}`, { method: 'DELETE' }).catch(() => undefined);
+        await apiFetch(`/api/v1/media/${uploadedMedia.id}`, { method: 'DELETE' }).catch(() => undefined);
         throw new Error('Failed to create voice message');
       }
 

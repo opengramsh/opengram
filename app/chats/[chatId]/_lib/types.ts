@@ -15,6 +15,11 @@ export type Model = {
 export type ConfigResponse = {
   agents: Agent[];
   models: Model[];
+  security?: {
+    instanceSecretEnabled?: boolean;
+    instanceSecret?: string;
+    readEndpointsRequireInstanceSecret?: boolean;
+  };
 };
 
 export type Chat = {

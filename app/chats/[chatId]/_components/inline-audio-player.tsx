@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 
+import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaItem } from '@/app/chats/[chatId]/_lib/types';
 import { Slider } from '@/src/components/ui/slider';
@@ -76,7 +77,7 @@ export function InlineAudioPlayer({ item }: { item: MediaItem }) {
 
   return (
     <div key={item.id} className="rounded-xl border border-border/70 bg-card/40 p-2.5">
-      <audio ref={audioRef} preload="metadata" src={`/api/v1/files/${item.id}`} className="hidden" />
+      <audio ref={audioRef} preload="metadata" src={buildFileUrl(item.id)} className="hidden" />
       <div className="flex items-center gap-2">
         <button
           type="button"

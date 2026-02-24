@@ -1,3 +1,5 @@
+import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
+
 export type PushConfigResponse = {
   enabled: boolean;
   vapidPublicKey: string;
@@ -36,7 +38,7 @@ export function getPushPermissionState(): PushPermissionState {
 }
 
 export async function fetchPushConfig(): Promise<PushConfigResponse> {
-  const response = await fetch('/api/v1/config', { cache: 'no-store' });
+  const response = await apiFetch('/api/v1/config', { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Failed to load config (${response.status}).`);
   }
@@ -46,7 +48,12 @@ export async function fetchPushConfig(): Promise<PushConfigResponse> {
       enabled?: boolean;
       vapidPublicKey?: string;
     };
+    security?: {
+      instanceSecret?: string;
+    };
   };
+
+  setApiSecret(parsed.security?.instanceSecret ?? null);
 
   return {
     enabled: Boolean(parsed.push?.enabled),
@@ -72,7 +79,7 @@ export async function getCurrentPushSubscription() {
 }
 
 async function sendSubscriptionToServer(subscription: PushSubscription) {
-  const response = await fetch('/api/v1/push/subscribe', {
+  const response = await apiFetch('/api/v1/push/subscribe', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(subscription.toJSON()),
@@ -127,7 +134,7 @@ export async function disablePushNotifications() {
     return false;
   }
 
-  await fetch('/api/v1/push/subscribe', {
+  await apiFetch('/api/v1/push/subscribe', {
     method: 'DELETE',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ endpoint: subscription.endpoint }),
@@ -137,7 +144,7 @@ export async function disablePushNotifications() {
 }
 
 export async function sendPushTestNotification() {
-  const response = await fetch('/api/v1/push/test', {
+  const response = await apiFetch('/api/v1/push/test', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

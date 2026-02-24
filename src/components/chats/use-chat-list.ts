@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 
+import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
 import { buildChatsQuery, sortInboxChats } from '@/src/lib/inbox';
 import {
   normalizeFirstMessageForNewChat,
@@ -110,7 +111,7 @@ export function useChatList(options: UseChatListOptions) {
     const controller = new AbortController();
     setIsSearchResultsLoading(true);
 
-    fetch(`/api/v1/search?q=${encodeURIComponent(searchQuery)}&scope=all`, {
+    apiFetch(`/api/v1/search?q=${encodeURIComponent(searchQuery)}&scope=all`, {
       cache: 'no-store',
       signal: controller.signal,
     })
@@ -128,12 +129,13 @@ export function useChatList(options: UseChatListOptions) {
   );
 
   const loadConfig = useCallback(async () => {
-    const response = await fetch('/api/v1/config', { cache: 'no-store' });
+    const response = await apiFetch('/api/v1/config', { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`Config request failed with status ${response.status}`);
     }
 
     const config = (await response.json()) as ConfigResponse;
+    setApiSecret(config.security?.instanceSecret ?? null);
     setAppName(config.appName || 'OpenGram');
     setAgents(config.agents ?? []);
     setModels(config.models ?? []);
@@ -155,7 +157,7 @@ export function useChatList(options: UseChatListOptions) {
         archived,
         agentId: selectedAgentId || null,
       });
-      const response = await fetch(`/api/v1/chats${query}`, { cache: 'no-store' });
+      const response = await apiFetch(`/api/v1/chats${query}`, { cache: 'no-store' });
       if (!response.ok) {
         throw new Error(`Chats request failed with status ${response.status}`);
       }
@@ -227,7 +229,7 @@ export function useChatList(options: UseChatListOptions) {
           last_read_at: new Date().toISOString(),
         }),
         () =>
-          fetch(`/api/v1/chats/${chat.id}/mark-read`, {
+          apiFetch(`/api/v1/chats/${chat.id}/mark-read`, {
             method: 'POST',
           }),
       );
@@ -245,7 +247,7 @@ export function useChatList(options: UseChatListOptions) {
           last_read_at: null,
         }),
         () =>
-          fetch(`/api/v1/chats/${chat.id}/mark-unread`, {
+          apiFetch(`/api/v1/chats/${chat.id}/mark-unread`, {
             method: 'POST',
           }),
       );
@@ -262,7 +264,7 @@ export function useChatList(options: UseChatListOptions) {
           pinned: !current.pinned,
         }),
         () =>
-          fetch(`/api/v1/chats/${chat.id}`, {
+          apiFetch(`/api/v1/chats/${chat.id}`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ pinned: !chat.pinned }),
@@ -285,7 +287,7 @@ export function useChatList(options: UseChatListOptions) {
           label: 'Undo',
           onClick: () => {
             setChats((current) => sortInboxChats([...current, chat]));
-            void fetch(`/api/v1/chats/${chat.id}/${reverseEndpoint}`, { method: 'POST' })
+            void apiFetch(`/api/v1/chats/${chat.id}/${reverseEndpoint}`, { method: 'POST' })
               .then((res) => {
                 if (!res.ok) throw new Error('undo failed');
                 return onMutationSuccess();
@@ -298,7 +300,7 @@ export function useChatList(options: UseChatListOptions) {
       });
 
       try {
-        const response = await fetch(`/api/v1/chats/${chat.id}/${endpoint}`, { method: 'POST' });
+        const response = await apiFetch(`/api/v1/chats/${chat.id}/${endpoint}`, { method: 'POST' });
         if (!response.ok) throw new Error('archive failed');
         await onMutationSuccess();
       } catch {
@@ -333,7 +335,7 @@ export function useChatList(options: UseChatListOptions) {
     setIsCreatingNewChat(true);
     setNewChatError(null);
     try {
-      const response = await fetch('/api/v1/chats', {
+      const response = await apiFetch('/api/v1/chats', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

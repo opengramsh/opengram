@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 
 import { toast } from 'sonner';
 
+import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
 import { buildInlineMessageMedia, mediaSortAsc, normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type {
   Agent,
@@ -158,7 +159,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       return;
     }
 
-    const response = await fetch(`/api/v1/chats/${chatId}/messages?limit=200`, { cache: 'no-store' });
+    const response = await apiFetch(`/api/v1/chats/${chatId}/messages?limit=200`, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('Failed to refresh messages');
     }
@@ -181,7 +182,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       return;
     }
 
-    const response = await fetch(`/api/v1/chats/${chatId}/requests?status=pending`, { cache: 'no-store' });
+    const response = await apiFetch(`/api/v1/chats/${chatId}/requests?status=pending`, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('Failed to load requests');
     }
@@ -196,7 +197,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       return;
     }
 
-    const response = await fetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' });
+    const response = await apiFetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('Failed to load media');
     }
@@ -215,11 +216,11 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
 
     try {
       const [configResponse, chatResponse, messagesResponse, requestsResponse, mediaResponse] = await Promise.all([
-        fetch('/api/v1/config', { cache: 'no-store' }),
-        fetch(`/api/v1/chats/${chatId}`, { cache: 'no-store' }),
-        fetch(`/api/v1/chats/${chatId}/messages?limit=200`, { cache: 'no-store' }),
-        fetch(`/api/v1/chats/${chatId}/requests?status=pending`, { cache: 'no-store' }),
-        fetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' }),
+        apiFetch('/api/v1/config', { cache: 'no-store' }),
+        apiFetch(`/api/v1/chats/${chatId}`, { cache: 'no-store' }),
+        apiFetch(`/api/v1/chats/${chatId}/messages?limit=200`, { cache: 'no-store' }),
+        apiFetch(`/api/v1/chats/${chatId}/requests?status=pending`, { cache: 'no-store' }),
+        apiFetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' }),
       ]);
 
       if (!configResponse.ok || !chatResponse.ok || !messagesResponse.ok || !requestsResponse.ok || !mediaResponse.ok) {
@@ -227,6 +228,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       }
 
       const config = (await configResponse.json()) as ConfigResponse;
+      setApiSecret(config.security?.instanceSecret ?? null);
       const chatPayload = (await chatResponse.json()) as Chat;
       const messagesPayload = (await messagesResponse.json()) as MessagesResponse;
       const requestsPayload = (await requestsResponse.json()) as RequestsResponse;
@@ -284,7 +286,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     setIsEditingTitle(false);
 
     try {
-      const response = await fetch(`/api/v1/chats/${chat.id}`, {
+      const response = await apiFetch(`/api/v1/chats/${chat.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ title: nextTitle }),
@@ -316,7 +318,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       if (content) body.content = content;
       if (pendingAttachments.length > 0) body.trace = { mediaIds: pendingAttachments.map((a) => a.id) };
 
-      const response = await fetch(`/api/v1/chats/${chat.id}/messages`, {
+      const response = await apiFetch(`/api/v1/chats/${chat.id}/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -354,7 +356,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
           formData.append('kind', forcedKind);
         }
 
-        const uploadResponse = await fetch(`/api/v1/chats/${chat.id}/media`, { method: 'POST', body: formData });
+        const uploadResponse = await apiFetch(`/api/v1/chats/${chat.id}/media`, { method: 'POST', body: formData });
         if (!uploadResponse.ok) {
           throw new Error('Failed to upload media');
         }

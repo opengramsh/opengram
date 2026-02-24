@@ -1,3 +1,5 @@
+import { getApiSecret } from '@/src/lib/api-fetch';
+
 export type FrontendStreamEventType =
   | 'chat.created'
   | 'chat.updated'
@@ -105,6 +107,11 @@ function buildStreamUrl(cursor: string | null) {
   params.set('ephemeral', 'true');
   if (cursor) {
     params.set('cursor', cursor);
+  }
+
+  const secret = getApiSecret();
+  if (secret) {
+    params.set('token', secret);
   }
 
   return `/api/v1/events/stream?${params.toString()}`;

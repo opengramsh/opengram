@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
+import { apiFetch } from '@/src/lib/api-fetch';
 import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
 import {
   applyStreamingChunk,
@@ -67,7 +68,7 @@ export function useChatPageEffects(data: ChatPageData) {
     }
 
     markReadInFlightRef.current = chatId;
-    void fetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
+    void apiFetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
       .then((response) => {
         if (!response.ok) {
           throw new Error('Failed to mark chat as read');
@@ -111,7 +112,7 @@ export function useChatPageEffects(data: ChatPageData) {
 
     tagSuggestionsTimerRef.current = window.setTimeout(() => {
       setIsLoadingTagSuggestions(true);
-      fetch(`/api/v1/tags/suggestions?q=${encodeURIComponent(query)}&limit=8`, { cache: 'no-store' })
+      apiFetch(`/api/v1/tags/suggestions?q=${encodeURIComponent(query)}&limit=8`, { cache: 'no-store' })
         .then(async (response) => {
           if (!response.ok) {
             throw new Error('Failed to load tag suggestions');
@@ -227,7 +228,7 @@ export function useChatPageEffects(data: ChatPageData) {
         // since the user is actively viewing this chat.
         if (role !== 'user' && streamState !== 'streaming' && markReadInFlightRef.current !== chatId) {
           markReadInFlightRef.current = chatId;
-          void fetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
+          void apiFetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
             .catch(() => {})
             .finally(() => {
               if (markReadInFlightRef.current === chatId) {
@@ -276,7 +277,7 @@ export function useChatPageEffects(data: ChatPageData) {
 
           if (markReadInFlightRef.current !== chatId) {
             markReadInFlightRef.current = chatId;
-            void fetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
+            void apiFetch(`/api/v1/chats/${chatId}/mark-read`, { method: 'POST' })
               .catch(() => {})
               .finally(() => {
                 if (markReadInFlightRef.current === chatId) {
@@ -291,7 +292,7 @@ export function useChatPageEffects(data: ChatPageData) {
       }
 
       if (event.type === 'chat.updated') {
-        void fetch(`/api/v1/chats/${chatId}`, { cache: 'no-store' })
+        void apiFetch(`/api/v1/chats/${chatId}`, { cache: 'no-store' })
           .then(async (res) => {
             if (!res.ok) return;
             const newChat = (await res.json()) as import('@/app/chats/[chatId]/_lib/types').Chat;

@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 
+import { apiFetch } from '@/src/lib/api-fetch';
 import type { Chat } from '@/app/chats/[chatId]/_lib/types';
 
 type UseChatSettingsActionsArgs = {
@@ -31,7 +32,7 @@ export function useChatSettingsActions({ chat, setChat, setError, goBack }: UseC
     setIsUpdatingChatSettings(true);
 
     try {
-      const response = await fetch(`/api/v1/chats/${chat.id}`, {
+      const response = await apiFetch(`/api/v1/chats/${chat.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
@@ -57,7 +58,7 @@ export function useChatSettingsActions({ chat, setChat, setError, goBack }: UseC
 
     setIsUpdatingChatSettings(true);
     try {
-      const response = await fetch(`/api/v1/chats/${chat.id}/archive`, { method: 'POST' });
+      const response = await apiFetch(`/api/v1/chats/${chat.id}/archive`, { method: 'POST' });
       if (!response.ok) {
         throw new Error('Failed to archive chat');
       }
@@ -78,7 +79,7 @@ export function useChatSettingsActions({ chat, setChat, setError, goBack }: UseC
 
     setIsUpdatingChatSettings(true);
     try {
-      const response = await fetch(`/api/v1/chats/${chat.id}/unarchive`, { method: 'POST' });
+      const response = await apiFetch(`/api/v1/chats/${chat.id}/unarchive`, { method: 'POST' });
       if (!response.ok) {
         throw new Error('Failed to unarchive chat');
       }

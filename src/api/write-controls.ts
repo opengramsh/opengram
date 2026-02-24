@@ -118,11 +118,20 @@ function requireInstanceSecret(request: Request, config: OpengramConfig = loadOp
     return;
   }
 
+  const expected = config.security.instanceSecret;
+
   const authHeader = request.headers.get('authorization');
-  const expected = `Bearer ${config.security.instanceSecret}`;
-  if (authHeader !== expected) {
-    throw unauthorizedError('Missing or invalid instance secret.');
+  if (authHeader === `Bearer ${expected}`) {
+    return;
   }
+
+  const url = new URL(request.url);
+  const tokenParam = url.searchParams.get('token');
+  if (tokenParam === expected) {
+    return;
+  }
+
+  throw unauthorizedError('Missing or invalid instance secret.');
 }
 
 export function requireWriteAuth(request: Request) {

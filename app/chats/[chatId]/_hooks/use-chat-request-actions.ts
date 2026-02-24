@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 
+import { apiFetch } from '@/src/lib/api-fetch';
 import { requestSortAsc } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { validateRequestResolutionPayload } from '@/app/chats/[chatId]/_lib/request-utils';
 import type { Chat, RequestDraftMap, RequestErrorMap, RequestItem } from '@/app/chats/[chatId]/_lib/types';
@@ -49,7 +50,7 @@ export function useChatRequestActions({
     setChat((current) => current ? { ...current, pending_requests_count: Math.max(0, current.pending_requests_count - 1) } : current);
 
     try {
-      const response = await fetch(`/api/v1/requests/${request.id}/resolve`, {
+      const response = await apiFetch(`/api/v1/requests/${request.id}/resolve`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(validation.payload),
