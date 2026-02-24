@@ -117,15 +117,42 @@ type ChatRowProps = {
   onTogglePin: () => void;
 };
 
+const TITLE_TYPING_SPEED_MS = 40;
+
 function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming = false, isContextMenuOpen, onOpen, onAction, onLongPress, onContextMenuOpenChange, onMarkReadToggle, onTogglePin }: ChatRowProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [typingTitle, setTypingTitle] = useState<string | null>(null);
+  const prevTitleRef = useRef(chat.title);
+  const titleTypingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dragStartXRef = useRef(0);
   const dragStartYRef = useRef(0);
   const dragBaseOffsetRef = useRef(0);
   const pointerIdRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    if (chat.title !== prevTitleRef.current && chat.title_source === 'auto') {
+      if (titleTypingIntervalRef.current) clearInterval(titleTypingIntervalRef.current);
+      const fullTitle = chat.title;
+      let i = 0;
+      setTypingTitle('');
+      titleTypingIntervalRef.current = setInterval(() => {
+        i++;
+        setTypingTitle(fullTitle.slice(0, i));
+        if (i >= fullTitle.length) {
+          clearInterval(titleTypingIntervalRef.current!);
+          titleTypingIntervalRef.current = null;
+          setTimeout(() => setTypingTitle(null), 1200);
+        }
+      }, TITLE_TYPING_SPEED_MS);
+    }
+    prevTitleRef.current = chat.title;
+    return () => {
+      if (titleTypingIntervalRef.current) clearInterval(titleTypingIntervalRef.current);
+    };
+  }, [chat.title, chat.title_source]);
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimerRef.current !== null) {
@@ -295,7 +322,11 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
               <p
                 className={`line-clamp-2 text-sm leading-5 ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}
               >
-                {chat.title}
+                {typingTitle != null ? (
+                  <>{typingTitle}<span className="animate-pulse opacity-70">|</span></>
+                ) : (
+                  chat.title
+                )}
               </p>
               <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">{agentName}{isStreaming ? ' · typing...' : ''}</p>
             </div>

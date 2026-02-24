@@ -33,6 +33,30 @@
         "type": "array",
         "items": { "type": "string" },
         "description": "Linked OpenClaw agent IDs"
+      },
+      "autoRename": {
+        "type": "object",
+        "description": "Automatic chat renaming based on conversation content",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false,
+            "description": "Enable automatic chat renaming"
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["anthropic", "openai", "google", "xai", "openrouter"],
+            "description": "AI provider for title generation"
+          },
+          "modelId": {
+            "type": "string",
+            "description": "Model ID to use for title generation"
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "API key (leave empty to use environment variable)"
+          }
+        }
       }
     },
     "required": []
@@ -55,6 +79,10 @@
     },
     "agents": {
       "label": "Linked Agents"
+    },
+    "autoRename": {
+      "label": "Auto Rename",
+      "apiKey": { "sensitive": true }
     }
   }
 }

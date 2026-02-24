@@ -23,6 +23,7 @@ export type Chat = {
   id: string;
   is_archived: boolean;
   title: string;
+  title_source: 'default' | 'auto' | 'manual';
   tags: string[];
   pinned: boolean;
   agent_ids: string[];

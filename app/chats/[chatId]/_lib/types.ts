@@ -20,6 +20,7 @@ export type ConfigResponse = {
 export type Chat = {
   id: string;
   title: string;
+  title_source: 'default' | 'auto' | 'manual';
   tags: string[];
   model_id: string;
   pinned: boolean;

@@ -15,9 +15,12 @@ import { subscribeToEventsStream, type FrontendStreamEvent } from '@/src/lib/eve
 
 const TYPING_EXPIRY_MS = 12_000;
 
+const TITLE_TYPING_SPEED_MS = 40;
+
 export function useChatPageEffects(data: ChatPageData) {
   const markReadInFlightRef = useRef<string | null>(null);
   const typingExpiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleTypingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const {
     chat,
     chatId,
@@ -36,6 +39,7 @@ export function useChatPageEffects(data: ChatPageData) {
     setKeyboardOffset,
     setMessages,
     setChat,
+    setTypingTitle,
     setPendingReply,
     setTagSuggestions,
     swipeRef,
@@ -275,6 +279,33 @@ export function useChatPageEffects(data: ChatPageData) {
         return;
       }
 
+      if (event.type === 'chat.updated') {
+        void fetch(`/api/v1/chats/${chatId}`, { cache: 'no-store' })
+          .then(async (res) => {
+            if (!res.ok) return;
+            const newChat = (await res.json()) as import('@/app/chats/[chatId]/_lib/types').Chat;
+            const prevTitle = chat?.title;
+            setChat(newChat);
+            if (newChat.title_source === 'auto' && newChat.title !== prevTitle) {
+              if (titleTypingIntervalRef.current) clearInterval(titleTypingIntervalRef.current);
+              const fullTitle = newChat.title;
+              let i = 0;
+              setTypingTitle('');
+              titleTypingIntervalRef.current = setInterval(() => {
+                i++;
+                setTypingTitle(fullTitle.slice(0, i));
+                if (i >= fullTitle.length) {
+                  clearInterval(titleTypingIntervalRef.current!);
+                  titleTypingIntervalRef.current = null;
+                  setTimeout(() => setTypingTitle(null), 1200);
+                }
+              }, TITLE_TYPING_SPEED_MS);
+            }
+          })
+          .catch(() => {});
+        return;
+      }
+
       if (event.type === 'request.created' || event.type === 'request.resolved' || event.type === 'request.cancelled') {
         void refreshPendingRequests();
         return;
@@ -292,7 +323,7 @@ export function useChatPageEffects(data: ChatPageData) {
         typingExpiryTimerRef.current = null;
       }
     };
-  }, [chatId, knownMessageIdsRef, refreshMedia, refreshMessages, refreshPendingRequests, setMessages, setPendingReply]);
+  }, [chat, chatId, knownMessageIdsRef, refreshMedia, refreshMessages, refreshPendingRequests, setChat, setMessages, setPendingReply, setTypingTitle]);
 
   useEffect(() => {
     if (!isEditingTitle) {
@@ -404,6 +435,9 @@ export function useChatPageEffects(data: ChatPageData) {
 
   useEffect(() => {
     return () => {
+      if (titleTypingIntervalRef.current) {
+        clearInterval(titleTypingIntervalRef.current);
+      }
       if (tagSuggestionsTimerRef.current) {
         window.clearTimeout(tagSuggestionsTimerRef.current);
       }

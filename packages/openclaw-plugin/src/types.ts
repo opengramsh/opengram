@@ -13,6 +13,8 @@ export type OpenClawConfig = {
 
 export type Chat = {
   id: string;
+  title?: string;
+  title_source?: 'default' | 'auto' | 'manual';
   agent_ids?: string[];
   [key: string]: unknown;
 };

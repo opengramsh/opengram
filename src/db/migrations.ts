@@ -147,11 +147,7 @@ export function ensureSqliteReady(dbPath: string) {
   }
 
   mkdirSync(path.dirname(dbPath), { recursive: true });
-
-  if (process.env.NODE_ENV !== 'production') {
-    applyMigrations(dbPath);
-  }
-
+  applyMigrations(dbPath);
   ensuredDbPaths.add(dbPath);
 }
 

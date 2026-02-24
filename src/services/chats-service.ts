@@ -17,6 +17,7 @@ type ChatRecord = {
   id: string;
   is_archived: number;
   title: string;
+  title_source: string;
   tags: string;
   pinned: number;
   agent_ids: string;
@@ -42,6 +43,7 @@ type CreateChatInput = {
 
 type UpdateChatInput = {
   title?: string;
+  titleAutoRenamed?: boolean;
   tags?: string[];
   pinned?: boolean;
   modelId?: string;
@@ -193,6 +195,7 @@ function serializeChat(record: ChatRecord) {
     id: record.id,
     is_archived: Boolean(record.is_archived),
     title: record.title,
+    title_source: record.title_source as 'default' | 'auto' | 'manual',
     tags: parseJsonArray(record.tags, 'tags'),
     pinned: Boolean(record.pinned),
     agent_ids: parseJsonArray(record.agent_ids, 'agentIds'),
@@ -628,6 +631,8 @@ export function updateChat(chatId: string, input: UpdateChatInput) {
 
     updates.push('title = ?');
     values.push(normalized.slice(0, config.titleMaxChars));
+    updates.push('title_source = ?');
+    values.push(input.titleAutoRenamed ? 'auto' : 'manual');
   }
 
   if (input.tags !== undefined) {

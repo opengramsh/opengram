@@ -57,6 +57,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
   const [isLoadingTagSuggestions, setIsLoadingTagSuggestions] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [typingTitle, setTypingTitle] = useState<string | null>(null);
 
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -457,6 +458,8 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     loadData,
     setTagSuggestions,
     setIsLoadingTagSuggestions,
+    typingTitle,
+    setTypingTitle,
     setKeyboardOffset,
     setIsEditingTitle,
     setTitleInput,

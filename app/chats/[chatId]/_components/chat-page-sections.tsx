@@ -36,6 +36,7 @@ function ChatHeaderSection() {
       chat={chat.chat}
       primaryAgent={chat.primaryAgent}
       isStreaming={isStreaming}
+      typingTitle={chat.typingTitle}
       goBack={chat.goBack}
       onTitleClick={() => {
         chat.setTitleInput(chat.chat?.title ?? '');

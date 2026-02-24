@@ -28,6 +28,7 @@ type CreateChatRequest = {
 
 type UpdateChatRequest = {
   title?: string;
+  titleAutoRenamed?: boolean;
   tags?: string[];
   pinned?: boolean;
   modelId?: string;

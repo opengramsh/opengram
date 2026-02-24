@@ -90,6 +90,23 @@ export class OpenGramClient {
     return (await res.json()) as ListChatsResponse;
   }
 
+  async getMessages(chatId: string, params?: { limit?: number }): Promise<Message[]> {
+    const qs = new URLSearchParams();
+    if (params?.limit) {
+      qs.set("limit", String(params.limit));
+    }
+    const suffix = qs.size > 0 ? `?${qs.toString()}` : "";
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/chats/${chatId}/messages${suffix}`, {
+      method: "GET",
+      headers: this.headers(),
+    });
+    if (!res.ok) {
+      throw new Error(`getMessages failed: ${res.status}`);
+    }
+    const body = await res.json() as { data: Message[] };
+    return body.data;
+  }
+
   async getChat(chatId: string): Promise<Chat> {
     const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/chats/${chatId}`, {
       method: "GET",

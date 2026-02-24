@@ -1,6 +1,7 @@
 import type { OpenGramClient } from "./api-client.js";
+import { maybeAutoRename } from "./auto-rename.js";
 import { resolveAgentForChat, trackActiveChat } from "./chat-manager.js";
-import { resolveOpenGramAccount } from "./config.js";
+import { resolveOpenGramAccount, type OpenGramChannelConfig } from "./config.js";
 import { downloadMedia } from "./media.js";
 import { getOpenGramRuntime } from "./runtime.js";
 import { cancelStream, finalizeStream, handleBlockReply, initStream } from "./streaming.js";
@@ -245,8 +246,9 @@ async function handleMessageCreated(
   });
   initStream(dispatchId, chatId, streamingMsg.id);
 
+  const account = resolveOpenGramAccount(cfg);
   const stopTyping = startTypingHeartbeat(client, chatId, agentId);
-  const deliver = buildDeliver(client, chatId, agentId, dispatchId, log);
+  const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
   const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
   const onError = (err: unknown) => {
     stopTyping();
@@ -299,8 +301,9 @@ async function handleRequestResolved(
   });
   initStream(dispatchId, chatId, streamingMsg.id);
 
+  const account = resolveOpenGramAccount(cfg);
   const stopTyping = startTypingHeartbeat(client, chatId, agentId);
-  const deliver = buildDeliver(client, chatId, agentId, dispatchId, log);
+  const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
   const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
   const onError = (err: unknown) => {
     stopTyping();
@@ -459,12 +462,21 @@ function buildDeliver(
   chatId: string,
   agentId: string,
   dispatchId: string,
+  cfg: OpenGramChannelConfig,
   log?: InboundListenerParams["log"],
 ): (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void> {
   return async (replyPayload, { kind }) => {
     log?.info(
       `[opengram] buildDeliver called: kind=${kind} textLen=${replyPayload.text?.length ?? 0} hasMedia=${Boolean(replyPayload.mediaUrl)}`,
     );
+
+    // Skip reasoning/thinking messages — they are internal chain-of-thought
+    // delivered as a separate "final" before the actual answer.
+    if (!cfg.showReasoningMessages && replyPayload.text?.trimStart().startsWith("Reasoning:\n")) {
+      log?.info("[opengram] skipping reasoning message");
+      return;
+    }
+
     if (kind === "block") {
       await handleBlockReply(client, chatId, agentId, dispatchId, replyPayload);
       return;
@@ -494,6 +506,10 @@ function buildDeliver(
         });
         await client.uploadMedia(chatId, { file: buffer, filename, contentType, messageId: msg.id });
       }
+      // Fire-and-forget: attempt auto-rename after first agent response.
+      maybeAutoRename({ chatId, cfg, client, log }).catch((err) => {
+        log?.warn(`[opengram:auto-rename] Unexpected error: ${String(err)}`);
+      });
       return;
     }
 

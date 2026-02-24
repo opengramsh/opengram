@@ -27,6 +27,7 @@ type ChatHeaderProps = {
   chat: Chat | null;
   primaryAgent?: Agent;
   isStreaming?: boolean;
+  typingTitle?: string | null;
   goBack: () => void;
   onTitleClick: () => void;
 };
@@ -35,6 +36,7 @@ export function ChatHeader({
   chat,
   primaryAgent,
   isStreaming,
+  typingTitle,
   goBack,
   onTitleClick,
 }: ChatHeaderProps) {
@@ -74,7 +76,11 @@ export function ChatHeader({
           onClick={onTitleClick}
         >
           <p className="truncate text-sm font-semibold leading-5 text-foreground">
-            {chat?.title || 'Chat'}
+            {typingTitle != null ? (
+              <>{typingTitle}<span className="animate-pulse opacity-70">|</span></>
+            ) : (
+              chat?.title || 'Chat'
+            )}
           </p>
           <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">
             {primaryAgent?.name ?? 'Unknown Agent'}{isStreaming ? ' · typing...' : ''}
