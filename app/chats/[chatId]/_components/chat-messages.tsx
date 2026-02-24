@@ -5,6 +5,7 @@ import { formatBytes, isMessageTyping, messageBubbleClass, messageText } from '@
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
+import { MarkdownContent } from '@/app/chats/[chatId]/_components/markdown-content';
 
 type ChatMessagesProps = {
   feedRef: RefObject<HTMLDivElement | null>;
@@ -169,7 +170,7 @@ export function ChatMessages({
           return (
             <div key={message.id} className="mb-2 flex w-full">
               <div className={bubbleClass}>
-                {typing ? <TypingDots /> : hasText && text}
+                {typing ? <TypingDots /> : hasText && <MarkdownContent text={text} />}
 
                 {/* Images */}
                 {imageItems.length > 0 && (
