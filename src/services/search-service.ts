@@ -11,6 +11,7 @@ type ChatSearchRow = {
   id: string;
   title: string;
   sort_at: number;
+  agent_ids: string;
 };
 
 type MessageSearchRow = {
@@ -19,6 +20,7 @@ type MessageSearchRow = {
   chat_title: string;
   sort_at: number;
   snippet: string;
+  agent_ids: string;
 };
 
 type CombinedSearchRow =
@@ -30,6 +32,7 @@ type CombinedSearchRow =
         id: string;
         title: string;
         snippet: string;
+        agent_ids: string[];
       };
     }
   | {
@@ -41,6 +44,7 @@ type CombinedSearchRow =
         chat_id: string;
         chat_title: string;
         snippet: string;
+        agent_ids: string[];
       };
     };
 
@@ -49,12 +53,14 @@ type SearchResult = {
     id: string;
     title: string;
     snippet: string;
+    agent_ids: string[];
   }>;
   messages: Array<{
     id: string;
     chat_id: string;
     chat_title: string;
     snippet: string;
+    agent_ids: string[];
   }>;
   nextCursor: string | null;
   hasMore: boolean;
@@ -174,7 +180,7 @@ function queryTitleMatches(
   const rows = db
     .prepare(
       [
-        'SELECT id, title, COALESCE(last_message_at, updated_at, created_at) AS sort_at',
+        'SELECT id, title, COALESCE(last_message_at, updated_at, created_at) AS sort_at, agent_ids',
         'FROM chats',
         'WHERE title LIKE ? ESCAPE \'\\\'',
         cursorClause.clause,
@@ -192,6 +198,7 @@ function queryTitleMatches(
       id: row.id,
       title: row.title,
       snippet: row.title,
+      agent_ids: JSON.parse(row.agent_ids || '[]'),
     },
   }));
 }
@@ -225,6 +232,7 @@ function queryMessageMatches(
           'm.id,',
           'm.chat_id,',
           'c.title AS chat_title,',
+          'c.agent_ids,',
           'm.created_at AS sort_at,',
           'snippet(messages_fts, 2, ?, ?, \'…\', 20) AS snippet',
           'FROM messages_fts',
@@ -253,6 +261,7 @@ function queryMessageMatches(
         chat_id: row.chat_id,
         chat_title: row.chat_title,
         snippet: sanitizeHighlightedSnippet(row.snippet),
+        agent_ids: JSON.parse(row.agent_ids || '[]'),
       },
     }));
   } catch (error) {

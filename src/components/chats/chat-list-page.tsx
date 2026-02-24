@@ -172,6 +172,7 @@ export function ChatListPage({
           searchResults={searchResults}
           loading={isSearchResultsLoading}
           query={searchQuery}
+          agentsById={agentsById}
           onOpenChat={(chatId) => navigate(`/chats/${chatId}`)}
         />
       ) : (

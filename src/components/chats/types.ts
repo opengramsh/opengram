@@ -46,8 +46,8 @@ export type ChatsResponse = {
   };
 };
 
-export type SearchChatResult = { id: string; title: string; snippet: string };
-export type SearchMessageResult = { id: string; chat_id: string; chat_title: string; snippet: string };
+export type SearchChatResult = { id: string; title: string; snippet: string; agent_ids: string[] };
+export type SearchMessageResult = { id: string; chat_id: string; chat_title: string; snippet: string; agent_ids: string[] };
 export type SearchResponse = {
   chats: SearchChatResult[];
   messages: SearchMessageResult[];
