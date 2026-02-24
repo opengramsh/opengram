@@ -4,7 +4,7 @@ import { type RefObject, useState } from 'react';
 import { Camera, ChevronRight, FileText, Images, Mic, Plus, Send, Square } from 'lucide-react';
 
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
-import type { Chat, Model } from '@/app/chats/[chatId]/_lib/types';
+import type { Model } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
 import {
   Drawer,
@@ -17,23 +17,23 @@ type ChatComposerProps = {
   keyboardOffset: number;
   composerText: string;
   isSending: boolean;
+  isComposerMenuOpen: boolean;
+  selectedModelId: string;
+  models: Model[];
+  setComposerText: (value: string) => void;
+  setIsComposerMenuOpen: (value: boolean) => void;
+  sendMessage: () => Promise<void>;
+  onModelChange: (modelId: string) => Promise<void>;
+  handleMicAction: () => Promise<void>;
   isRecording: boolean;
   recordingSeconds: number;
   isUploadingVoiceNote: boolean;
   showMicSettingsPrompt: boolean;
-  isComposerMenuOpen: boolean;
   isUploadingAttachment: boolean;
-  chat: Chat | null;
-  models: Model[];
+  uploadComposerFiles: (files: FileList | null, forcedKind?: 'image' | 'file') => Promise<void>;
   cameraInputRef: RefObject<HTMLInputElement | null>;
   photosInputRef: RefObject<HTMLInputElement | null>;
   filesInputRef: RefObject<HTMLInputElement | null>;
-  setComposerText: (value: string) => void;
-  setIsComposerMenuOpen: (value: boolean) => void;
-  sendMessage: () => Promise<void>;
-  handleMicAction: () => Promise<void>;
-  uploadComposerFiles: (files: FileList | null, forcedKind?: 'image' | 'file') => Promise<void>;
-  patchChatSettings: (payload: { modelId?: string }) => Promise<void>;
   onCameraCapture: () => void;
 };
 
@@ -41,27 +41,27 @@ export function ChatComposer({
   keyboardOffset,
   composerText,
   isSending,
+  isComposerMenuOpen,
+  selectedModelId,
+  models,
+  setComposerText,
+  setIsComposerMenuOpen,
+  sendMessage,
+  onModelChange,
+  handleMicAction,
   isRecording,
   recordingSeconds,
   isUploadingVoiceNote,
   showMicSettingsPrompt,
-  isComposerMenuOpen,
   isUploadingAttachment,
-  chat,
-  models,
+  uploadComposerFiles,
   cameraInputRef,
   photosInputRef,
   filesInputRef,
-  setComposerText,
-  setIsComposerMenuOpen,
-  sendMessage,
-  handleMicAction,
-  uploadComposerFiles,
-  patchChatSettings,
   onCameraCapture,
 }: ChatComposerProps) {
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const currentModel = models.find((m) => m.id === chat?.model_id);
+  const currentModel = models.find((m) => m.id === selectedModelId);
 
   return (
     <>
@@ -238,7 +238,7 @@ export function ChatComposer({
           <DrawerTitle className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Choose model</DrawerTitle>
           <div className="space-y-1">
             {models.map((model) => {
-              const isActive = model.id === chat?.model_id;
+              const isActive = model.id === selectedModelId;
               return (
                 <button
                   key={model.id}
@@ -247,7 +247,7 @@ export function ChatComposer({
                     isActive ? 'bg-primary/15 text-foreground' : 'text-foreground hover:bg-muted/60'
                   }`}
                   onClick={() => {
-                    void patchChatSettings({ modelId: model.id });
+                    void onModelChange(model.id);
                     setIsModelPickerOpen(false);
                   }}
                 >

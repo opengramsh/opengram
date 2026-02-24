@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { ArrowLeft, ChevronDown, Send } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
 import { Facehash } from 'facehash';
 
+import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
+import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
 import { Button } from '@/src/components/ui/button';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
-import { Textarea } from '@/src/components/ui/textarea';
 import {
   Drawer,
   DrawerContent,
@@ -36,8 +38,13 @@ export default function NewChatPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
-  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const photosInputRef = useRef<HTMLInputElement | null>(null);
+  const filesInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingChatIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -78,25 +85,61 @@ export default function NewChatPage() {
     [agents, selectedAgentId],
   );
 
-  const selectedModel = useMemo(
-    () => models.find((m) => m.id === selectedModelId),
-    [models, selectedModelId],
-  );
+  const resolveModelId = useCallback(() => {
+    return selectedModelId === AGENT_DEFAULT_MODEL_ID
+      ? (selectedAgent?.defaultModelId ?? rawModels[0]?.id ?? '')
+      : selectedModelId;
+  }, [selectedModelId, selectedAgent, rawModels]);
+
+  const ensureChatId = useCallback(async (): Promise<string | null> => {
+    if (pendingChatIdRef.current) return pendingChatIdRef.current;
+    if (!selectedAgentId) return null;
+
+    const resolvedModelId = resolveModelId();
+    if (!resolvedModelId) return null;
+
+    try {
+      const response = await fetch('/api/v1/chats', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentIds: [selectedAgentId],
+          modelId: resolvedModelId,
+        }),
+      });
+
+      if (!response.ok) return null;
+
+      const chat = (await response.json()) as { id: string };
+      pendingChatIdRef.current = chat.id;
+      return chat.id;
+    } catch {
+      return null;
+    }
+  }, [selectedAgentId, resolveModelId]);
 
   const createChat = useCallback(async () => {
     const content = message.trim();
     if (!content || !selectedAgentId || !selectedModelId || isCreating) return;
 
-    // Resolve "Agent's default" to the agent's configured model or the first available model
-    const resolvedModelId =
-      selectedModelId === AGENT_DEFAULT_MODEL_ID
-        ? (selectedAgent?.defaultModelId ?? rawModels[0]?.id ?? '')
-        : selectedModelId;
-
+    const resolvedModelId = resolveModelId();
     if (!resolvedModelId) return;
 
     setIsCreating(true);
     try {
+      // Reuse pending chat if one was already created (e.g. by a file upload that didn't navigate)
+      const existingChatId = pendingChatIdRef.current;
+      if (existingChatId) {
+        const response = await fetch(`/api/v1/chats/${existingChatId}/messages`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ role: 'user', senderId: 'user:primary', content }),
+        });
+        if (!response.ok) throw new Error('Failed');
+        navigate(`/chats/${existingChatId}`, { replace: true });
+        return;
+      }
+
       const response = await fetch('/api/v1/chats', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -114,7 +157,55 @@ export default function NewChatPage() {
     } catch {
       setIsCreating(false);
     }
-  }, [message, selectedAgentId, selectedModelId, selectedAgent, rawModels, isCreating, navigate]);
+  }, [message, selectedAgentId, selectedModelId, isCreating, resolveModelId, navigate]);
+
+  const uploadComposerFiles = useCallback(async (fileList: FileList | null, forcedKind?: 'image' | 'file') => {
+    if (!fileList || fileList.length === 0 || isUploadingAttachment) return;
+
+    setIsUploadingAttachment(true);
+    try {
+      const chatId = await ensureChatId();
+      if (!chatId) {
+        toast.error('Failed to create chat.');
+        return;
+      }
+
+      for (const file of Array.from(fileList)) {
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        if (forcedKind) formData.append('kind', forcedKind);
+
+        const uploadResponse = await fetch(`/api/v1/chats/${chatId}/media`, { method: 'POST', body: formData });
+        if (!uploadResponse.ok) throw new Error('Failed to upload media');
+
+        const media = (await uploadResponse.json()) as { id: string; kind: string };
+
+        const messageResponse = await fetch(`/api/v1/chats/${chatId}/messages`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            role: 'user',
+            senderId: 'user:primary',
+            trace: { mediaId: media.id, kind: media.kind },
+          }),
+        });
+
+        if (!messageResponse.ok) throw new Error('Failed to create message');
+      }
+
+      navigate(`/chats/${chatId}`, { replace: true });
+    } catch {
+      toast.error('Failed to upload attachment.');
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  }, [ensureChatId, isUploadingAttachment, navigate]);
+
+  const recorder = useChatRecorder({
+    getChatId: ensureChatId,
+    setError: (msg) => { if (msg) toast.error(msg); },
+    onVoiceNoteUploaded: (chatId) => navigate(`/chats/${chatId}`, { replace: true }),
+  });
 
   return (
     <div className="flex h-[100dvh] w-full flex-col bg-background">
@@ -159,18 +250,6 @@ export default function NewChatPage() {
               <p className="truncate text-[11px] text-muted-foreground">Tap to change agent</p>
             </div>
           </button>
-
-          {/* Model selector */}
-          <button
-            type="button"
-            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/60 bg-muted/30 px-2.5 py-1 transition active:scale-[0.97]"
-            onClick={() => setIsModelPickerOpen(true)}
-          >
-            <p className="text-[11px] font-medium text-muted-foreground">
-              {selectedModel?.name ?? 'Choose model'}
-            </p>
-            <ChevronDown size={11} className="text-muted-foreground" />
-          </button>
         </div>
       </header>
 
@@ -186,36 +265,29 @@ export default function NewChatPage() {
         )}
       </main>
 
-      {/* Composer */}
-      <footer
-        className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-3"
-        style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}
-      >
-        <div className="flex items-end gap-2">
-          <Textarea
-            ref={textareaRef}
-            rows={1}
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="Message"
-            className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void createChat();
-              }
-            }}
-          />
-          <Button
-            size="icon-xl"
-            aria-label="Send message"
-            onClick={() => void createChat()}
-            disabled={isCreating || !message.trim() || !selectedAgentId || !selectedModelId}
-          >
-            <Send size={16} />
-          </Button>
-        </div>
-      </footer>
+      <ChatComposer
+        keyboardOffset={0}
+        composerText={message}
+        setComposerText={setMessage}
+        isSending={isCreating}
+        sendMessage={createChat}
+        selectedModelId={selectedModelId}
+        models={models}
+        onModelChange={async (id) => setSelectedModelId(id)}
+        isComposerMenuOpen={isComposerMenuOpen}
+        setIsComposerMenuOpen={setIsComposerMenuOpen}
+        handleMicAction={recorder.handleMicAction}
+        isRecording={recorder.isRecording}
+        recordingSeconds={recorder.recordingSeconds}
+        isUploadingVoiceNote={recorder.isUploadingVoiceNote}
+        showMicSettingsPrompt={recorder.showMicSettingsPrompt}
+        isUploadingAttachment={isUploadingAttachment}
+        uploadComposerFiles={uploadComposerFiles}
+        cameraInputRef={cameraInputRef}
+        photosInputRef={photosInputRef}
+        filesInputRef={filesInputRef}
+        onCameraCapture={() => cameraInputRef.current?.click()}
+      />
 
       {/* Agent Picker */}
       <Drawer open={isAgentPickerOpen} onOpenChange={setIsAgentPickerOpen}>
@@ -250,39 +322,6 @@ export default function NewChatPage() {
                     <p className={`text-sm ${isActive ? 'font-semibold' : 'font-medium'} text-foreground`}>{agent.name}</p>
                     {agent.description && (
                       <p className="truncate text-xs text-muted-foreground">{agent.description}</p>
-                    )}
-                  </div>
-                  {isActive && <div className="size-2 shrink-0 rounded-full bg-primary" />}
-                </button>
-              );
-            })}
-          </div>
-        </DrawerContent>
-      </Drawer>
-
-      {/* Model Picker */}
-      <Drawer open={isModelPickerOpen} onOpenChange={setIsModelPickerOpen}>
-        <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-5 pt-3">
-          <DrawerTitle className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Choose model</DrawerTitle>
-          <div className="space-y-1">
-            {models.map((model) => {
-              const isActive = model.id === selectedModelId;
-              return (
-                <button
-                  key={model.id}
-                  type="button"
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                    isActive ? 'bg-primary/15' : 'hover:bg-muted/60'
-                  }`}
-                  onClick={() => {
-                    setSelectedModelId(model.id);
-                    setIsModelPickerOpen(false);
-                  }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm ${isActive ? 'font-semibold' : 'font-medium'} text-foreground`}>{model.name}</p>
-                    {model.description && (
-                      <p className="truncate text-xs text-muted-foreground">{model.description}</p>
                     )}
                   </div>
                   {isActive && <div className="size-2 shrink-0 rounded-full bg-primary" />}

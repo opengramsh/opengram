@@ -399,7 +399,8 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     await settings.patchChatSettings({ tags: chat.tags.filter((item) => item !== tag) });
   }, [chat, settings.patchChatSettings]);
 
-  const recorder = useChatRecorder({ chat, setError, setMessages, setMedia });
+  const getChatId = useCallback(async () => chat?.id ?? null, [chat]);
+  const recorder = useChatRecorder({ getChatId, setError, setMessages, setMedia });
   const requests = useChatRequestActions({
     setPendingRequests,
     setChat,

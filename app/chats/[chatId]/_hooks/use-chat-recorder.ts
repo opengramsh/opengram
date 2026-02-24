@@ -3,17 +3,18 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { isMicPermissionDenied } from '@/app/chats/[chatId]/_lib/chat-utils';
-import type { Chat, MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
+import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
 import { upsertFeedMessage } from '@/src/lib/chat';
 
 type UseChatRecorderArgs = {
-  chat: Chat | null;
+  getChatId: () => Promise<string | null>;
   setError: (message: string | null) => void;
-  setMessages: Dispatch<SetStateAction<Message[]>>;
-  setMedia: Dispatch<SetStateAction<MediaItem[]>>;
+  setMessages?: Dispatch<SetStateAction<Message[]>>;
+  setMedia?: Dispatch<SetStateAction<MediaItem[]>>;
+  onVoiceNoteUploaded?: (chatId: string) => void;
 };
 
-export function useChatRecorder({ chat, setError, setMessages, setMedia }: UseChatRecorderArgs) {
+export function useChatRecorder({ getChatId, setError, setMessages, setMedia, onVoiceNoteUploaded }: UseChatRecorderArgs) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isUploadingVoiceNote, setIsUploadingVoiceNote] = useState(false);
@@ -26,10 +27,13 @@ export function useChatRecorder({ chat, setError, setMessages, setMedia }: UseCh
   const recordingSecondsRef = useRef(0);
 
   const uploadVoiceNote = useCallback(async (blob: Blob) => {
-    if (!chat || blob.size === 0) {
-      if (blob.size === 0) {
-        setError('Recording was too short. Try again.');
-      }
+    if (blob.size === 0) {
+      setError('Recording was too short. Try again.');
+      return;
+    }
+
+    const chatId = await getChatId();
+    if (!chatId) {
       return;
     }
 
@@ -39,7 +43,7 @@ export function useChatRecorder({ chat, setError, setMessages, setMedia }: UseCh
       formData.append('file', blob, `voice-${Date.now()}.webm`);
       formData.append('kind', 'audio');
 
-      const uploadResponse = await fetch(`/api/v1/chats/${chat.id}/media`, {
+      const uploadResponse = await fetch(`/api/v1/chats/${chatId}/media`, {
         method: 'POST',
         body: formData,
       });
@@ -52,7 +56,7 @@ export function useChatRecorder({ chat, setError, setMessages, setMedia }: UseCh
 
       let messageResponse: Response;
       try {
-        messageResponse = await fetch(`/api/v1/chats/${chat.id}/messages`, {
+        messageResponse = await fetch(`/api/v1/chats/${chatId}/messages`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -72,12 +76,13 @@ export function useChatRecorder({ chat, setError, setMessages, setMedia }: UseCh
       }
 
       const createdMessage = (await messageResponse.json()) as Message;
-      setMessages((current) => upsertFeedMessage(current, createdMessage));
-      setMedia((current) => (current.some((item) => item.id === uploadedMedia.id) ? current : [...current, uploadedMedia]));
+      setMessages?.((current) => upsertFeedMessage(current, createdMessage));
+      setMedia?.((current) => (current.some((item) => item.id === uploadedMedia.id) ? current : [...current, uploadedMedia]));
+      onVoiceNoteUploaded?.(chatId);
     } finally {
       setIsUploadingVoiceNote(false);
     }
-  }, [chat, setError, setMedia, setMessages]);
+  }, [getChatId, setError, setMedia, setMessages, onVoiceNoteUploaded]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
