@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Facehash } from 'facehash';
-import { Plus } from 'lucide-react';
+import { MessageCirclePlus, Search, X } from 'lucide-react';
 
 import { cn, FACEHASH_COLORS } from '@/src/lib/utils';
 
@@ -40,6 +40,15 @@ export function ChatListPage({
   unreadByAgent,
 }: ChatListPageProps) {
   const navigate = useNavigate();
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isSearchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [isSearchOpen]);
+
   const {
     agents,
     models,
@@ -72,13 +81,55 @@ export function ChatListPage({
   } = chatList;
 
   return (
-    <div className={cn('flex w-full flex-col bg-background', sidebarMode ? 'h-full overflow-hidden' : 'min-h-screen pb-36')}>
+    <div className={cn('flex w-full flex-col bg-background', sidebarMode ? 'h-full overflow-hidden' : 'min-h-screen')}>
       <header className="sticky top-0 z-20 h-[61px] border-b border-border/70 bg-background/95 px-4 py-1.5 backdrop-blur-md">
-        <div className="grid grid-cols-[36px_1fr_36px] items-center">
-          <HamburgerMenu />
-          <div className="text-center">{headerContent}</div>
-          <div />
-        </div>
+        {isSearchOpen ? (
+          <div className="flex h-full items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                type="search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder={searchPlaceholder}
+                className="h-9 pl-9 text-sm"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Close search"
+              onClick={() => {
+                setSearchInput('');
+                setIsSearchOpen(false);
+              }}
+            >
+              <X size={18} />
+            </Button>
+          </div>
+        ) : (
+          <div className="grid h-full grid-cols-[36px_1fr_36px_36px] items-center">
+            <HamburgerMenu />
+            <div className="text-center">{headerContent}</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Search chats"
+              onClick={() => setIsSearchOpen(true)}
+            >
+              <Search size={18} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="New chat"
+              onClick={() => navigate('/chats/new')}
+            >
+              <MessageCirclePlus size={18} strokeWidth={2} />
+            </Button>
+          </div>
+        )}
       </header>
 
       <section className="border-b border-border/60 px-4 py-3">
@@ -127,24 +178,6 @@ export function ChatListPage({
         onTogglePin={togglePin}
         onToggleArchive={toggleArchive}
       />
-
-      <div className={cn('liquid-glass z-30 flex h-[69px] w-full items-center gap-3 px-4 py-3', sidebarMode ? 'sticky bottom-0' : 'fixed inset-x-0 bottom-0')}>
-        <Input
-          type="search"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder={searchPlaceholder}
-          className="h-11 flex-1 rounded-2xl border-border/70 bg-background/70"
-        />
-        <Button
-          aria-label="New chat"
-          size="icon-xl"
-          className="bg-[hsl(151,100%,43%)] text-black shadow-lg shadow-[hsl(151,100%,43%)]/30 hover:bg-[hsl(151,100%,38%)]"
-          onClick={() => navigate('/chats/new')}
-        >
-          <Plus size={19} strokeWidth={2.5} />
-        </Button>
-      </div>
 
       <NewChatSheet
         open={isNewChatOpen}
