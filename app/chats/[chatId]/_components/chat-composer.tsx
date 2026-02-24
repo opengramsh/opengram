@@ -1,7 +1,7 @@
 'use client';
 
 import { type RefObject, useState } from 'react';
-import { Camera, ChevronRight, FileText, Images, Mic, Plus, Send, Square } from 'lucide-react';
+import { Camera, FileText, Images, Mic, Plus, Send, Square } from 'lucide-react';
 
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { Model } from '@/app/chats/[chatId]/_lib/types';
@@ -60,8 +60,8 @@ export function ChatComposer({
   filesInputRef,
   onCameraCapture,
 }: ChatComposerProps) {
-  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const currentModel = models.find((m) => m.id === selectedModelId);
+  // const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  // const currentModel = models.find((m) => m.id === selectedModelId);
 
   return (
     <>
@@ -212,7 +212,7 @@ export function ChatComposer({
             </button>
           </div>
 
-          {/* Model selector */}
+          {/* Model selector — commented out while feature is disabled
           <button
             type="button"
             className="mt-3 flex w-full items-center justify-between rounded-2xl border border-border bg-muted/60 px-4 py-3 transition active:scale-[0.98]"
@@ -227,12 +227,13 @@ export function ChatComposer({
             </div>
             <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
           </button>
+          */}
 
           {isUploadingAttachment && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment...</p>}
         </DrawerContent>
       </Drawer>
 
-      {/* Model Picker Drawer */}
+      {/* Model Picker Drawer — commented out while feature is disabled
       <Drawer open={isModelPickerOpen} onOpenChange={setIsModelPickerOpen}>
         <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-5 pt-3">
           <DrawerTitle className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Choose model</DrawerTitle>
@@ -264,6 +265,7 @@ export function ChatComposer({
           </div>
         </DrawerContent>
       </Drawer>
+      */}
     </>
   );
 }

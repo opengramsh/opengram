@@ -40,9 +40,9 @@ export async function runSetupWizard(
   // --- Step 3: Instance secret (optional) ---
   const instanceSecret = await promptInstanceSecret(prompter, existing.instanceSecret);
 
-  // --- Step 4: Model selection (from OpenClaw config) ---
-  const existingModelIds = await fetchExistingModelIds(baseUrl, instanceSecret);
-  const selectedModels = await promptModels(prompter, cfg, existingModelIds);
+  // --- Step 4: Model selection — disabled (models managed elsewhere) ---
+  // const existingModelIds = await fetchExistingModelIds(baseUrl, instanceSecret);
+  // const selectedModels = await promptModels(prompter, cfg, existingModelIds);
 
   // --- Step 5: Agent selection (from OpenClaw config) ---
   const { agentIds, agentConfigs } = await promptAgents(prompter, cfg, existing.agents);
@@ -51,10 +51,10 @@ export async function runSetupWizard(
   const autoRename = await promptAutoRename(prompter, existing.autoRename);
 
   // --- Step 6: Push to OpenGram ---
-  if (selectedModels.length > 0 || agentConfigs.length > 0) {
+  if (agentConfigs.length > 0) {
     const spin = prompter.progress("Pushing config to OpenGram…");
     try {
-      await pushToOpenGram(baseUrl, instanceSecret, agentConfigs, selectedModels);
+      await pushToOpenGram(baseUrl, instanceSecret, agentConfigs, []);
       spin.stop("Config pushed to OpenGram successfully.");
     } catch (error) {
       spin.stop(`Failed to push config: ${error}`);
@@ -192,83 +192,83 @@ async function promptInstanceSecret(
   return secret;
 }
 
-/**
- * Fetch model IDs currently configured in the OpenGram instance.
- * Returns an empty array on any failure (instance not reachable, etc.).
- */
-async function fetchExistingModelIds(
-  baseUrl: string,
-  instanceSecret: string | undefined,
-): Promise<string[]> {
-  try {
-    const headers: Record<string, string> = {};
-    if (instanceSecret) {
-      headers.Authorization = `Bearer ${instanceSecret}`;
-    }
-    const res = await fetch(`${baseUrl}/api/v1/config`, {
-      method: "GET",
-      headers,
-    });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { models?: Array<{ id: string }> };
-    return body.models?.map((m) => m.id) ?? [];
-  } catch {
-    return [];
-  }
-}
+// Model selection functions — commented out while feature is disabled
+//
+// async function fetchExistingModelIds(
+//   baseUrl: string,
+//   instanceSecret: string | undefined,
+// ): Promise<string[]> {
+//   try {
+//     const headers: Record<string, string> = {};
+//     if (instanceSecret) {
+//       headers.Authorization = `Bearer ${instanceSecret}`;
+//     }
+//     const res = await fetch(`${baseUrl}/api/v1/config`, {
+//       method: "GET",
+//       headers,
+//     });
+//     if (!res.ok) return [];
+//     const body = (await res.json()) as { models?: Array<{ id: string }> };
+//     return body.models?.map((m) => m.id) ?? [];
+//   } catch {
+//     return [];
+//   }
+// }
+//
+// type ImportedModel = { id: string; name: string; description: string };
+//
+// async function promptModels(
+//   prompter: WizardPrompter,
+//   cfg: OpenClawConfig,
+//   existingModelIds?: string[],
+// ): Promise<ImportedModel[]> {
+//   // Models live at agents.defaults.models as Record<id, { alias? }>
+//   const modelsRecord = (cfg as any).agents?.defaults?.models as
+//     | Record<string, { alias?: string }>
+//     | undefined;
+//
+//   if (!modelsRecord || Object.keys(modelsRecord).length === 0) {
+//     await prompter.note(
+//       "No models found in OpenClaw config. Add models to opengram.config.json manually.",
+//       "Models",
+//     );
+//     return [];
+//   }
+//
+//   const modelIds = Object.keys(modelsRecord);
+//
+//   const options = modelIds.map((id) => {
+//     const alias = modelsRecord[id]?.alias;
+//     return {
+//       value: id,
+//       label: alias ? `${alias} (${id})` : id,
+//     };
+//   });
+//
+//   // Re-running setup: pre-select only models already in OpenGram.
+//   // First-time: select all.
+//   const validExisting =
+//     existingModelIds?.filter((id) => modelIds.includes(id)) ?? [];
+//   const defaultSelection =
+//     validExisting.length > 0 ? validExisting : modelIds;
+//
+//   const selected = await prompter.multiselect<string>({
+//     message: "Which models should be available in OpenGram?",
+//     options,
+//     initialValues: defaultSelection,
+//   });
+//
+//   return selected.map((id) => {
+//     const alias = modelsRecord[id]?.alias;
+//     return {
+//       id,
+//       name: alias ? `${alias} (${id})` : id,
+//       description: "",
+//     };
+//   });
+// }
 
 type ImportedModel = { id: string; name: string; description: string };
-
-async function promptModels(
-  prompter: WizardPrompter,
-  cfg: OpenClawConfig,
-  existingModelIds?: string[],
-): Promise<ImportedModel[]> {
-  // Models live at agents.defaults.models as Record<id, { alias? }>
-  const modelsRecord = (cfg as any).agents?.defaults?.models as
-    | Record<string, { alias?: string }>
-    | undefined;
-
-  if (!modelsRecord || Object.keys(modelsRecord).length === 0) {
-    await prompter.note(
-      "No models found in OpenClaw config. Add models to opengram.config.json manually.",
-      "Models",
-    );
-    return [];
-  }
-
-  const modelIds = Object.keys(modelsRecord);
-
-  const options = modelIds.map((id) => {
-    const alias = modelsRecord[id]?.alias;
-    return {
-      value: id,
-      label: alias ? `${alias} (${id})` : id,
-    };
-  });
-
-  // Re-running setup: pre-select only models already in OpenGram.
-  // First-time: select all.
-  const validExisting =
-    existingModelIds?.filter((id) => modelIds.includes(id)) ?? [];
-  const defaultSelection =
-    validExisting.length > 0 ? validExisting : modelIds;
-
-  const selected = await prompter.multiselect<string>({
-    message: "Which models should be available in OpenGram?",
-    options,
-    initialValues: defaultSelection,
-  });
-
-  return selected.map((id) => {
-    const alias = modelsRecord[id]?.alias;
-    return {
-      id,
-      name: alias ? `${alias} (${id})` : id,
-      description: "",
-    };
-  });
-}
 
 type ImportedAgent = { id: string; name: string; description: string; defaultModelId?: string };
 

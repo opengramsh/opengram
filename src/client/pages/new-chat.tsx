@@ -20,11 +20,11 @@ type Agent = { id: string; name: string; description: string; defaultModelId?: s
 type Model = { id: string; name: string; description: string };
 
 const AGENT_DEFAULT_MODEL_ID = '__agent_default__';
-const AGENT_DEFAULT_MODEL: Model = {
-  id: AGENT_DEFAULT_MODEL_ID,
-  name: "Agent's default",
-  description: "Uses the agent's configured model",
-};
+// const AGENT_DEFAULT_MODEL: Model = {
+//   id: AGENT_DEFAULT_MODEL_ID,
+//   name: "Agent's default",
+//   description: "Uses the agent's configured model",
+// };
 
 export default function NewChatPage() {
   const navigate = useNavigate();
@@ -57,17 +57,19 @@ export default function NewChatPage() {
 
         // Set defaults from URL params or fallback to first available
         const paramAgentId = searchParams.get('agentId');
-        const paramModelId = searchParams.get('modelId');
         if (paramAgentId && config.agents.some((a: Agent) => a.id === paramAgentId)) {
           setSelectedAgentId(paramAgentId);
         } else if (config.agents.length > 0) {
           setSelectedAgentId(config.agents[0].id);
         }
-        if (paramModelId && config.models.some((m: Model) => m.id === paramModelId)) {
-          setSelectedModelId(paramModelId);
-        } else {
-          setSelectedModelId(AGENT_DEFAULT_MODEL_ID);
-        }
+        // Model selection disabled — auto-resolve to agent default
+        // const paramModelId = searchParams.get('modelId');
+        // if (paramModelId && config.models.some((m: Model) => m.id === paramModelId)) {
+        //   setSelectedModelId(paramModelId);
+        // } else {
+        //   setSelectedModelId(AGENT_DEFAULT_MODEL_ID);
+        // }
+        setSelectedModelId(AGENT_DEFAULT_MODEL_ID);
         setConfigLoaded(true);
       } catch {
         // Silently fail
@@ -75,10 +77,11 @@ export default function NewChatPage() {
     })();
   }, [searchParams]);
 
-  const models = useMemo<Model[]>(
-    () => [AGENT_DEFAULT_MODEL, ...rawModels],
-    [rawModels],
-  );
+  // Model selection disabled — pass empty array to composer
+  // const models = useMemo<Model[]>(
+  //   () => [AGENT_DEFAULT_MODEL, ...rawModels],
+  //   [rawModels],
+  // );
 
   const selectedAgent = useMemo(
     () => agents.find((a) => a.id === selectedAgentId),
@@ -272,8 +275,8 @@ export default function NewChatPage() {
         isSending={isCreating}
         sendMessage={createChat}
         selectedModelId={selectedModelId}
-        models={models}
-        onModelChange={async (id) => setSelectedModelId(id)}
+        models={[]}
+        onModelChange={async () => {}}
         isComposerMenuOpen={isComposerMenuOpen}
         setIsComposerMenuOpen={setIsComposerMenuOpen}
         handleMicAction={recorder.handleMicAction}

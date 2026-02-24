@@ -2,7 +2,7 @@
 
 import type { Agent, Chat, Model, TagSuggestion } from '@/app/chats/[chatId]/_lib/types';
 
-const AGENT_DEFAULT_MODEL_ID = '__agent_default__';
+// const AGENT_DEFAULT_MODEL_ID = '__agent_default__';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
 import {
@@ -12,13 +12,13 @@ import {
 } from '@/src/components/ui/drawer';
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/src/components/ui/select';
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from '@/src/components/ui/select';
 
 type ChatSettingsProps = {
   isChatSettingsOpen: boolean;
@@ -59,20 +59,21 @@ export function ChatSettings({
     return null;
   }
 
-  const allModels: Model[] = [
-    { id: AGENT_DEFAULT_MODEL_ID, name: "Agent's default", description: "Uses the agent's configured model" },
-    ...models,
-  ];
-
-  function handleModelChange(value: string) {
-    const resolvedModelId =
-      value === AGENT_DEFAULT_MODEL_ID
-        ? (primaryAgent?.defaultModelId ?? models[0]?.id ?? '')
-        : value;
-    if (resolvedModelId) {
-      void patchChatSettings({ modelId: resolvedModelId });
-    }
-  }
+  // Model selection disabled
+  // const allModels: Model[] = [
+  //   { id: AGENT_DEFAULT_MODEL_ID, name: "Agent's default", description: "Uses the agent's configured model" },
+  //   ...models,
+  // ];
+  //
+  // function handleModelChange(value: string) {
+  //   const resolvedModelId =
+  //     value === AGENT_DEFAULT_MODEL_ID
+  //       ? (primaryAgent?.defaultModelId ?? models[0]?.id ?? '')
+  //       : value;
+  //   if (resolvedModelId) {
+  //     void patchChatSettings({ modelId: resolvedModelId });
+  //   }
+  // }
 
   return (
     <Drawer open={isChatSettingsOpen} onOpenChange={setIsChatSettingsOpen}>
@@ -82,6 +83,7 @@ export function ChatSettings({
         </div>
 
         <div className="space-y-3">
+          {/* Model selector — commented out while feature is disabled
           <div>
             <Label className="mb-1 text-xs text-muted-foreground">Model</Label>
             <Select
@@ -101,6 +103,7 @@ export function ChatSettings({
               </SelectContent>
             </Select>
           </div>
+          */}
 
           <div>
             <Label className="mb-1 text-xs text-muted-foreground">Tags</Label>

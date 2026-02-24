@@ -97,8 +97,8 @@ function ChatComposerSection() {
       showMicSettingsPrompt={chat.showMicSettingsPrompt}
       isComposerMenuOpen={chat.isComposerMenuOpen}
       isUploadingAttachment={chat.isUploadingAttachment}
-      selectedModelId={chat.chat?.model_id ?? ''}
-      models={chat.models}
+      selectedModelId={''}
+      models={[]}
       cameraInputRef={chat.cameraInputRef}
       photosInputRef={chat.photosInputRef}
       filesInputRef={chat.filesInputRef}
@@ -107,7 +107,7 @@ function ChatComposerSection() {
       sendMessage={chat.sendMessage}
       handleMicAction={chat.handleMicAction}
       uploadComposerFiles={chat.uploadComposerFiles}
-      onModelChange={(id) => chat.patchChatSettings({ modelId: id })}
+      onModelChange={async () => {}}
       onCameraCapture={() => chat.setIsCameraOpen(true)}
     />
   );
@@ -139,7 +139,7 @@ function ChatSettingsSection() {
     <ChatSettings
       isChatSettingsOpen={chat.isChatSettingsOpen}
       chat={chat.chat}
-      models={chat.models}
+      models={[]}
       primaryAgent={chat.primaryAgent}
       isUpdatingChatSettings={chat.isUpdatingChatSettings}
       tagInput={chat.tagInput}

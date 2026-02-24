@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Braces, ChevronDown, Cpu, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
+import { AlertTriangle, Bot, Braces, ChevronDown, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
 
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 import { Button } from '@/src/components/ui/button';
@@ -203,132 +203,132 @@ function AgentDialog({ mode, initial, trigger, onSave }: AgentDialogProps) {
   );
 }
 
-// ─── Model Dialog ─────────────────────────────────────────────────────────────
-
-type ModelDialogProps = {
-  mode: 'add' | 'edit';
-  initial?: Model;
-  trigger: React.ReactNode;
-  onSave: (model: Model) => Promise<void>;
-};
-
-function ModelDialog({ mode, initial, trigger, onSave }: ModelDialogProps) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState(initial?.name ?? '');
-  const [id, setId] = useState(initial?.id ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const originalId = useRef(initial?.id);
-  const idChanged = mode === 'edit' && id !== originalId.current;
-
-  function reset() {
-    setName(initial?.name ?? '');
-    setId(initial?.id ?? '');
-    setDescription(initial?.description ?? '');
-    setError(null);
-    originalId.current = initial?.id;
-  }
-
-  useEffect(() => {
-    if (open) reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  async function handleSave() {
-    if (!name.trim() || !id.trim()) {
-      setError('Name and ID are required.');
-      return;
-    }
-    try {
-      setSaving(true);
-      setError(null);
-      await onSave({ id: id.trim(), name: name.trim(), description: description.trim() });
-      setOpen(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save model.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{mode === 'add' ? 'Add Model' : 'Edit Model'}</DialogTitle>
-          <DialogDescription>
-            {mode === 'add'
-              ? 'Configure a new model that agents can use.'
-              : 'Update the model details. The ID must match what is configured in the source system.'}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="model-name">Name</Label>
-            <Input
-              id="model-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. GPT-4o"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="model-id">ID</Label>
-            <Input
-              id="model-id"
-              value={id}
-              onChange={(e) => setId(e.target.value)}
-              placeholder="e.g. gpt-4o"
-              className={idChanged ? 'border-amber-500 focus-visible:ring-amber-500/30' : ''}
-            />
-            {idChanged && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                <span>
-                  Changing the ID will break the connection to this model if the new ID does not
-                  match the source system (e.g., OpenClaw).
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="model-description">Description</Label>
-            <Textarea
-              id="model-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-              rows={3}
-            />
-          </div>
-
-          {error && <p className="text-xs text-destructive">{error}</p>}
-        </div>
-
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline" disabled={saving}>
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button
-            onClick={() => {
-              handleSave().catch(() => undefined);
-            }}
-            disabled={saving}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// ─── Model Dialog — commented out while feature is disabled ──────────────────
+//
+// type ModelDialogProps = {
+//   mode: 'add' | 'edit';
+//   initial?: Model;
+//   trigger: React.ReactNode;
+//   onSave: (model: Model) => Promise<void>;
+// };
+//
+// function ModelDialog({ mode, initial, trigger, onSave }: ModelDialogProps) {
+//   const [open, setOpen] = useState(false);
+//   const [name, setName] = useState(initial?.name ?? '');
+//   const [id, setId] = useState(initial?.id ?? '');
+//   const [description, setDescription] = useState(initial?.description ?? '');
+//   const [saving, setSaving] = useState(false);
+//   const [error, setError] = useState<string | null>(null);
+//   const originalId = useRef(initial?.id);
+//   const idChanged = mode === 'edit' && id !== originalId.current;
+//
+//   function reset() {
+//     setName(initial?.name ?? '');
+//     setId(initial?.id ?? '');
+//     setDescription(initial?.description ?? '');
+//     setError(null);
+//     originalId.current = initial?.id;
+//   }
+//
+//   useEffect(() => {
+//     if (open) reset();
+//     // eslint-disable-next-line react-hooks/exhaustive-deps
+//   }, [open]);
+//
+//   async function handleSave() {
+//     if (!name.trim() || !id.trim()) {
+//       setError('Name and ID are required.');
+//       return;
+//     }
+//     try {
+//       setSaving(true);
+//       setError(null);
+//       await onSave({ id: id.trim(), name: name.trim(), description: description.trim() });
+//       setOpen(false);
+//     } catch (e) {
+//       setError(e instanceof Error ? e.message : 'Failed to save model.');
+//     } finally {
+//       setSaving(false);
+//     }
+//   }
+//
+//   return (
+//     <Dialog open={open} onOpenChange={setOpen}>
+//       <DialogTrigger asChild>{trigger}</DialogTrigger>
+//       <DialogContent className="max-w-md">
+//         <DialogHeader>
+//           <DialogTitle>{mode === 'add' ? 'Add Model' : 'Edit Model'}</DialogTitle>
+//           <DialogDescription>
+//             {mode === 'add'
+//               ? 'Configure a new model that agents can use.'
+//               : 'Update the model details. The ID must match what is configured in the source system.'}
+//           </DialogDescription>
+//         </DialogHeader>
+//
+//         <div className="space-y-4">
+//           <div className="space-y-1.5">
+//             <Label htmlFor="model-name">Name</Label>
+//             <Input
+//               id="model-name"
+//               value={name}
+//               onChange={(e) => setName(e.target.value)}
+//               placeholder="e.g. GPT-4o"
+//             />
+//           </div>
+//
+//           <div className="space-y-1.5">
+//             <Label htmlFor="model-id">ID</Label>
+//             <Input
+//               id="model-id"
+//               value={id}
+//               onChange={(e) => setId(e.target.value)}
+//               placeholder="e.g. gpt-4o"
+//               className={idChanged ? 'border-amber-500 focus-visible:ring-amber-500/30' : ''}
+//             />
+//             {idChanged && (
+//               <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+//                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+//                 <span>
+//                   Changing the ID will break the connection to this model if the new ID does not
+//                   match the source system (e.g., OpenClaw).
+//                 </span>
+//               </div>
+//             )}
+//           </div>
+//
+//           <div className="space-y-1.5">
+//             <Label htmlFor="model-description">Description</Label>
+//             <Textarea
+//               id="model-description"
+//               value={description}
+//               onChange={(e) => setDescription(e.target.value)}
+//               placeholder="Optional description"
+//               rows={3}
+//             />
+//           </div>
+//
+//           {error && <p className="text-xs text-destructive">{error}</p>}
+//         </div>
+//
+//         <DialogFooter>
+//           <DialogClose asChild>
+//             <Button variant="outline" disabled={saving}>
+//               Cancel
+//             </Button>
+//           </DialogClose>
+//           <Button
+//             onClick={() => {
+//               handleSave().catch(() => undefined);
+//             }}
+//             disabled={saving}
+//           >
+//             {saving ? 'Saving…' : 'Save'}
+//           </Button>
+//         </DialogFooter>
+//       </DialogContent>
+//     </Dialog>
+//   );
+// }
 
 // ─── Delete Confirm Dialog ────────────────────────────────────────────────────
 
@@ -489,106 +489,106 @@ function AgentsTab({ agents, onAgentsChange }: { agents: Agent[]; onAgentsChange
   );
 }
 
-// ─── Models Tab ───────────────────────────────────────────────────────────────
-
-function ModelsTab({ models, onModelsChange }: { models: Model[]; onModelsChange: (m: Model[]) => void }) {
-  async function saveModels(updated: Model[]) {
-    const res = await fetch('/api/v1/config/admin', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ models: updated }),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? 'Failed to save models.');
-    }
-    onModelsChange(updated);
-  }
-
-  async function handleAdd(model: Model) {
-    if (models.some((m) => m.id === model.id)) {
-      throw new Error(`A model with ID "${model.id}" already exists.`);
-    }
-    await saveModels([...models, model]);
-  }
-
-  async function handleEdit(original: Model, updated: Model) {
-    if (updated.id !== original.id && models.some((m) => m.id === updated.id)) {
-      throw new Error(`A model with ID "${updated.id}" already exists.`);
-    }
-    await saveModels(models.map((m) => (m.id === original.id ? updated : m)));
-  }
-
-  async function handleDelete(model: Model) {
-    if (models.length <= 1) {
-      throw new Error('At least one model is required.');
-    }
-    await saveModels(models.filter((m) => m.id !== model.id));
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {models.length} {models.length === 1 ? 'model' : 'models'} configured
-        </p>
-        <ModelDialog
-          mode="add"
-          trigger={
-            <Button size="sm" className="gap-1.5">
-              <Plus size={13} />
-              Add model
-            </Button>
-          }
-          onSave={handleAdd}
-        />
-      </div>
-
-      <ul className="space-y-2">
-        {models.map((model) => (
-          <li
-            key={model.id}
-            className="flex items-start gap-3 rounded-xl border border-border/70 bg-background/70 px-3 py-2.5"
-          >
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <p className="text-sm font-medium text-foreground">{model.name}</p>
-              <p className="font-mono text-[11px] text-muted-foreground">{model.id}</p>
-              {model.description && (
-                <p className="mt-0.5 text-xs text-muted-foreground">{model.description}</p>
-              )}
-            </div>
-            <div className="flex shrink-0 gap-1">
-              <ModelDialog
-                mode="edit"
-                initial={model}
-                trigger={
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                    <Pencil size={13} />
-                  </Button>
-                }
-                onSave={(updated) => handleEdit(model, updated)}
-              />
-              <DeleteDialog
-                label={model.name}
-                trigger={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    disabled={models.length <= 1}
-                  >
-                    <Trash2 size={13} />
-                  </Button>
-                }
-                onConfirm={() => handleDelete(model)}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+// ─── Models Tab — commented out while feature is disabled ─────────────────────
+//
+// function ModelsTab({ models, onModelsChange }: { models: Model[]; onModelsChange: (m: Model[]) => void }) {
+//   async function saveModels(updated: Model[]) {
+//     const res = await fetch('/api/v1/config/admin', {
+//       method: 'PATCH',
+//       headers: { 'Content-Type': 'application/json' },
+//       body: JSON.stringify({ models: updated }),
+//     });
+//     if (!res.ok) {
+//       const data = (await res.json().catch(() => ({}))) as { error?: string };
+//       throw new Error(data.error ?? 'Failed to save models.');
+//     }
+//     onModelsChange(updated);
+//   }
+//
+//   async function handleAdd(model: Model) {
+//     if (models.some((m) => m.id === model.id)) {
+//       throw new Error(`A model with ID "${model.id}" already exists.`);
+//     }
+//     await saveModels([...models, model]);
+//   }
+//
+//   async function handleEdit(original: Model, updated: Model) {
+//     if (updated.id !== original.id && models.some((m) => m.id === updated.id)) {
+//       throw new Error(`A model with ID "${updated.id}" already exists.`);
+//     }
+//     await saveModels(models.map((m) => (m.id === original.id ? updated : m)));
+//   }
+//
+//   async function handleDelete(model: Model) {
+//     if (models.length <= 1) {
+//       throw new Error('At least one model is required.');
+//     }
+//     await saveModels(models.filter((m) => m.id !== model.id));
+//   }
+//
+//   return (
+//     <div className="space-y-3">
+//       <div className="flex items-center justify-between">
+//         <p className="text-xs text-muted-foreground">
+//           {models.length} {models.length === 1 ? 'model' : 'models'} configured
+//         </p>
+//         <ModelDialog
+//           mode="add"
+//           trigger={
+//             <Button size="sm" className="gap-1.5">
+//               <Plus size={13} />
+//               Add model
+//             </Button>
+//           }
+//           onSave={handleAdd}
+//         />
+//       </div>
+//
+//       <ul className="space-y-2">
+//         {models.map((model) => (
+//           <li
+//             key={model.id}
+//             className="flex items-start gap-3 rounded-xl border border-border/70 bg-background/70 px-3 py-2.5"
+//           >
+//             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+//               <p className="text-sm font-medium text-foreground">{model.name}</p>
+//               <p className="font-mono text-[11px] text-muted-foreground">{model.id}</p>
+//               {model.description && (
+//                 <p className="mt-0.5 text-xs text-muted-foreground">{model.description}</p>
+//               )}
+//             </div>
+//             <div className="flex shrink-0 gap-1">
+//               <ModelDialog
+//                 mode="edit"
+//                 initial={model}
+//                 trigger={
+//                   <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+//                     <Pencil size={13} />
+//                   </Button>
+//                 }
+//                 onSave={(updated) => handleEdit(model, updated)}
+//               />
+//               <DeleteDialog
+//                 label={model.name}
+//                 trigger={
+//                   <Button
+//                     variant="ghost"
+//                     size="icon"
+//                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
+//                     disabled={models.length <= 1}
+//                   >
+//                     <Trash2 size={13} />
+//                   </Button>
+//                 }
+//                 onConfirm={() => handleDelete(model)}
+//               />
+//             </div>
+//           </li>
+//         ))}
+//       </ul>
+//     </div>
+//   );
+// }
 
 // ─── App Settings Tab ─────────────────────────────────────────────────────────
 
@@ -862,7 +862,7 @@ function RawConfigTab({ config, onConfigSaved }: { config: ConfigResponse; onCon
 
 const TABS = [
   { value: 'agents', label: 'Agents', icon: Bot },
-  { value: 'models', label: 'Models', icon: Cpu },
+  // { value: 'models', label: 'Models', icon: Cpu },
   { value: 'app', label: 'App', icon: Settings },
   { value: 'raw', label: 'Raw config', icon: Braces },
 ] as const;
@@ -977,7 +977,7 @@ export default function SettingsPage() {
           <HamburgerMenu />
           <div className="text-center">
             <h1 className="text-sm font-semibold tracking-wide text-foreground">Settings</h1>
-            <p className="text-xs text-muted-foreground">Agents, models &amp; app controls</p>
+            <p className="text-xs text-muted-foreground">Agents &amp; app controls</p>
           </div>
           <div />
         </div>
@@ -998,12 +998,14 @@ export default function SettingsPage() {
               />
             </TabsContent>
 
+            {/* Models tab — commented out while feature is disabled
             <TabsContent value="models">
               <ModelsTab
                 models={config.models}
                 onModelsChange={(models) => setConfig({ ...config, models })}
               />
             </TabsContent>
+            */}
 
             <TabsContent value="app">
               <AppSettingsTab config={config} />
