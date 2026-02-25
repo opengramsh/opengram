@@ -42,6 +42,7 @@ type ChatComposerProps = {
   photosInputRef: RefObject<HTMLInputElement | null>;
   filesInputRef: RefObject<HTMLInputElement | null>;
   onCameraCapture: () => void;
+  keyboardOffset: number;
 };
 
 export function ChatComposer({
@@ -70,12 +71,16 @@ export function ChatComposer({
   photosInputRef,
   filesInputRef,
   onCameraCapture,
+  keyboardOffset,
 }: ChatComposerProps) {
   return (
     <>
       <footer
-        className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-3"
-        style={{ paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px))` }}
+        className="liquid-glass fixed inset-x-0 z-40 w-full px-3 pt-3"
+        style={{
+          bottom: `${keyboardOffset}px`,
+          paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px))`,
+        }}
       >
         {!isRecording && pendingAttachments.length > 0 && (
           <div className="mb-2 overflow-x-auto">
