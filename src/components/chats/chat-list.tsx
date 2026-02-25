@@ -68,7 +68,7 @@ export function ChatList({
   const [activeContextChatId, setActiveContextChatId] = useState<string | null>(null);
 
   return (
-    <main className="flex-1 overflow-y-auto px-2 py-2">
+    <main className="flex-1 overflow-y-auto px-2 pt-2" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
       {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading chats...</p>}
       {!loading && error && <p className="px-4 py-6 text-sm text-red-300">{error}</p>}
       {!loading && !error && chats.length === 0 && <p className="px-4 py-8 text-sm text-muted-foreground">{emptyLabel}</p>}
