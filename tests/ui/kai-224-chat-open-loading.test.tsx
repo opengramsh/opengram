@@ -63,6 +63,41 @@ describe('KAI-223 chat open loading regression', () => {
     expect(screen.queryByText('Unknown Agent')).toBeNull();
   });
 
+  it('shows message skeletons instead of "No messages yet" when seeded from inbox', () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/chats/chat-1',
+            state: {
+              chat: {
+                id: 'chat-1',
+                title: 'Seeded Chat',
+                title_source: 'manual',
+                tags: [],
+                model_id: 'model-a',
+                pinned: false,
+                is_archived: false,
+                notifications_muted: false,
+                agent_ids: ['agent-a'],
+                pending_requests_count: 0,
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/chats/:chatId" element={<ChatPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Should show message skeletons while messages are still loading
+    expect(screen.getByLabelText('Loading messages')).toBeTruthy();
+    // Should NOT show empty state prematurely
+    expect(screen.queryByText('No messages yet.')).toBeNull();
+  });
+
   it('does not render Unknown Agent while loading a cold-opened chat', () => {
     render(
       <MemoryRouter initialEntries={['/chats/chat-1']}>

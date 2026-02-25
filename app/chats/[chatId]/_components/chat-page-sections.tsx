@@ -52,7 +52,8 @@ function ChatMessagesSection() {
   return (
     <ChatMessages
       feedRef={chat.feedRef}
-      loading={chat.loading}
+      loading={chat.loading && !chat.chat}
+      messagesLoading={chat.messagesLoading}
       error={chat.error}
       messages={chat.messages}
       inlineMessageMedia={chat.inlineMessageMedia}

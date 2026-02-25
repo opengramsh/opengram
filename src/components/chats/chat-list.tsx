@@ -81,7 +81,7 @@ export function ChatList({
             <ChatRow
               key={chat.id}
               chat={chat}
-              agentName={agent?.name ?? 'Unknown Agent'}
+              agentName={agent?.name ?? chat.title}
               actionLabel={rowActionLabel}
               isActive={activeChatId === chat.id}
               isStreaming={streamingChatIds?.has(chat.id) ?? false}
@@ -308,7 +308,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
       <button
         type="button"
         className={cn(
-          'facehash-hover-group relative z-10 flex w-full cursor-pointer items-center gap-3 border-b px-3 py-2.5 text-left transition-all duration-150',
+          'facehash-hover-group relative z-10 flex w-full cursor-pointer items-center gap-3 border-b px-3 py-3.5 md:py-2.5 text-left transition-all duration-150',
           isActive
             ? 'bg-muted border-border/30'
             : 'bg-background border-border/30 hover:bg-muted',

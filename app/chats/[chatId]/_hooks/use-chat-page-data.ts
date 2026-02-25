@@ -41,6 +41,7 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [pendingRequests, setPendingRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(!initialChat);
+  const [messagesLoading, setMessagesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(initialChat?.title ?? '');
@@ -303,6 +304,7 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
     } finally {
       hasOptimisticChatRef.current = false;
       setLoading(false);
+      setMessagesLoading(false);
     }
   }, [chatId]);
 
@@ -459,6 +461,7 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
     chat,
     models,
     loading,
+    messagesLoading,
     error,
     primaryAgent,
     messages,

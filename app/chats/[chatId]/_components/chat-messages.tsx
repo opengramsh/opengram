@@ -12,6 +12,7 @@ import { MarkdownContent } from '@/app/chats/[chatId]/_components/markdown-conte
 type ChatMessagesProps = {
   feedRef: RefObject<HTMLDivElement | null>;
   loading: boolean;
+  messagesLoading: boolean;
   error: string | null;
   messages: Message[];
   inlineMessageMedia: Map<string, MediaItem[]>;
@@ -126,9 +127,22 @@ function FileAttachmentCard({
   );
 }
 
+function MessageSkeletons() {
+  return (
+    <div className="space-y-3 py-4" aria-label="Loading messages">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : ''}`}>
+          <div className={`h-10 rounded-2xl bg-muted animate-pulse ${i % 2 === 0 ? 'w-2/5' : 'w-3/5'}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ChatMessages({
   feedRef,
   loading,
+  messagesLoading,
   error,
   messages,
   inlineMessageMedia,
@@ -146,7 +160,9 @@ export function ChatMessages({
       {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
       {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}
 
-      {!loading && !error && messages.length === 0 && (
+      {!loading && !error && messagesLoading && messages.length === 0 && <MessageSkeletons />}
+
+      {!loading && !error && !messagesLoading && messages.length === 0 && (
         <p className="px-2 py-6 text-sm text-muted-foreground">No messages yet.</p>
       )}
 
