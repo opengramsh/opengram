@@ -9,6 +9,7 @@ const activeStreams = new Map<string, StreamState>();
 
 type StreamState = {
   chatId: string;
+  agentId: string;
   messageId: string;
   /** How much accumulated text we've already sent as chunks. */
   lastSentLength: number;
@@ -39,7 +40,7 @@ export async function handleBlockReply(
       senderId: agentId,
       streaming: true,
     });
-    stream = { chatId, messageId: message.id, lastSentLength: 0 };
+    stream = { chatId, agentId, messageId: message.id, lastSentLength: 0 };
     activeStreams.set(dispatchId, stream);
   }
 
@@ -68,7 +69,19 @@ export async function finalizeStream(
   const stream = activeStreams.get(dispatchId);
   if (!stream) return false;
 
-  await client.completeMessage(stream.messageId, finalText);
+  try {
+    await client.completeMessage(stream.messageId, finalText);
+  } catch {
+    // completeMessage can fail with 409 Conflict when the OpenGram server's
+    // stale-streaming sweeper has already cancelled the message (e.g. no chunks
+    // sent for >60s during extended thinking). Fall back to a regular message
+    // so the reply text is not lost.
+    await client.createMessage(stream.chatId, {
+      role: "agent",
+      senderId: stream.agentId,
+      content: finalText,
+    });
+  }
   activeStreams.delete(dispatchId);
   return true;
 }
@@ -91,8 +104,8 @@ export function cancelStream(client: OpenGramClient, dispatchId: string): void {
  * handler starts processing, before the SDK dispatch, so the frontend sees
  * stream_state:'streaming' immediately (typing indicator).
  */
-export function initStream(dispatchId: string, chatId: string, messageId: string): void {
-  activeStreams.set(dispatchId, { chatId, messageId, lastSentLength: 0 });
+export function initStream(dispatchId: string, chatId: string, messageId: string, agentId: string): void {
+  activeStreams.set(dispatchId, { chatId, agentId, messageId, lastSentLength: 0 });
 }
 
 /**

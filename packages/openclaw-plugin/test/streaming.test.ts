@@ -227,7 +227,7 @@ describe("streaming", () => {
     it("pre-seeded stream skips createMessage on first block", async () => {
       const client = createMockClient();
 
-      initStream("dispatch-pre", "chat-1", "msg-eager-1");
+      initStream("dispatch-pre", "chat-1", "msg-eager-1", "grami");
       await handleBlockReply(client, "chat-1", "grami", "dispatch-pre", { text: "Hello" });
 
       // createMessage should NOT be called — the stream was pre-seeded
@@ -239,7 +239,7 @@ describe("streaming", () => {
     it("allows direct finalizeStream without any blocks", async () => {
       const client = createMockClient();
 
-      initStream("dispatch-pre", "chat-1", "msg-eager-1");
+      initStream("dispatch-pre", "chat-1", "msg-eager-1", "grami");
       const result = await finalizeStream(client, "dispatch-pre", "Final text");
 
       expect(result).toBe(true);
@@ -250,7 +250,7 @@ describe("streaming", () => {
     it("allows cancelStream without any blocks", () => {
       const client = createMockClient();
 
-      initStream("dispatch-pre", "chat-1", "msg-eager-1");
+      initStream("dispatch-pre", "chat-1", "msg-eager-1", "grami");
       cancelStream(client, "dispatch-pre");
 
       expect(client.cancelMessage).toHaveBeenCalledWith("msg-eager-1");
@@ -336,6 +336,56 @@ describe("streaming", () => {
       expect(client.sendChunk).toHaveBeenNthCalledWith(3, "msg-stream-1", "C");
       expect(client.sendChunk).toHaveBeenNthCalledWith(4, "msg-stream-1", "D");
       expect(client.sendChunk).toHaveBeenNthCalledWith(5, "msg-stream-1", "E");
+    });
+
+    /**
+     * BUG KAI-217: finalizeStream 409 race condition — reply text lost.
+     *
+     * When the OpenGram server's stale-streaming sweeper auto-cancels a
+     * streaming message (no chunks for >60s during extended thinking),
+     * completeMessage() throws (409 Conflict). The current code propagates
+     * the exception, so buildDeliver's "if (!wasStreaming)" fallback in
+     * inbound.ts never runs, and the reply text is permanently lost.
+     *
+     * This test demonstrates the bug: finalizeStream throws instead of
+     * gracefully handling the 409 and allowing the caller to fall back.
+     */
+    it("BUG KAI-217: should not throw when completeMessage fails (e.g. 409 conflict)", async () => {
+      const client = createMockClient({
+        completeMessage: vi.fn().mockRejectedValue(new Error("completeMessage failed: 409")),
+      });
+
+      initStream("d-409", "chat-1", "msg-swept", "grami");
+
+      const result = await finalizeStream(client, "d-409", "Important reply that would be lost");
+
+      // Must not throw. Falls back to createMessage internally, returning true.
+      expect(result).toBe(true);
+
+      // Stream must be cleaned up regardless of the error.
+      expect(hasActiveStream("d-409")).toBe(false);
+    });
+
+    it("BUG KAI-217: fallback createMessage is called with correct args on 409", async () => {
+      const client = createMockClient({
+        completeMessage: vi.fn().mockRejectedValue(new Error("409 Conflict")),
+      });
+
+      initStream("d-fallback", "chat-42", "msg-swept-2", "agent-x");
+
+      await finalizeStream(client, "d-fallback", "Recovered reply text");
+
+      // completeMessage was attempted first
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-swept-2", "Recovered reply text");
+
+      // Fallback createMessage sent the full text as a regular message
+      expect(client.createMessage).toHaveBeenCalledWith("chat-42", {
+        role: "agent",
+        senderId: "agent-x",
+        content: "Recovered reply text",
+      });
+
+      expect(hasActiveStream("d-fallback")).toBe(false);
     });
 
     it("re-creating a stream after finalization works", async () => {

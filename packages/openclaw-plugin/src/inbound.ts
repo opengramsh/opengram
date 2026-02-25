@@ -301,7 +301,7 @@ async function handleMessageCreated(
     senderId: agentId,
     streaming: true,
   });
-  initStream(dispatchId, chatId, streamingMsg.id);
+  initStream(dispatchId, chatId, streamingMsg.id, agentId);
 
   const account = resolveOpenGramAccount(cfg);
   const stopTyping = startTypingHeartbeat(client, chatId, agentId);
@@ -360,7 +360,7 @@ async function handleRequestResolved(
     senderId: agentId,
     streaming: true,
   });
-  initStream(dispatchId, chatId, streamingMsg.id);
+  initStream(dispatchId, chatId, streamingMsg.id, agentId);
 
   const account = resolveOpenGramAccount(cfg);
   const stopTyping = startTypingHeartbeat(client, chatId, agentId);
