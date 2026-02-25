@@ -86,7 +86,7 @@ export function ChatListPage({
 
   return (
     <div className={cn('flex w-full flex-col bg-background', sidebarMode ? 'h-full overflow-hidden' : 'min-h-screen')}>
-      <header className="sticky top-0 z-20 h-[61px] border-b border-border/70 bg-background/95 px-4 py-1.5 backdrop-blur-md">
+      <header className="sticky top-0 z-20 h-[68px] md:h-[61px] border-b border-border/70 bg-background/95 px-4 py-1.5 backdrop-blur-md">
         {isSearchOpen ? (
           <div className="flex h-full items-center gap-2">
             <div className="relative flex-1">
@@ -104,6 +104,7 @@ export function ChatListPage({
               variant="ghost"
               size="icon"
               aria-label="Close search"
+              className="size-10 md:size-9"
               onClick={() => {
                 setSearchInput('');
                 setIsSearchOpen(false);
@@ -113,13 +114,14 @@ export function ChatListPage({
             </Button>
           </div>
         ) : (
-          <div className="grid h-full grid-cols-[36px_1fr_36px_36px] items-center">
+          <div className="grid h-full grid-cols-[42px_1fr_42px_42px] md:grid-cols-[36px_1fr_36px_36px] items-center">
             <HamburgerMenu />
             <div className="text-center">{headerContent}</div>
             <Button
               variant="ghost"
               size="icon"
               aria-label="Search chats"
+              className="size-10 md:size-9"
               onClick={() => setIsSearchOpen(true)}
             >
               <Search size={18} />
@@ -128,6 +130,7 @@ export function ChatListPage({
               variant="ghost"
               size="icon"
               aria-label="New chat"
+              className="size-10 md:size-9"
               onClick={() => navigate('/chats/new')}
             >
               <MessageCirclePlus size={18} strokeWidth={2} />
@@ -173,7 +176,25 @@ export function ChatListPage({
           loading={isSearchResultsLoading}
           query={searchQuery}
           agentsById={agentsById}
-          onOpenChat={(chatId) => navigate(`/chats/${chatId}`)}
+          onOpenChat={(chatId, chatSeed) =>
+            navigate(`/chats/${chatId}`, {
+              state: chatSeed
+                ? {
+                  chat: {
+                    id: chatSeed.id,
+                    title: chatSeed.title,
+                    title_source: 'default',
+                    tags: [],
+                    model_id: '',
+                    pinned: false,
+                    is_archived: false,
+                    notifications_muted: false,
+                    agent_ids: chatSeed.agent_ids,
+                    pending_requests_count: 0,
+                  },
+                }
+                : undefined,
+            })}
         />
       ) : (
         <ChatList
@@ -185,7 +206,7 @@ export function ChatListPage({
           rowActionLabel={rowActionLabel}
           activeChatId={activeChatId}
           streamingChatIds={streamingChatIds}
-          onOpenChat={(chat) => navigate(`/chats/${chat.id}`)}
+          onOpenChat={(chat) => navigate(`/chats/${chat.id}`, { state: { chat } })}
           onMarkRead={markChatRead}
           onMarkUnread={markChatUnread}
           onTogglePin={togglePin}

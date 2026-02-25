@@ -41,34 +41,42 @@ export function ChatHeader({
   onTitleClick,
 }: ChatHeaderProps) {
   const navigate = useNavigate();
+  const displayTitle = typingTitle != null ? typingTitle : (chat?.title || 'Chat');
+  const subtitle = primaryAgent?.name ?? chat?.title ?? null;
 
   return (
-    <header className="facehash-hover-group sticky top-0 z-30 h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
+    <header className="facehash-hover-group sticky top-0 z-30 h-[68px] md:h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
       <div className="flex items-center gap-3">
         <Button
           variant="outline"
           size="icon"
           aria-label="Back"
           onClick={goBack}
-          className="md:hidden"
+          className="size-10 md:hidden"
         >
           <ArrowLeft size={16} />
         </Button>
 
-        <button type="button" onClick={onTitleClick} className="shrink-0 cursor-pointer">
-          <Facehash
-            name={primaryAgent?.name ?? 'Unknown Agent'}
-            size={36}
-            interactive
-            colors={FACEHASH_COLORS}
-            intensity3d="dramatic"
-            variant="gradient"
-            gradientOverlayClass="facehash-gradient"
-            className="rounded-full text-black"
-            enableBlink={isStreaming}
-            onRenderMouth={isStreaming ? () => <Spinner /> : undefined}
-          />
-        </button>
+        {primaryAgent ? (
+          <button type="button" onClick={onTitleClick} className="shrink-0 cursor-pointer">
+            <Facehash
+              name={primaryAgent.name}
+              size={36}
+              interactive
+              colors={FACEHASH_COLORS}
+              intensity3d="dramatic"
+              variant="gradient"
+              gradientOverlayClass="facehash-gradient"
+              className="rounded-full text-black"
+              enableBlink={isStreaming}
+              onRenderMouth={isStreaming ? () => <Spinner /> : undefined}
+            />
+          </button>
+        ) : (
+          <button type="button" onClick={onTitleClick} className="shrink-0 cursor-pointer" aria-label="Chat details">
+            <span className="block size-9 rounded-full bg-muted animate-pulse" />
+          </button>
+        )}
 
         <button
           type="button"
@@ -76,21 +84,23 @@ export function ChatHeader({
           onClick={onTitleClick}
         >
           <p className="truncate text-sm font-semibold leading-5 text-foreground">
-            {typingTitle != null ? (
-              <>{typingTitle}<span className="animate-pulse opacity-70">|</span></>
-            ) : (
-              chat?.title || 'Chat'
-            )}
+            {displayTitle}
+            {typingTitle != null ? <span className="animate-pulse opacity-70">|</span> : null}
           </p>
-          <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">
-            {primaryAgent?.name ?? 'Unknown Agent'}{isStreaming ? ' · typing...' : ''}
-          </p>
+          {subtitle ? (
+            <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">
+              {subtitle}{isStreaming ? ' · typing...' : ''}
+            </p>
+          ) : (
+            <span className="mt-1 block h-3 w-24 rounded bg-muted animate-pulse" aria-hidden />
+          )}
         </button>
 
         <Button
           variant="outline"
           size="icon"
           aria-label="New chat"
+          className="size-10 md:size-9"
           onClick={() => {
             const params = new URLSearchParams();
             if (chat?.agent_ids[0]) params.set('agentId', chat.agent_ids[0]);

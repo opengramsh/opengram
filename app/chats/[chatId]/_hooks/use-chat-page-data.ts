@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
+import { getFrontendConfigCache, setFrontendConfigCache } from '@/src/lib/frontend-config-cache';
 import { buildInlineMessageMedia, mediaSortAsc, normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type {
   Agent,
@@ -26,21 +27,23 @@ import { sortMessagesForFeed, upsertFeedMessage } from '@/src/lib/chat';
 
 type UseChatPageDataArgs = {
   chatId?: string;
+  initialChat?: Chat | null;
 };
 
-export function useChatPageData({ chatId }: UseChatPageDataArgs) {
+export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataArgs) {
   const navigate = useNavigate();
+  const cachedConfig = getFrontendConfigCache();
 
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
-  const [chat, setChat] = useState<Chat | null>(null);
+  const [agents, setAgents] = useState<Agent[]>(cachedConfig?.agents ?? []);
+  const [models, setModels] = useState<Model[]>(cachedConfig?.models ?? []);
+  const [chat, setChat] = useState<Chat | null>(initialChat);
   const [messages, setMessages] = useState<Message[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [pendingRequests, setPendingRequests] = useState<RequestItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialChat);
   const [error, setError] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleInput, setTitleInput] = useState('');
+  const [titleInput, setTitleInput] = useState(initialChat?.title ?? '');
   const [titleError, setTitleError] = useState<string | null>(null);
   const [composerText, setComposerText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -68,6 +71,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
   const tagSuggestionsTimerRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const hasOptimisticChatRef = useRef(Boolean(initialChat));
   const swipeRef = useRef({
     active: false,
     startX: 0,
@@ -231,23 +235,47 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
       return;
     }
 
-    setLoading(true);
+    if (!hasOptimisticChatRef.current) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
-      const [configResponse, chatResponse, messagesResponse, requestsResponse, mediaResponse] = await Promise.all([
-        apiFetch('/api/v1/config', { cache: 'no-store' }),
+      const configPromise = (async () => {
+        const existing = getFrontendConfigCache();
+        if (existing) {
+          return {
+            agents: existing.agents,
+            models: existing.models,
+            security: existing.security,
+          } as ConfigResponse;
+        }
+
+        const response = await apiFetch('/api/v1/config', { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Config request failed with status ${response.status}`);
+        }
+
+        return (await response.json()) as ConfigResponse;
+      })();
+
+      const [config, chatResponse, messagesResponse, requestsResponse, mediaResponse] = await Promise.all([
+        configPromise,
         apiFetch(`/api/v1/chats/${chatId}`, { cache: 'no-store' }),
         apiFetch(`/api/v1/chats/${chatId}/messages?limit=200`, { cache: 'no-store' }),
         apiFetch(`/api/v1/chats/${chatId}/requests?status=pending`, { cache: 'no-store' }),
         apiFetch(`/api/v1/chats/${chatId}/media`, { cache: 'no-store' }),
       ]);
 
-      if (!configResponse.ok || !chatResponse.ok || !messagesResponse.ok || !requestsResponse.ok || !mediaResponse.ok) {
+      if (!chatResponse.ok || !messagesResponse.ok || !requestsResponse.ok || !mediaResponse.ok) {
         throw new Error('Failed to load chat data');
       }
 
-      const config = (await configResponse.json()) as ConfigResponse;
+      setFrontendConfigCache({
+        agents: config.agents ?? [],
+        models: config.models ?? [],
+        security: { instanceSecret: config.security?.instanceSecret ?? null },
+      });
       setApiSecret(config.security?.instanceSecret ?? null);
       const chatPayload = (await chatResponse.json()) as Chat;
       const messagesPayload = (await messagesResponse.json()) as MessagesResponse;
@@ -273,6 +301,7 @@ export function useChatPageData({ chatId }: UseChatPageDataArgs) {
     } catch {
       setError('Failed to load chat.');
     } finally {
+      hasOptimisticChatRef.current = false;
       setLoading(false);
     }
   }, [chatId]);

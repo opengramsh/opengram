@@ -9,7 +9,7 @@ type SearchResultsListProps = {
   loading: boolean;
   query: string;
   agentsById: Map<string, Agent>;
-  onOpenChat: (chatId: string) => void;
+  onOpenChat: (chatId: string, chatSeed?: { id: string; title: string; agent_ids: string[] }) => void;
 };
 
 function AgentAvatar({ agentIds, agentsById }: { agentIds: string[]; agentsById: Map<string, Agent> }) {
@@ -66,7 +66,7 @@ export function SearchResultsList({ searchResults, loading, query, agentsById, o
                 key={chat.id}
                 type="button"
                 className="facehash-hover-group mb-2 w-full cursor-pointer rounded-2xl border border-border/80 bg-card px-3 py-3 text-left transition-colors hover:bg-muted/60"
-                onClick={() => onOpenChat(chat.id)}
+                onClick={() => onOpenChat(chat.id, { id: chat.id, title: chat.title, agent_ids: chat.agent_ids })}
               >
                 <div className="flex items-center gap-3">
                   <AgentAvatar agentIds={chat.agent_ids} agentsById={agentsById} />
@@ -95,7 +95,11 @@ export function SearchResultsList({ searchResults, loading, query, agentsById, o
                 key={msg.id}
                 type="button"
                 className="facehash-hover-group mb-2 w-full cursor-pointer rounded-2xl border border-border/80 bg-card px-3 py-3 text-left transition-colors hover:bg-muted/60"
-                onClick={() => onOpenChat(msg.chat_id)}
+                onClick={() => onOpenChat(msg.chat_id, {
+                  id: msg.chat_id,
+                  title: msg.chat_title,
+                  agent_ids: msg.agent_ids,
+                })}
               >
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5">

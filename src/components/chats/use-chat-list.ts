@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
+import { setFrontendConfigCache } from '@/src/lib/frontend-config-cache';
 import { buildChatsQuery, sortInboxChats } from '@/src/lib/inbox';
 import {
   normalizeFirstMessageForNewChat,
@@ -136,6 +137,13 @@ export function useChatList(options: UseChatListOptions) {
     }
 
     const config = (await response.json()) as ConfigResponse;
+    setFrontendConfigCache({
+      appName: config.appName,
+      defaultModelIdForNewChats: config.defaultModelIdForNewChats,
+      agents: config.agents ?? [],
+      models: config.models ?? [],
+      security: { instanceSecret: config.security?.instanceSecret ?? null },
+    });
     setApiSecret(config.security?.instanceSecret ?? null);
     setAppName(config.appName || 'OpenGram');
     setAgents(config.agents ?? []);
