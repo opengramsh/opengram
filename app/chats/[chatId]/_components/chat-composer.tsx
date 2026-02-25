@@ -4,6 +4,7 @@ import { type RefObject, useState } from 'react';
 import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
 
 import { buildFileUrl } from '@/src/lib/api-fetch';
+import { isTouchDevice } from '@/src/lib/utils';
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type { MediaItem, Model } from '@/app/chats/[chatId]/_lib/types';
 import { RecordingWaveform } from '@/app/chats/[chatId]/_components/recording-waveform';
@@ -161,7 +162,7 @@ export function ChatComposer({
               placeholder="Message"
               className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey && (composerText.trim() || pendingAttachments.length > 0)) {
+                if (event.key === 'Enter' && !event.shiftKey && !isTouchDevice() && (composerText.trim() || pendingAttachments.length > 0)) {
                   event.preventDefault();
                   void sendMessage();
                 }

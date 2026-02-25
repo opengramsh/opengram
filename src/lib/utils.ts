@@ -5,6 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function isTouchDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(pointer: coarse)').matches;
+}
+
 export const FACEHASH_COLORS = [
   // Reds
   "#ff1744", "#ff5252", "#ff6b6b", "#e53935",

@@ -131,6 +131,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
   const pointerIdRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const scrolledRef = useRef(false);
 
   useEffect(() => {
     if (chat.title !== prevTitleRef.current && chat.title_source === 'auto') {
@@ -173,6 +174,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
       dragBaseOffsetRef.current = offsetX;
       setIsDragging(false);
       longPressTriggeredRef.current = false;
+      scrolledRef.current = false;
       if (typeof event.currentTarget.setPointerCapture === 'function') {
         event.currentTarget.setPointerCapture(event.pointerId);
       }
@@ -195,6 +197,9 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
 
       const deltaX = event.clientX - dragStartXRef.current;
       const deltaY = event.clientY - dragStartYRef.current;
+      if (!scrolledRef.current && Math.abs(deltaY) > 10) {
+        scrolledRef.current = true;
+      }
       if (!isDragging) {
         if (!shouldStartInboxSwipeDrag(deltaX, deltaY, dragBaseOffsetRef.current)) {
           clearLongPressTimer();
@@ -229,7 +234,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
         return;
       }
 
-      if (!isDragging && !longPressTriggeredRef.current) {
+      if (!isDragging && !longPressTriggeredRef.current && !scrolledRef.current) {
         if (offsetX < 0) {
           setOffsetX(0);
           return;

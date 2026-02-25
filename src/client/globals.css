@@ -96,6 +96,15 @@ body {
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* Prevent iOS Safari from zooming on input focus (requires >= 16px) */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 @keyframes typing-dot {
   0%, 60%, 100% { transform: translateY(0); }
   30% { transform: translateY(-4px); }
