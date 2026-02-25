@@ -318,7 +318,7 @@ async function handleMessageCreated(
     if (dispatch) {
       dispatch({ chatId, agentId, messageId, content, mediaUrl, images, cfg, deliver, onCleanup, onError });
     } else {
-      await dispatchViaSdk({ chatId, agentId, messageId, content, images, tempFilePaths, tempFileMimes, tempFileUrls, cfg, deliver, onError, log });
+      await dispatchViaSdk({ chatId, agentId, messageId, content, images, tempFilePaths, tempFileMimes, tempFileUrls, cfg, deliver, onError, onSkip: () => { stopTyping(); cancelStream(client, dispatchId); }, log });
     }
   } catch (err) {
     stopTyping();
@@ -393,6 +393,7 @@ async function handleRequestResolved(
         cfg,
         deliver,
         onError: (err) => { stopTyping(); log?.error(`[opengram] Reply dispatch error: ${err}`); },
+        onSkip: () => { stopTyping(); cancelStream(client, dispatchId); },
         log,
       });
     }
@@ -449,6 +450,7 @@ async function dispatchViaSdk(opts: {
   cfg: OpenClawConfig;
   deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
   onError: (err: unknown) => void;
+  onSkip?: () => void;
   log?: InboundListenerParams["log"];
 }): Promise<void> {
   const { chatId, agentId, messageId, content, images, tempFilePaths = [], tempFileMimes = [], tempFileUrls = [], cfg, deliver, onError, log } = opts;
@@ -513,6 +515,7 @@ async function dispatchViaSdk(opts: {
         log?.warn(
           `[opengram] deliver skipped: kind=${info.kind} reason=${info.reason} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
         );
+        opts.onSkip?.();
       },
       onError: (err, info) => {
         log?.error(`[opengram] ${info.kind} reply failed: ${String(err)}`);

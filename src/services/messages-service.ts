@@ -454,6 +454,11 @@ export function listMessages(chatId: string, url: URL): ListMessagesResult {
   const conditions = ['chat_id = ?'];
   const values: unknown[] = [chatId];
 
+  // Exclude cancelled messages with no content and no linked media (KAI-216)
+  conditions.push(
+    "NOT (stream_state = 'cancelled' AND content_final IS NULL AND content_partial IS NULL AND NOT EXISTS (SELECT 1 FROM media WHERE media.message_id = messages.id))",
+  );
+
   if (cursor) {
     conditions.push('(created_at < ? OR (created_at = ? AND id < ?))');
     values.push(cursor.createdAt, cursor.createdAt, cursor.id);

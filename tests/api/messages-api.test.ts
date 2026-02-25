@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,6 +10,7 @@ import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
 import { resetEventSubscribersForTests, subscribeToEvents } from '@/src/services/events-service';
 import { resetStreamingTimeoutSweeperForTests, sweepStaleStreamingMessages } from '@/src/services/messages-service';
+import { resetConfigCacheForTests } from '@/src/config/opengram-config';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
 const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
@@ -42,15 +43,29 @@ beforeEach(() => {
   resetWriteRateLimitForTests();
   resetEventSubscribersForTests();
   resetStreamingTimeoutSweeperForTests();
+
+  // Disable auth for tests — create a temp config with instanceSecretEnabled=false
+  const baseConfig = JSON.parse(readFileSync(join(repoRoot, 'config', 'opengram.config.json'), 'utf8'));
+  baseConfig.security = {
+    ...baseConfig.security,
+    instanceSecretEnabled: false,
+    readEndpointsRequireInstanceSecret: false,
+  };
+  const configPath = join(tempDir, 'opengram.config.json');
+  writeFileSync(configPath, JSON.stringify(baseConfig), 'utf8');
+  process.env.OPENGRAM_CONFIG_PATH = configPath;
+  resetConfigCacheForTests();
 });
 
 afterEach(() => {
   closeDb();
   db.close();
   delete process.env.DATABASE_URL;
+  delete process.env.OPENGRAM_CONFIG_PATH;
   resetWriteRateLimitForTests();
   resetEventSubscribersForTests();
   resetStreamingTimeoutSweeperForTests();
+  resetConfigCacheForTests();
 });
 
 describe('messages API', () => {
@@ -618,6 +633,47 @@ describe('messages API', () => {
         },
       },
     });
+  });
+
+  it('excludes cancelled messages with no content from listing (KAI-216)', async () => {
+    // Create chat and messages directly via SQL to avoid API auth dependency
+    const chatId = 'kai216test00000000001'; // exactly 21 chars (nanoid format)
+    const now = Date.now();
+    db.prepare(
+      [
+        'INSERT INTO chats (id, title, agent_ids, model_id, created_at, updated_at)',
+        'VALUES (?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(chatId, 'KAI-216 test chat', '["agent-default"]', 'model-default', now, now);
+
+    // Insert a normal complete message
+    db.prepare(
+      [
+        'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial, stream_state, model_id)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('VISIBLE_MSG_000000001', chatId, 'agent', 'agent-default', now - 1000, now - 1000, 'visible message', null, 'complete', 'model-default');
+
+    // Insert a cancelled message with no content (simulates sweeper auto-cancel
+    // of an eagerly-created streaming message that never received content)
+    db.prepare(
+      [
+        'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial, stream_state, model_id)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('CANCELLED_EMPTY_00001', chatId, 'agent', 'agent-default', now, now, null, null, 'cancelled', 'model-default');
+
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages', {
+      method: 'GET',
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    // The cancelled empty message should NOT appear in the listing
+    const messageIds = body.data.map((m: { id: string }) => m.id);
+    expect(messageIds).not.toContain('CANCELLED_EMPTY_00001');
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].content_final).toBe('visible message');
   });
 
   it('auto-cancels stale streaming messages and emits completion events', async () => {
