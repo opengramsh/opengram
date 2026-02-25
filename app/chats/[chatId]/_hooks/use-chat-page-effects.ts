@@ -379,13 +379,31 @@ export function useChatPageEffects(data: ChatPageData) {
       setKeyboardOffset(nextOffset);
     };
 
+    // iOS PWA sometimes fails to fire visualViewport resize when the keyboard
+    // is dismissed. Listen for focusout as a fallback: if no input is focused
+    // after a short delay, recalculate (which yields 0 when keyboard is gone).
+    let focusoutTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleFocusOut = () => {
+      if (focusoutTimer) clearTimeout(focusoutTimer);
+      focusoutTimer = setTimeout(() => {
+        focusoutTimer = null;
+        const active = document.activeElement;
+        if (!active || active === document.body || active === document.documentElement) {
+          updateOffset();
+        }
+      }, 300);
+    };
+
     updateOffset();
     viewport.addEventListener('resize', updateOffset);
     viewport.addEventListener('scroll', updateOffset);
+    window.addEventListener('focusout', handleFocusOut);
 
     return () => {
       viewport.removeEventListener('resize', updateOffset);
       viewport.removeEventListener('scroll', updateOffset);
+      window.removeEventListener('focusout', handleFocusOut);
+      if (focusoutTimer) clearTimeout(focusoutTimer);
     };
   }, [setKeyboardOffset]);
 

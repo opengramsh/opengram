@@ -24,7 +24,30 @@ type UnreadSummaryPayload = {
   unread_by_agent?: Record<string, number>;
 };
 
+/**
+ * Global safety-net: reset keyboard-related viewport offset when the
+ * visualViewport height returns to full window height (keyboard dismissed).
+ * Runs at the layout level so it isn't tied to the chat page lifecycle.
+ */
+function useGlobalKeyboardReset() {
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const onResize = () => {
+      const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      if (offset === 0) {
+        document.documentElement.style.setProperty('--keyboard-offset', '0px');
+      }
+    };
+
+    viewport.addEventListener('resize', onResize);
+    return () => viewport.removeEventListener('resize', onResize);
+  }, []);
+}
+
 export default function InboxLayout() {
+  useGlobalKeyboardReset();
   const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadByAgent, setUnreadByAgent] = useState<Record<string, number>>(
