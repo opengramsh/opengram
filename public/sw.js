@@ -29,8 +29,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(payload.title, {
       body: payload.body,
       data: payload.data,
-      badge: '/icons/icon-192.png',
-      icon: '/icons/icon-192.png',
+      badge: '/web-app-manifest-192x192.png',
+      icon: '/web-app-manifest-192x192.png',
       tag: payload.data && payload.data.messageId ? `message:${payload.data.messageId}` : 'opengram',
       renotify: true,
     }),

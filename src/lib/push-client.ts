@@ -66,7 +66,7 @@ export async function registerPushServiceWorker() {
     return null;
   }
 
-  return navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  return navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
 }
 
 export async function getCurrentPushSubscription() {

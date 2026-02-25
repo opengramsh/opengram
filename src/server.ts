@@ -101,7 +101,18 @@ app.use(
   }),
 );
 
-// Static files (manifest, icons, sw.js, etc.)
+// Service worker: must never be cached to ensure updates propagate
+app.use(
+  "/sw.js",
+  serveStatic({
+    root: "./dist/client",
+    onFound: (_path, c) => {
+      c.header("Cache-Control", "no-cache, must-revalidate");
+    },
+  }),
+);
+
+// Static files (manifest, icons, etc.)
 app.use("/*", serveStatic({ root: "./dist/client" }));
 
 // SPA fallback: serve index.html for client-side routes
