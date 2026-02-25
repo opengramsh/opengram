@@ -17,7 +17,6 @@ import {
 import { Textarea } from '@/src/components/ui/textarea';
 
 type ChatComposerProps = {
-  keyboardOffset: number;
   composerText: string;
   isSending: boolean;
   isComposerMenuOpen: boolean;
@@ -46,7 +45,6 @@ type ChatComposerProps = {
 };
 
 export function ChatComposer({
-  keyboardOffset,
   composerText,
   isSending,
   isComposerMenuOpen,
@@ -77,7 +75,7 @@ export function ChatComposer({
     <>
       <footer
         className="liquid-glass fixed inset-x-0 bottom-0 z-40 w-full px-3 pt-3"
-        style={{ paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)` }}
+        style={{ paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px))` }}
       >
         {!isRecording && pendingAttachments.length > 0 && (
           <div className="mb-2 overflow-x-auto">
@@ -202,12 +200,14 @@ export function ChatComposer({
             </Button>
           </div>
         )}
+        {/* tabIndex={-1} removes these from iOS form navigation, suppressing the ↑↓✓ accessory bar */}
         <input
           ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
           className="hidden"
+          tabIndex={-1}
           onChange={(event) => {
             void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
               event.currentTarget.value = '';
@@ -220,6 +220,7 @@ export function ChatComposer({
           accept="image/*"
           multiple
           className="hidden"
+          tabIndex={-1}
           onChange={(event) => {
             void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
               event.currentTarget.value = '';
@@ -231,6 +232,7 @@ export function ChatComposer({
           type="file"
           multiple
           className="hidden"
+          tabIndex={-1}
           onChange={(event) => {
             void uploadComposerFiles(event.currentTarget.files).finally(() => {
               event.currentTarget.value = '';
