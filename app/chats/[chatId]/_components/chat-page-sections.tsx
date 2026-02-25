@@ -88,7 +88,6 @@ function ChatComposerSection() {
 
   return (
     <ChatComposer
-      keyboardOffset={chat.keyboardOffset}
       composerText={chat.composerText}
       isSending={chat.isSending}
       isRecording={chat.isRecording}
