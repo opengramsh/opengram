@@ -38,6 +38,7 @@ function useGlobalKeyboardReset() {
       const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
       if (offset === 0) {
         document.documentElement.style.setProperty('--keyboard-offset', '0px');
+        window.scrollTo(0, 0);
       }
     };
 
@@ -355,7 +356,7 @@ export default function InboxLayout() {
   ]);
 
   return (
-    <div className="flex h-[100dvh] w-full bg-background">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-background">
       {/* Left sidebar: always visible on md+, only visible on mobile when no chat is selected */}
       <div
         className={cn(

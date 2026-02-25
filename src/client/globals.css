@@ -74,8 +74,12 @@
   scrollbar-width: thin;
 }
 
+html {
+  height: 100%;
+}
+
 body {
-  min-height: 100vh;
+  height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);

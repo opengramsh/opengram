@@ -377,6 +377,9 @@ export function useChatPageEffects(data: ChatPageData) {
     const updateOffset = () => {
       const nextOffset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
       setKeyboardOffset(nextOffset);
+      if (nextOffset === 0) {
+        window.scrollTo(0, 0);
+      }
     };
 
     // iOS PWA sometimes fails to fire visualViewport resize when the keyboard
