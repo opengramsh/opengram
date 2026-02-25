@@ -26,8 +26,40 @@ function loadServiceWorker(selfObject: Record<string, unknown>) {
   vm.runInNewContext(source, { self: selfObject, URL });
 }
 
-describe('service worker push suppression when chat is visible', () => {
-  it('should skip showNotification when a focused client is viewing the target chat', async () => {
+/** Creates a mock IndexedDB that returns `activeChatId` from the "ui-state" store. */
+function createMockIndexedDB(activeChatId: string | null) {
+  return {
+    open: vi.fn(() => {
+      const request = {
+        result: {
+          objectStoreNames: { contains: () => true },
+          transaction: vi.fn(() => ({
+            objectStore: vi.fn(() => ({
+              get: vi.fn(() => {
+                const getReq = {
+                  result: activeChatId,
+                  onsuccess: null as (() => void) | null,
+                  onerror: null as (() => void) | null,
+                };
+                queueMicrotask(() => getReq.onsuccess?.());
+                return getReq;
+              }),
+            })),
+          })),
+          close: vi.fn(),
+        },
+        onsuccess: null as ((e: unknown) => void) | null,
+        onerror: null as (() => void) | null,
+        onupgradeneeded: null as (() => void) | null,
+      };
+      queueMicrotask(() => request.onsuccess?.({ target: { result: request.result } }));
+      return request;
+    }),
+  };
+}
+
+describe('service worker push suppression via IndexedDB', () => {
+  it('should skip showNotification when IndexedDB activeChatId matches', async () => {
     const listeners = new Map<string, (event: PushEvent) => void>();
     const showNotification = vi.fn(async () => undefined);
 
@@ -36,20 +68,12 @@ describe('service worker push suppression when chat is visible', () => {
         listeners.set(type, listener);
       },
       location: { origin: 'https://app.example' },
-      clients: {
-        matchAll: vi.fn(async () => [
-          {
-            url: 'https://app.example/chats/chat-42',
-            focused: true,
-            visibilityState: 'visible',
-            postMessage: vi.fn(),
-          },
-        ]),
-      },
+      clients: { matchAll: vi.fn(async () => []) },
       registration: {
         showNotification,
         pushManager: { subscribe: vi.fn() },
       },
+      indexedDB: createMockIndexedDB('chat-42'),
     };
 
     loadServiceWorker(selfObject);
@@ -73,11 +97,92 @@ describe('service worker push suppression when chat is visible', () => {
       await pending;
     }
 
-    // The notification should NOT be shown because the user already has this chat open and focused
     expect(showNotification).not.toHaveBeenCalled();
   });
 
-  it('should still show notification when client has the chat open but is not focused', async () => {
+  it('should show notification when IndexedDB activeChatId is null (app hidden)', async () => {
+    const listeners = new Map<string, (event: PushEvent) => void>();
+    const showNotification = vi.fn(async () => undefined);
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: PushEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: { matchAll: vi.fn(async () => []) },
+      registration: {
+        showNotification,
+        pushManager: { subscribe: vi.fn() },
+      },
+      indexedDB: createMockIndexedDB(null),
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('push');
+    expect(handler).toBeTypeOf('function');
+
+    const payload = {
+      title: 'New message',
+      body: 'Hello!',
+      data: { chatId: 'chat-42', type: 'message', url: '/chats/chat-42' },
+    };
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      data: { text: () => JSON.stringify(payload) },
+      waitUntil: (promise) => { pending = promise; },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    expect(showNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('should show notification when a different chat is active', async () => {
+    const listeners = new Map<string, (event: PushEvent) => void>();
+    const showNotification = vi.fn(async () => undefined);
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: PushEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: { matchAll: vi.fn(async () => []) },
+      registration: {
+        showNotification,
+        pushManager: { subscribe: vi.fn() },
+      },
+      indexedDB: createMockIndexedDB('chat-99'),
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('push');
+    expect(handler).toBeTypeOf('function');
+
+    const payload = {
+      title: 'New message',
+      body: 'Hello!',
+      data: { chatId: 'chat-42', type: 'message', url: '/chats/chat-42' },
+    };
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      data: { text: () => JSON.stringify(payload) },
+      waitUntil: (promise) => { pending = promise; },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    expect(showNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('should skip showNotification on iOS PWA (IndexedDB works even when client.focused is undefined)', async () => {
     const listeners = new Map<string, (event: PushEvent) => void>();
     const showNotification = vi.fn(async () => undefined);
 
@@ -90,8 +195,8 @@ describe('service worker push suppression when chat is visible', () => {
         matchAll: vi.fn(async () => [
           {
             url: 'https://app.example/chats/chat-42',
-            focused: false,
-            visibilityState: 'hidden',
+            focused: undefined,
+            visibilityState: undefined,
             postMessage: vi.fn(),
           },
         ]),
@@ -100,6 +205,7 @@ describe('service worker push suppression when chat is visible', () => {
         showNotification,
         pushManager: { subscribe: vi.fn() },
       },
+      indexedDB: createMockIndexedDB('chat-42'),
     };
 
     loadServiceWorker(selfObject);
@@ -123,58 +229,7 @@ describe('service worker push suppression when chat is visible', () => {
       await pending;
     }
 
-    // Notification SHOULD be shown because the tab is in the background
-    expect(showNotification).toHaveBeenCalledTimes(1);
-  });
-
-  it('should still show notification when a different chat is open', async () => {
-    const listeners = new Map<string, (event: PushEvent) => void>();
-    const showNotification = vi.fn(async () => undefined);
-
-    const selfObject = {
-      addEventListener: (type: string, listener: (event: PushEvent) => void) => {
-        listeners.set(type, listener);
-      },
-      location: { origin: 'https://app.example' },
-      clients: {
-        matchAll: vi.fn(async () => [
-          {
-            url: 'https://app.example/chats/chat-99',
-            focused: true,
-            visibilityState: 'visible',
-            postMessage: vi.fn(),
-          },
-        ]),
-      },
-      registration: {
-        showNotification,
-        pushManager: { subscribe: vi.fn() },
-      },
-    };
-
-    loadServiceWorker(selfObject);
-    const handler = listeners.get('push');
-    expect(handler).toBeTypeOf('function');
-
-    const payload = {
-      title: 'New message',
-      body: 'Hello!',
-      data: { chatId: 'chat-42', type: 'message', url: '/chats/chat-42' },
-    };
-
-    let pending: Promise<unknown> | null = null;
-    handler?.({
-      data: { text: () => JSON.stringify(payload) },
-      waitUntil: (promise) => { pending = promise; },
-    });
-
-    expect(pending).not.toBeNull();
-    if (pending) {
-      await pending;
-    }
-
-    // Notification SHOULD be shown because a different chat is open
-    expect(showNotification).toHaveBeenCalledTimes(1);
+    expect(showNotification).not.toHaveBeenCalled();
   });
 
   it('should show notification when payload has no chatId', async () => {
@@ -186,20 +241,12 @@ describe('service worker push suppression when chat is visible', () => {
         listeners.set(type, listener);
       },
       location: { origin: 'https://app.example' },
-      clients: {
-        matchAll: vi.fn(async () => [
-          {
-            url: 'https://app.example/chats/chat-42',
-            focused: true,
-            visibilityState: 'visible',
-            postMessage: vi.fn(),
-          },
-        ]),
-      },
+      clients: { matchAll: vi.fn(async () => []) },
       registration: {
         showNotification,
         pushManager: { subscribe: vi.fn() },
       },
+      indexedDB: createMockIndexedDB('chat-42'),
     };
 
     loadServiceWorker(selfObject);
@@ -223,9 +270,101 @@ describe('service worker push suppression when chat is visible', () => {
       await pending;
     }
 
-    // Notification SHOULD be shown — no chatId means suppression logic is skipped
     expect(showNotification).toHaveBeenCalledTimes(1);
-    expect(selfObject.clients.matchAll).not.toHaveBeenCalled();
+  });
+
+  it('should show notification (fail-safe) when IndexedDB is unavailable', async () => {
+    const listeners = new Map<string, (event: PushEvent) => void>();
+    const showNotification = vi.fn(async () => undefined);
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: PushEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: { matchAll: vi.fn(async () => []) },
+      registration: {
+        showNotification,
+        pushManager: { subscribe: vi.fn() },
+      },
+      // No indexedDB property — simulates environments where it's unavailable
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('push');
+    expect(handler).toBeTypeOf('function');
+
+    const payload = {
+      title: 'New message',
+      body: 'Hello!',
+      data: { chatId: 'chat-42', type: 'message', url: '/chats/chat-42' },
+    };
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      data: { text: () => JSON.stringify(payload) },
+      waitUntil: (promise) => { pending = promise; },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    // When IndexedDB is unavailable, fail safe — show notification
+    expect(showNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('should show notification (fail-safe) when IndexedDB open() fails', async () => {
+    const listeners = new Map<string, (event: PushEvent) => void>();
+    const showNotification = vi.fn(async () => undefined);
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: PushEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: { matchAll: vi.fn(async () => []) },
+      registration: {
+        showNotification,
+        pushManager: { subscribe: vi.fn() },
+      },
+      indexedDB: {
+        open: vi.fn(() => {
+          const request = {
+            onsuccess: null as (() => void) | null,
+            onerror: null as (() => void) | null,
+            onupgradeneeded: null as (() => void) | null,
+          };
+          queueMicrotask(() => request.onerror?.());
+          return request;
+        }),
+      },
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('push');
+    expect(handler).toBeTypeOf('function');
+
+    const payload = {
+      title: 'New message',
+      body: 'Hello!',
+      data: { chatId: 'chat-42', type: 'message', url: '/chats/chat-42' },
+    };
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      data: { text: () => JSON.stringify(payload) },
+      waitUntil: (promise) => { pending = promise; },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    // When IndexedDB fails, fail safe — show notification
+    expect(showNotification).toHaveBeenCalledTimes(1);
   });
 });
 

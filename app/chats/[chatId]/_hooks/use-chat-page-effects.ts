@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 
+import { setActiveChatId } from '@/app/chats/[chatId]/_lib/active-chat-idb';
 import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { apiFetch } from '@/src/lib/api-fetch';
 import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
@@ -53,6 +54,26 @@ export function useChatPageEffects(data: ChatPageData) {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!chatId) return;
+
+    const update = () => {
+      if (document.visibilityState === 'visible') {
+        void setActiveChatId(chatId);
+      } else {
+        void setActiveChatId(null);
+      }
+    };
+
+    update();
+    document.addEventListener('visibilitychange', update);
+
+    return () => {
+      document.removeEventListener('visibilitychange', update);
+      void setActiveChatId(null);
+    };
+  }, [chatId]);
 
   useEffect(() => {
     if (!chatId || !chat || chat.id !== chatId) {

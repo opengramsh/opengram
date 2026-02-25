@@ -6,6 +6,43 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+function getActiveChatId() {
+  return new Promise(function (resolve) {
+    try {
+      var request = self.indexedDB.open('opengram-state', 1);
+      request.onupgradeneeded = function () {
+        var db = request.result;
+        if (!db.objectStoreNames.contains('ui-state')) {
+          db.createObjectStore('ui-state');
+        }
+      };
+      request.onsuccess = function () {
+        try {
+          var db = request.result;
+          var tx = db.transaction('ui-state', 'readonly');
+          var store = tx.objectStore('ui-state');
+          var getReq = store.get('activeChatId');
+          getReq.onsuccess = function () {
+            db.close();
+            resolve(typeof getReq.result === 'string' ? getReq.result : null);
+          };
+          getReq.onerror = function () {
+            db.close();
+            resolve(null);
+          };
+        } catch (e) {
+          resolve(null);
+        }
+      };
+      request.onerror = function () {
+        resolve(null);
+      };
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
 self.addEventListener('push', (event) => {
   let payload = {
     title: 'OpenGram',
@@ -28,17 +65,9 @@ self.addEventListener('push', (event) => {
   event.waitUntil((async () => {
     const chatId = payload.data && payload.data.chatId;
     if (chatId) {
-      const chatPath = '/chats/' + encodeURIComponent(chatId);
-      const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      for (const client of allClients) {
-        try {
-          const clientUrl = new URL(client.url);
-          if (clientUrl.pathname === chatPath && client.focused && client.visibilityState === 'visible') {
-            return;
-          }
-        } catch {
-          continue;
-        }
+      const activeChatId = await getActiveChatId();
+      if (activeChatId === chatId) {
+        return;
       }
     }
 
