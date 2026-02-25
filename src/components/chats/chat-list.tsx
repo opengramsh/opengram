@@ -292,17 +292,19 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
 
   return (
     <div className="relative overflow-hidden">
-      <button
-        type="button"
-        className={cn(
-          'absolute inset-y-0 right-0 z-0 w-[86px] cursor-pointer flex flex-col items-center justify-center gap-1 rounded-l-xl text-white',
-          actionLabel === 'Archive' ? 'bg-red-500' : 'bg-blue-500',
-        )}
-        onClick={onAction}
-      >
-        {actionLabel === 'Archive' ? <Archive size={20} /> : <Inbox size={20} />}
-        <span className="text-[11px] font-semibold uppercase tracking-wide">{actionLabel}</span>
-      </button>
+      {offsetX < 0 && (
+        <button
+          type="button"
+          className={cn(
+            'absolute inset-y-0 right-0 z-0 w-[86px] cursor-pointer flex flex-col items-center justify-center gap-1 rounded-l-xl text-white',
+            actionLabel === 'Archive' ? 'bg-red-500' : 'bg-blue-500',
+          )}
+          onClick={onAction}
+        >
+          {actionLabel === 'Archive' ? <Archive size={20} /> : <Inbox size={20} />}
+          <span className="text-[11px] font-semibold uppercase tracking-wide">{actionLabel}</span>
+        </button>
+      )}
       <button
         type="button"
         className={cn(
