@@ -173,4 +173,57 @@ describe('service worker notification click handling', () => {
 
     expect(openWindow).toHaveBeenCalledWith('/chats/chat-9');
   });
+
+  it('falls back to existing client message when openWindow throws', async () => {
+    const listeners = new Map<string, (event: WorkerEvent) => void>();
+    const fallbackFocus = vi.fn(async () => undefined);
+    const fallbackPostMessage = vi.fn(() => undefined);
+    const openWindow = vi.fn(async () => {
+      throw new Error('openWindow failed');
+    });
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: WorkerEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: {
+        matchAll: vi.fn(async () => [
+          { url: 'https://app.example/', focus: fallbackFocus, postMessage: fallbackPostMessage },
+        ]),
+        openWindow,
+      },
+      registration: {
+        showNotification: vi.fn(async () => undefined),
+      },
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('notificationclick');
+    expect(handler).toBeTypeOf('function');
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      notification: {
+        close: vi.fn(),
+        data: { chatId: 'chat-fallback' },
+      },
+      waitUntil: (promise) => {
+        pending = promise;
+      },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    expect(openWindow).toHaveBeenCalledWith('/chats/chat-fallback');
+    expect(fallbackPostMessage).toHaveBeenCalledWith({
+      type: 'push:navigate',
+      url: '/chats/chat-fallback',
+      chatId: 'chat-fallback',
+    });
+    expect(fallbackFocus).toHaveBeenCalledTimes(1);
+  });
 });

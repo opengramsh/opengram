@@ -137,11 +137,15 @@ self.addEventListener('notificationclick', (event) => {
     // iOS PWAs may not expose navigate() on existing clients; opening the
     // target URL is the most reliable deep-link path on tap.
     if (self.clients.openWindow) {
-      const opened = await self.clients.openWindow(targetPath);
-      if (opened) {
-        opened.postMessage(navigateMessage);
-        await opened.focus();
-        return;
+      try {
+        const opened = await self.clients.openWindow(targetPath);
+        if (opened) {
+          opened.postMessage(navigateMessage);
+          await opened.focus();
+          return;
+        }
+      } catch {
+        // Continue to last-resort fallback client postMessage.
       }
     }
 
