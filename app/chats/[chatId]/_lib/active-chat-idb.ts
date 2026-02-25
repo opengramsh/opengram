@@ -17,10 +17,11 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 export async function setActiveChatId(chatId: string | null): Promise<void> {
+  let db: IDBDatabase | null = null;
   try {
-    const db = await openDB();
+    db = await openDB();
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const tx = db!.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       if (chatId === null) {
         store.delete(KEY);
@@ -30,8 +31,9 @@ export async function setActiveChatId(chatId: string | null): Promise<void> {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-    db.close();
   } catch {
     // Fail silently — worst case is an extra notification
+  } finally {
+    db?.close();
   }
 }

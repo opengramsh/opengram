@@ -21,9 +21,12 @@ type PushEvent = {
 };
 
 function loadServiceWorker(selfObject: Record<string, unknown>) {
+  if (!('setTimeout' in selfObject)) {
+    selfObject.setTimeout = setTimeout;
+  }
   const swPath = join(import.meta.dirname, '..', '..', 'public', 'sw.js');
   const source = readFileSync(swPath, 'utf8');
-  vm.runInNewContext(source, { self: selfObject, URL });
+  vm.runInNewContext(source, { self: selfObject, URL, Promise, queueMicrotask });
 }
 
 /** Creates a mock IndexedDB that returns `activeChatId` from the "ui-state" store. */

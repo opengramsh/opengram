@@ -65,7 +65,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil((async () => {
     const chatId = payload.data && payload.data.chatId;
     if (chatId) {
-      const activeChatId = await getActiveChatId();
+      var idbTimeout = new Promise(function (resolve) { self.setTimeout(function () { resolve(null); }, 1500); });
+      const activeChatId = await Promise.race([getActiveChatId(), idbTimeout]);
       if (activeChatId === chatId) {
         return;
       }
