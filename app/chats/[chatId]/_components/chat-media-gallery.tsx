@@ -1,3 +1,6 @@
+import { useCallback, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
+
 import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
 import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatBytes } from '@/app/chats/[chatId]/_lib/chat-utils';
@@ -139,46 +142,135 @@ export function ChatMediaGallery({
         </DrawerContent>
       </Drawer>
 
-      <Dialog open={viewerMedia?.kind === 'image'} onOpenChange={(isOpen) => { if (!isOpen) setViewerMediaId(null); }}>
-        <DialogContent
-          showCloseButton={false}
-          className="h-[90dvh] max-w-3xl border-white/20 bg-black/90 p-3"
-        >
-          <DialogTitle className="sr-only">Image viewer</DialogTitle>
-          {viewerMedia?.kind === 'image' && (
-            <div className="flex h-full flex-col">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="truncate text-sm text-white">{viewerMedia.filename || 'Image viewer'}</p>
-                <div className="flex items-center gap-3">
-                  <a
-                    href={buildFileUrl(viewerMedia.id)}
-                    download
-                    aria-label={`Download ${viewerMedia.filename || 'image'}`}
-                    className="text-xs text-white/90"
-                  >
-                    Download
-                  </a>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="text-white/80 hover:text-white"
-                    onClick={() => setViewerMediaId(null)}
-                  >
-                    Close
-                  </Button>
-                </div>
-              </div>
-              <div className="relative min-h-0 flex-1 overflow-auto rounded-2xl border border-white/20 bg-black/40">
-                <img
-                  src={buildFileUrl(viewerMedia.id)}
-                  alt={viewerMedia.filename || 'Image viewer'}
-                  className="absolute inset-0 h-full w-full object-contain"
-                />
+      <ImageViewerDialog
+        viewerMedia={viewerMedia}
+        setViewerMediaId={setViewerMediaId}
+      />
+    </>
+  );
+}
+
+const DISMISS_THRESHOLD = 100;
+
+function ImageViewerDialog({
+  viewerMedia,
+  setViewerMediaId,
+}: {
+  viewerMedia?: MediaItem;
+  setViewerMediaId: (id: string | null) => void;
+}) {
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const pointerIdRef = useRef<number | null>(null);
+  const startYRef = useRef(0);
+  const startXRef = useRef(0);
+  const lockedRef = useRef<'vertical' | null>(null);
+
+  const resetDrag = useCallback(() => {
+    setDragY(0);
+    setIsDragging(false);
+    pointerIdRef.current = null;
+    lockedRef.current = null;
+  }, []);
+
+  const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    pointerIdRef.current = e.pointerId;
+    startYRef.current = e.clientY;
+    startXRef.current = e.clientX;
+    lockedRef.current = null;
+    setIsDragging(false);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return;
+    const dy = e.clientY - startYRef.current;
+    const dx = e.clientX - startXRef.current;
+
+    if (!lockedRef.current) {
+      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
+        lockedRef.current = 'vertical';
+        setIsDragging(true);
+      } else {
+        return;
+      }
+    }
+
+    // Only allow dragging down (positive dy)
+    setDragY(Math.max(0, dy));
+  }, []);
+
+  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return;
+    if (dragY > DISMISS_THRESHOLD) {
+      setViewerMediaId(null);
+    }
+    resetDrag();
+  }, [dragY, resetDrag, setViewerMediaId]);
+
+  const isOpen = viewerMedia?.kind === 'image';
+  const opacity = isDragging ? Math.max(0.2, 1 - dragY / 400) : 1;
+
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          resetDrag();
+          setViewerMediaId(null);
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="h-[90dvh] max-w-3xl border-white/20 bg-black/90 p-3"
+        style={{
+          transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
+          opacity,
+          transition: isDragging ? 'none' : 'transform 0.2s ease-out, opacity 0.2s ease-out',
+        }}
+      >
+        <DialogTitle className="sr-only">Image viewer</DialogTitle>
+        {viewerMedia?.kind === 'image' && (
+          <div className="flex h-full flex-col">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="truncate text-sm text-white">{viewerMedia.filename || 'Image viewer'}</p>
+              <div className="flex items-center gap-3">
+                <a
+                  href={buildFileUrl(viewerMedia.id)}
+                  download
+                  aria-label={`Download ${viewerMedia.filename || 'image'}`}
+                  className="text-xs text-white/90"
+                >
+                  Download
+                </a>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-white/80 hover:text-white"
+                  onClick={() => setViewerMediaId(null)}
+                >
+                  Close
+                </Button>
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+            <div
+              className="relative min-h-0 flex-1 overflow-auto rounded-2xl border border-white/20 bg-black/40 touch-none"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+            >
+              <img
+                src={buildFileUrl(viewerMedia.id)}
+                alt={viewerMedia.filename || 'Image viewer'}
+                className="absolute inset-0 h-full w-full object-contain select-none"
+                draggable={false}
+              />
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
