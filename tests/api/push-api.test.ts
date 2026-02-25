@@ -300,4 +300,70 @@ describe('push API', () => {
       },
     });
   });
+
+  it('rejects cross-origin URL values and keeps chat deep-link', async () => {
+    db.prepare(
+      [
+        'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('111111111111111111111', 'https://fcm.googleapis.com/sub/live', 'k1', 'a1', null, Date.now());
+
+    sendWebPushNotificationMock.mockResolvedValueOnce({ statusCode: 201 });
+
+    const response = await app.request('/api/v1/push/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Test title',
+        body: 'Test body',
+        chatId: 'chat-default',
+        url: 'https://malicious.example/chats/hijack',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = sendWebPushNotificationMock.mock.calls[0]?.[1];
+    expect(typeof payload).toBe('string');
+    expect(JSON.parse(String(payload))).toMatchObject({
+      data: {
+        chatId: 'chat-default',
+        type: 'test',
+        url: '/chats/chat-default',
+      },
+    });
+  });
+
+  it('rejects protocol-relative URL values and keeps chat deep-link', async () => {
+    db.prepare(
+      [
+        'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('111111111111111111111', 'https://fcm.googleapis.com/sub/live', 'k1', 'a1', null, Date.now());
+
+    sendWebPushNotificationMock.mockResolvedValueOnce({ statusCode: 201 });
+
+    const response = await app.request('/api/v1/push/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Test title',
+        body: 'Test body',
+        chatId: 'chat-default',
+        url: '//malicious.example/chats/hijack',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = sendWebPushNotificationMock.mock.calls[0]?.[1];
+    expect(typeof payload).toBe('string');
+    expect(JSON.parse(String(payload))).toMatchObject({
+      data: {
+        chatId: 'chat-default',
+        type: 'test',
+        url: '/chats/chat-default',
+      },
+    });
+  });
 });

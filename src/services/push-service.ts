@@ -236,7 +236,11 @@ function resolveNotificationUrl(chatId: string, url: unknown) {
   }
 
   try {
-    const parsed = new URL(url, 'https://app.local');
+    const base = new URL('https://app.local');
+    const parsed = new URL(url, base);
+    if (parsed.origin !== base.origin) {
+      return chatPath;
+    }
     const pathname = parsed.pathname && parsed.pathname.startsWith('/') ? parsed.pathname : '/';
     return `${pathname}${parsed.search}${parsed.hash}`;
   } catch {
