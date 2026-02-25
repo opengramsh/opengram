@@ -25,16 +25,32 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(payload.title, {
+  event.waitUntil((async () => {
+    const chatId = payload.data && payload.data.chatId;
+    if (chatId) {
+      const chatPath = '/chats/' + encodeURIComponent(chatId);
+      const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of allClients) {
+        try {
+          const clientUrl = new URL(client.url);
+          if (clientUrl.pathname === chatPath && client.focused && client.visibilityState === 'visible') {
+            return;
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    await self.registration.showNotification(payload.title, {
       body: payload.body,
       data: payload.data,
       badge: '/web-app-manifest-192x192.png',
       icon: '/web-app-manifest-192x192.png',
       tag: payload.data && payload.data.messageId ? `message:${payload.data.messageId}` : 'opengram',
       renotify: true,
-    }),
-  );
+    });
+  })());
 });
 
 self.addEventListener('pushsubscriptionchange', (event) => {
