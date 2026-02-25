@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Facehash } from 'facehash';
-import { Pin } from 'lucide-react';
+import { Archive, Inbox, Mail, MailOpen, Pin, PinOff } from 'lucide-react';
 
 import { formatInboxTimestamp, resolveInboxSwipeEnd, shouldStartInboxSwipeDrag } from '@/src/lib/inbox';
 import type { Agent, Chat } from '@/src/components/chats/types';
@@ -286,21 +286,25 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
     : null;
 
   return (
-    <div className="relative mb-2 overflow-hidden rounded-2xl">
+    <div className="relative overflow-hidden">
       <button
         type="button"
-        className="absolute inset-y-1 right-1 z-0 cursor-pointer rounded-xl bg-red-500/90 px-4 text-xs font-semibold text-white"
+        className={cn(
+          'absolute inset-y-0 right-0 z-0 w-[86px] cursor-pointer flex flex-col items-center justify-center gap-1 rounded-l-xl text-white',
+          actionLabel === 'Archive' ? 'bg-red-500' : 'bg-blue-500',
+        )}
         onClick={onAction}
       >
-        {actionLabel}
+        {actionLabel === 'Archive' ? <Archive size={20} /> : <Inbox size={20} />}
+        <span className="text-[11px] font-semibold uppercase tracking-wide">{actionLabel}</span>
       </button>
       <button
         type="button"
         className={cn(
-          'facehash-hover-group relative z-10 flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-150',
+          'facehash-hover-group relative z-10 flex w-full cursor-pointer items-center gap-3 border-b px-3 py-2.5 text-left transition-all duration-150',
           isActive
-            ? 'border-primary/40 bg-muted'
-            : 'border-border/80 bg-card',
+            ? 'bg-muted border-border/30'
+            : 'bg-background border-border/30 hover:bg-muted',
         )}
         style={{ transform: `translateX(${offsetX}px)` }}
         onPointerDown={handlePointerDown}
@@ -314,49 +318,43 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
         }}
       >
         <div className="shrink-0">
-          <Facehash name={agentName} size={44} interactive colors={FACEHASH_COLORS} intensity3d="dramatic" variant="gradient" gradientOverlayClass="facehash-gradient" className="rounded-xl text-black" enableBlink={isStreaming} onRenderMouth={isStreaming ? () => <Spinner /> : undefined} />
+          <Facehash name={agentName} size={36} interactive colors={FACEHASH_COLORS} intensity3d="dramatic" variant="gradient" gradientOverlayClass="facehash-gradient" className="rounded-full text-black" enableBlink={isStreaming} onRenderMouth={isStreaming ? () => <Spinner /> : undefined} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p
-                className={`line-clamp-2 text-sm leading-5 ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}
-              >
-                {typingTitle != null ? (
-                  <>{typingTitle}<span className="animate-pulse opacity-70">|</span></>
-                ) : (
-                  chat.title
-                )}
-              </p>
-              <p className="truncate text-[11px] font-semibold tracking-wide text-primary/60">{agentName}{isStreaming ? ' · typing...' : ''}</p>
-            </div>
-            <div className="flex flex-col items-end gap-1 pt-0.5">
-              <p className="text-[11px] text-muted-foreground">{formatInboxTimestamp(chat.last_message_at)}</p>
-              {chat.pinned && <Pin size={11} className="text-primary" />}
-            </div>
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <p className="truncate text-xs font-normal text-muted-foreground/70">
-              {chat.last_message_preview?.trim() || 'No messages yet'}
+          <div className="flex items-baseline justify-between gap-2">
+            <p
+              className={`line-clamp-1 text-[13px] ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}
+            >
+              {typingTitle != null ? (
+                <>{typingTitle}<span className="animate-pulse opacity-70">|</span></>
+              ) : (
+                chat.title
+              )}
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {chat.pinned && <Pin className="h-3 w-3 text-muted-foreground/60 fill-muted-foreground/60" />}
+              <span className="text-[11px] text-muted-foreground/60">{formatInboxTimestamp(chat.last_message_at)}</span>
               {pendingBadge}
               {!isActive && <UnreadBadge count={chat.unread_count} />}
             </div>
           </div>
+          <p className="text-[11px] font-semibold text-primary/60 truncate">{agentName}{isStreaming ? ' · typing...' : ''}</p>
+          <p className="truncate text-xs text-muted-foreground/50">
+            {chat.last_message_preview?.trim() || 'No messages yet'}
+          </p>
         </div>
       </button>
 
       <DropdownMenu open={isContextMenuOpen} onOpenChange={onContextMenuOpenChange}>
-        <DropdownMenuTrigger className="pointer-events-none absolute bottom-0 right-0 opacity-0" tabIndex={-1} aria-hidden="true" />
-        <DropdownMenuContent align="end" className="min-w-48">
+        <DropdownMenuTrigger className="pointer-events-none absolute bottom-0 left-0 opacity-0" tabIndex={-1} aria-hidden="true" />
+        <DropdownMenuContent align="start" className="min-w-48">
           <DropdownMenuItem
             onClick={() => {
               onContextMenuOpenChange(false);
               onMarkReadToggle();
             }}
           >
-            {chat.unread_count > 0 ? 'Mark as read' : 'Mark as unread'}
+            {chat.unread_count > 0 ? <><MailOpen size={16} /> Mark as read</> : <><Mail size={16} /> Mark as unread</>}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
@@ -364,7 +362,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
               onTogglePin();
             }}
           >
-            {chat.pinned ? 'Unpin' : 'Pin'}
+            {chat.pinned ? <><PinOff size={16} /> Unpin</> : <><Pin size={16} /> Pin</>}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
@@ -372,7 +370,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
               onAction();
             }}
           >
-            {chat.is_archived ? 'Unarchive' : 'Archive'}
+            {chat.is_archived ? <><Inbox size={16} /> Unarchive</> : <><Archive size={16} /> Archive</>}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

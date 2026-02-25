@@ -64,7 +64,7 @@ export function ChatHeader({
             intensity3d="dramatic"
             variant="gradient"
             gradientOverlayClass="facehash-gradient"
-            className="rounded-xl text-black"
+            className="rounded-full text-black"
             enableBlink={isStreaming}
             onRenderMouth={isStreaming ? () => <Spinner /> : undefined}
           />
