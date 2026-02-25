@@ -140,6 +140,15 @@ function encryptPayload(
   return { ciphertext: Buffer.concat([salt, recordHeader, serverPublicKey, encrypted, authTag]) };
 }
 
+export function generateVapidKeys(): { publicKey: string; privateKey: string } {
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  return {
+    publicKey: ecdh.getPublicKey().toString('base64url'),
+    privateKey: ecdh.getPrivateKey().toString('base64url'),
+  };
+}
+
 export async function sendWebPushNotification(
   subscription: PushSubscription,
   payload: string,

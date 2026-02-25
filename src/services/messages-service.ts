@@ -427,9 +427,10 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
     trace: serialized.trace,
   });
 
-  if (serialized.role === 'agent') {
+  if (serialized.role === 'agent' && serialized.stream_state !== 'streaming') {
     void notifyAgentMessageCreated({
       chatId: serialized.chat_id,
+      messageId: serialized.id,
       senderId: serialized.sender_id,
       preview: serialized.content_final,
     }).catch((error) => {
@@ -623,6 +624,21 @@ function completeOrCancelStreamingMessage(
     streamState: serialized.stream_state,
     finalText: serialized.content_final,
   }, { timestampMs: now });
+
+  if (targetState === 'complete') {
+    const preview = serialized.content_final?.trim()
+      ? serialized.content_final.trim().slice(0, 180)
+      : null;
+    void notifyAgentMessageCreated({
+      chatId: serialized.chat_id,
+      messageId: serialized.id,
+      senderId: serialized.sender_id,
+      preview,
+    }).catch((error) => {
+      console.error('Failed to send message.created push notification.', error);
+    });
+  }
+
   return serialized;
 }
 

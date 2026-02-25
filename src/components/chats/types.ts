@@ -38,6 +38,7 @@ export type Chat = {
   pending_requests_count: number;
   last_read_at: string | null;
   unread_count: number;
+  notifications_muted?: boolean;
   created_at: string;
   updated_at: string;
   last_message_at: string | null;

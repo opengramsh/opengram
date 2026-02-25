@@ -12,6 +12,8 @@ import {
   type FrontendStreamEvent,
 } from "@/src/lib/events-stream";
 import { cn } from "@/src/lib/utils";
+import { isSoundEnabled } from "@/src/lib/notification-preferences";
+import { playNotificationSound } from "@/src/lib/notification-sound";
 
 function pendingLabel(total: number) {
   return total === 1 ? "1 pending request" : `${total} pending requests`;
@@ -82,6 +84,14 @@ export default function InboxLayout() {
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+  const chatsRef = useRef<Chat[]>([]);
+  useEffect(() => {
+    chatsRef.current = chatList.chats;
+  }, [chatList.chats]);
+  const activeChatIdRef = useRef(activeChatId);
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
 
   const { setChats, loadChats, refreshChats, matchesActiveFilters } = chatList;
 
@@ -182,6 +192,19 @@ export default function InboxLayout() {
             next.delete(chatIdFromEvent);
             return next;
           });
+        }
+
+        // Play notification sound for incoming non-user messages
+        if (
+          (event.type === "message.created" || event.type === "message.streaming.complete") &&
+          chatIdFromEvent &&
+          event.payload.role !== "user" &&
+          event.payload.streamState !== "streaming"
+        ) {
+          const chat = chatsRef.current.find((c) => c.id === chatIdFromEvent);
+          if (!(chat?.notifications_muted) && isSoundEnabled()) {
+            playNotificationSound();
+          }
         }
 
         const isStreamingStart =
@@ -326,7 +349,7 @@ export default function InboxLayout() {
           unreadByAgent={unreadByAgent}
           headerContent={
             <div className="flex items-center justify-center gap-3">
-              <img src={logoSm} alt="" className="h-10 w-10 shrink-0" />
+              <img src={logoSm} alt="" className="h-12 w-12 shrink-0" />
               <div className="flex flex-col items-start">
                 <h1 className="text-sm font-semibold tracking-wide text-foreground leading-tight">
                   {chatList.appName}

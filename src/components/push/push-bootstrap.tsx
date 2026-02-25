@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 
 import { enablePushNotifications, fetchPushConfig, getPushPermissionState, registerPushServiceWorker } from '@/src/lib/push-client';
+import { setBrowserNotificationsEnabled } from '@/src/lib/notification-preferences';
 
 const PROMPT_STORAGE_KEY = 'opengram.push.prompted.v1';
 
@@ -32,6 +33,7 @@ export function PushBootstrap() {
 
         window.localStorage.setItem(PROMPT_STORAGE_KEY, '1');
         await enablePushNotifications(config.vapidPublicKey);
+        setBrowserNotificationsEnabled(true);
       } catch (err) {
         // Notification setup is optional and should never block app startup.
         console.error('[push-bootstrap] setup failed:', err);

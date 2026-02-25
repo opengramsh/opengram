@@ -22,6 +22,7 @@ type PushNotificationPayload = {
   body: string;
   data: {
     chatId: string;
+    messageId?: string;
     type: 'message' | 'request' | 'test';
     url: string;
   };
@@ -403,6 +404,7 @@ export async function sendTestPushNotification(input: {
 
 export async function notifyAgentMessageCreated(input: {
   chatId: string;
+  messageId: string;
   senderId: string;
   preview: string | null;
 }) {
@@ -419,6 +421,7 @@ export async function notifyAgentMessageCreated(input: {
     body,
     data: {
       chatId: input.chatId,
+      messageId: input.messageId,
       type: 'message',
       url: `/chats/${input.chatId}`,
     },

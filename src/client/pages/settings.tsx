@@ -1224,9 +1224,9 @@ function RawConfigTab({
 // ─── Responsive Tabs Header ───────────────────────────────────────────────────
 
 const TABS = [
+  { value: "app", label: "App", icon: Settings },
   { value: "agents", label: "Agents", icon: Bot },
   // { value: 'models', label: 'Models', icon: Cpu },
-  { value: "app", label: "App", icon: Settings },
   { value: "raw", label: "Raw config", icon: Braces },
 ] as const;
 

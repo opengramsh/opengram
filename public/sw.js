@@ -1,3 +1,11 @@
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener('push', (event) => {
   let payload = {
     title: 'OpenGram',
@@ -23,7 +31,7 @@ self.addEventListener('push', (event) => {
       data: payload.data,
       badge: '/icons/icon-192.png',
       icon: '/icons/icon-192.png',
-      tag: payload.data && payload.data.chatId ? `chat:${payload.data.chatId}` : undefined,
+      tag: payload.data && payload.data.messageId ? `message:${payload.data.messageId}` : 'opengram',
       renotify: true,
     }),
   );

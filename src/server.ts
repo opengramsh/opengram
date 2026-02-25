@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 
-import { loadOpengramConfig } from "@/src/config/opengram-config";
+import { ensurePushProvisioned, loadOpengramConfig } from "@/src/config/opengram-config";
 import { getDb } from "@/src/db/client";
 import {
   startHooksSubscriber,
@@ -124,6 +124,9 @@ function startBackgroundJobs() {
 if (process.env.NODE_ENV !== "test") {
   // Initialize DB connection eagerly
   getDb();
+
+  // Auto-generate VAPID keys if missing
+  ensurePushProvisioned();
 
   // Start background jobs
   startBackgroundJobs();

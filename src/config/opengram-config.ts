@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { generateVapidKeys } from "@/src/services/push-crypto";
+
 export type OpengramConfig = {
   appName: string;
   maxUploadBytes: number;
@@ -376,6 +378,46 @@ export function saveRawOpengramConfig(raw: Record<string, unknown>, configPath?:
 
   // Invalidate cache so next read picks up the new file
   configCache = null;
+}
+
+export function ensurePushProvisioned(configPath?: string): void {
+  const config = loadOpengramConfig(configPath);
+
+  if (config.push.vapidPublicKey || config.push.vapidPrivateKey) {
+    return;
+  }
+
+  const keys = generateVapidKeys();
+  const subject = config.server.publicBaseUrl.startsWith("https://")
+    ? config.server.publicBaseUrl
+    : "mailto:opengram@localhost";
+
+  const resolvedPath = resolveConfigPath(configPath);
+  let current: Record<string, unknown> = {};
+  if (existsSync(resolvedPath)) {
+    const raw = readFileSync(resolvedPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (isRecord(parsed)) {
+      current = parsed;
+    }
+  }
+
+  const existingPush = isRecord(current.push) ? current.push : {};
+  current.push = {
+    ...existingPush,
+    enabled: true,
+    vapidPublicKey: keys.publicKey,
+    vapidPrivateKey: keys.privateKey,
+    subject,
+  };
+
+  const merged = mergeConfig(structuredClone(defaultConfig), current);
+  validateConfig(merged);
+
+  writeFileSync(resolvedPath, JSON.stringify(current, null, 2) + "\n", "utf8");
+  configCache = null;
+
+  console.log("[push] Auto-generated VAPID keys and enabled push notifications.");
 }
 
 export function resetConfigCacheForTests() {
