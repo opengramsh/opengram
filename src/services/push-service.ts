@@ -228,6 +228,22 @@ function normalizeBodyPreview(value: string) {
   return `${trimmed.slice(0, MAX_BODY_CHARS - 1).trimEnd()}…`;
 }
 
+function resolveNotificationUrl(chatId: string, url: unknown) {
+  const normalizedChatId = chatId.trim();
+  const chatPath = normalizedChatId ? `/chats/${encodeURIComponent(normalizedChatId)}` : '/';
+  if (typeof url !== 'string' || !url.trim()) {
+    return chatPath;
+  }
+
+  try {
+    const parsed = new URL(url, 'https://app.local');
+    const pathname = parsed.pathname && parsed.pathname.startsWith('/') ? parsed.pathname : '/';
+    return `${pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return chatPath;
+  }
+}
+
 function buildPayload(payload: PushNotificationPayload) {
   const compact = {
     title: payload.title,
@@ -399,7 +415,7 @@ export async function sendTestPushNotification(input: {
     ? input.body.trim()
     : 'This is a test push notification.';
   const chatId = typeof input.chatId === 'string' && input.chatId.trim() ? input.chatId.trim() : 'test';
-  const url = typeof input.url === 'string' && input.url.trim() ? input.url.trim() : '/';
+  const url = resolveNotificationUrl(chatId, input.url);
 
   return sendPayloadToAll({
     title,
@@ -433,7 +449,7 @@ export async function notifyAgentMessageCreated(input: {
       chatId: input.chatId,
       messageId: input.messageId,
       type: 'message',
-      url: `/chats/${input.chatId}`,
+      url: resolveNotificationUrl(input.chatId, `/chats/${input.chatId}`),
     },
   });
 }
@@ -455,7 +471,7 @@ export async function notifyRequestCreated(input: {
     data: {
       chatId: input.chatId,
       type: 'request',
-      url: `/chats/${input.chatId}`,
+      url: resolveNotificationUrl(input.chatId, `/chats/${input.chatId}`),
     },
   });
 }

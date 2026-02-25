@@ -1,5 +1,6 @@
 
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 
 import { enablePushNotifications, fetchPushConfig, getPushPermissionState, registerPushServiceWorker } from '@/src/lib/push-client';
 import { setBrowserNotificationsEnabled } from '@/src/lib/notification-preferences';
@@ -7,6 +8,26 @@ import { setBrowserNotificationsEnabled } from '@/src/lib/notification-preferenc
 const PROMPT_STORAGE_KEY = 'opengram.push.prompted.v1';
 
 export function PushBootstrap() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== 'push:navigate') {
+        return;
+      }
+
+      const rawUrl = typeof event.data.url === 'string' ? event.data.url.trim() : '';
+      const chatId = typeof event.data.chatId === 'string' ? event.data.chatId.trim() : '';
+      const target = rawUrl || (chatId ? `/chats/${encodeURIComponent(chatId)}` : '');
+
+      if (target.startsWith('/')) {
+        navigate(target);
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', handler);
+    return () => navigator.serviceWorker?.removeEventListener('message', handler);
+  }, [navigate]);
+
   useEffect(() => {
     let cancelled = false;
 

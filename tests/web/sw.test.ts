@@ -9,6 +9,7 @@ type WorkerEvent = {
     close: () => void;
     data?: {
       url?: string;
+      chatId?: string;
     };
   };
   waitUntil: (promise: Promise<unknown>) => void;
@@ -25,6 +26,8 @@ describe('service worker notification click handling', () => {
     const listeners = new Map<string, (event: WorkerEvent) => void>();
     const wrongFocus = vi.fn(async () => undefined);
     const exactFocus = vi.fn(async () => undefined);
+    const wrongPostMessage = vi.fn(() => undefined);
+    const exactPostMessage = vi.fn(() => undefined);
     const openWindow = vi.fn(async () => undefined);
 
     const selfObject = {
@@ -34,8 +37,8 @@ describe('service worker notification click handling', () => {
       location: { origin: 'https://app.example' },
       clients: {
         matchAll: vi.fn(async () => [
-          { url: 'https://app.example/chats/10', focus: wrongFocus },
-          { url: 'https://app.example/chats/1', focus: exactFocus },
+          { url: 'https://app.example/chats/10', focus: wrongFocus, postMessage: wrongPostMessage },
+          { url: 'https://app.example/chats/1', focus: exactFocus, postMessage: exactPostMessage },
         ]),
         openWindow,
       },
@@ -66,13 +69,22 @@ describe('service worker notification click handling', () => {
 
     expect(exactFocus).toHaveBeenCalledTimes(1);
     expect(wrongFocus).not.toHaveBeenCalled();
+    expect(exactPostMessage).toHaveBeenCalledWith({
+      type: 'push:navigate',
+      url: '/chats/1',
+      chatId: '',
+    });
+    expect(wrongPostMessage).not.toHaveBeenCalled();
     expect(openWindow).not.toHaveBeenCalled();
   });
 
-  it('opens deep link when existing client cannot navigate', async () => {
+  it('opens deep link and posts navigate message when existing client cannot navigate', async () => {
     const listeners = new Map<string, (event: WorkerEvent) => void>();
     const rootFocus = vi.fn(async () => undefined);
-    const openWindow = vi.fn(async () => ({}));
+    const rootPostMessage = vi.fn(() => undefined);
+    const openedFocus = vi.fn(async () => undefined);
+    const openedPostMessage = vi.fn(() => undefined);
+    const openWindow = vi.fn(async () => ({ focus: openedFocus, postMessage: openedPostMessage }));
 
     const selfObject = {
       addEventListener: (type: string, listener: (event: WorkerEvent) => void) => {
@@ -81,7 +93,7 @@ describe('service worker notification click handling', () => {
       location: { origin: 'https://app.example' },
       clients: {
         matchAll: vi.fn(async () => [
-          { url: 'https://app.example/', focus: rootFocus },
+          { url: 'https://app.example/', focus: rootFocus, postMessage: rootPostMessage },
         ]),
         openWindow,
       },
@@ -112,5 +124,53 @@ describe('service worker notification click handling', () => {
 
     expect(openWindow).toHaveBeenCalledWith('/chats/chat-2');
     expect(rootFocus).not.toHaveBeenCalled();
+    expect(rootPostMessage).not.toHaveBeenCalled();
+    expect(openedPostMessage).toHaveBeenCalledWith({
+      type: 'push:navigate',
+      url: '/chats/chat-2',
+      chatId: 'chat-2',
+    });
+    expect(openedFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to same-origin chat path when notification URL is cross-origin', async () => {
+    const listeners = new Map<string, (event: WorkerEvent) => void>();
+    const openWindow = vi.fn(async () => ({ focus: vi.fn(async () => undefined), postMessage: vi.fn(() => undefined) }));
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: WorkerEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: {
+        matchAll: vi.fn(async () => []),
+        openWindow,
+      },
+      registration: {
+        showNotification: vi.fn(async () => undefined),
+      },
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('notificationclick');
+    expect(handler).toBeTypeOf('function');
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      notification: {
+        close: vi.fn(),
+        data: { chatId: 'chat-9', url: 'https://malicious.example/phish' },
+      },
+      waitUntil: (promise) => {
+        pending = promise;
+      },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    expect(openWindow).toHaveBeenCalledWith('/chats/chat-9');
   });
 });

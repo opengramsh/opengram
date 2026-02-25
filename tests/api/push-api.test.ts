@@ -259,4 +259,45 @@ describe('push API', () => {
       .all() as Array<{ endpoint: string }>;
     expect(remaining).toEqual([{ endpoint: 'https://fcm.googleapis.com/sub/live' }]);
   });
+
+  it('defaults test notification URL to chat deep-link when chatId is provided', async () => {
+    db.prepare(
+      [
+        'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('111111111111111111111', 'https://fcm.googleapis.com/sub/live', 'k1', 'a1', null, Date.now());
+
+    sendWebPushNotificationMock.mockResolvedValueOnce({ statusCode: 201 });
+
+    const response = await app.request('/api/v1/push/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Test title',
+        body: 'Test body',
+        chatId: 'chat-default',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      sent: 1,
+      failed: 0,
+      removed: 0,
+    });
+
+    const payload = sendWebPushNotificationMock.mock.calls[0]?.[1];
+    expect(typeof payload).toBe('string');
+    expect(JSON.parse(String(payload))).toMatchObject({
+      title: 'Test title',
+      body: 'Test body',
+      data: {
+        chatId: 'chat-default',
+        type: 'test',
+        url: '/chats/chat-default',
+      },
+    });
+  });
 });

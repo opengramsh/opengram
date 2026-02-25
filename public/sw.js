@@ -59,30 +59,52 @@ self.addEventListener('notificationclick', (event) => {
   const notificationData = event.notification.data && typeof event.notification.data === 'object'
     ? event.notification.data
     : null;
+
   const chatId = notificationData && typeof notificationData.chatId === 'string'
     ? notificationData.chatId.trim()
     : '';
-  const targetUrl = notificationData && typeof notificationData.url === 'string' && notificationData.url.trim()
-    ? notificationData.url
-    : (chatId ? `/chats/${encodeURIComponent(chatId)}` : '/');
+  const encodedChatPath = chatId ? `/chats/${encodeURIComponent(chatId)}` : '';
+  const dataUrl = notificationData && typeof notificationData.url === 'string'
+    ? notificationData.url.trim()
+    : '';
+  const fallbackPath = encodedChatPath || '/';
+  let resolvedTarget;
+
+  if (dataUrl) {
+    try {
+      const parsed = new URL(dataUrl, self.location.origin);
+      resolvedTarget = parsed.origin === self.location.origin ? parsed : new URL(fallbackPath, self.location.origin);
+    } catch {
+      resolvedTarget = new URL(fallbackPath, self.location.origin);
+    }
+  } else {
+    resolvedTarget = new URL(fallbackPath, self.location.origin);
+  }
+
+  const targetPath = resolvedTarget.pathname + resolvedTarget.search + resolvedTarget.hash;
+  const navigateMessage = {
+    type: 'push:navigate',
+    url: targetPath,
+    chatId,
+  };
 
   event.waitUntil((async () => {
-    let resolvedTarget;
-    try {
-      resolvedTarget = new URL(targetUrl, self.location.origin);
-    } catch {
-      resolvedTarget = new URL('/', self.location.origin);
-    }
     const matchedClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
     // First pass: check for exact same page — just focus it
     for (const client of matchedClients) {
-      const clientUrl = new URL(client.url);
+      let clientUrl;
+      try {
+        clientUrl = new URL(client.url);
+      } catch {
+        continue;
+      }
       const samePage = clientUrl.origin === resolvedTarget.origin
         && clientUrl.pathname === resolvedTarget.pathname
         && clientUrl.search === resolvedTarget.search;
 
       if (samePage && 'focus' in client) {
+        client.postMessage(navigateMessage);
         await client.focus();
         return;
       }
@@ -91,13 +113,23 @@ self.addEventListener('notificationclick', (event) => {
     // Second pass: find any same-origin window and navigate it
     let fallbackClient = null;
     for (const client of matchedClients) {
-      const clientUrl = new URL(client.url);
+      let clientUrl;
+      try {
+        clientUrl = new URL(client.url);
+      } catch {
+        continue;
+      }
       if (clientUrl.origin === resolvedTarget.origin) {
         fallbackClient = client;
         if ('navigate' in client) {
-          await client.navigate(resolvedTarget.toString());
-          await client.focus();
-          return;
+          try {
+            await client.navigate(resolvedTarget.toString());
+            client.postMessage(navigateMessage);
+            await client.focus();
+            return;
+          } catch {
+            // Fall through to openWindow/postMessage fallback.
+          }
         }
       }
     }
@@ -105,20 +137,17 @@ self.addEventListener('notificationclick', (event) => {
     // iOS PWAs may not expose navigate() on existing clients; opening the
     // target URL is the most reliable deep-link path on tap.
     if (self.clients.openWindow) {
-      const opened = await self.clients.openWindow(
-        resolvedTarget.pathname + resolvedTarget.search + resolvedTarget.hash,
-      );
+      const opened = await self.clients.openWindow(targetPath);
       if (opened) {
+        opened.postMessage(navigateMessage);
+        await opened.focus();
         return;
       }
     }
 
     // Last resort for older browsers: post message to an existing client.
     if (fallbackClient) {
-      fallbackClient.postMessage({
-        type: 'push:navigate',
-        url: resolvedTarget.pathname + resolvedTarget.search,
-      });
+      fallbackClient.postMessage(navigateMessage);
       await fallbackClient.focus();
     }
   })());
