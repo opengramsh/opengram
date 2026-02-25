@@ -147,7 +147,7 @@ describe('push crypto', () => {
     expect(headers['Content-Encoding']).toBe('aes128gcm');
     expect(headers['Content-Type']).toBe('application/octet-stream');
     expect(headers.TTL).toBe('2419200');
-    expect(headers['Crypto-Key']).toBe(`p256ecdsa=${vapid.publicKey}`);
+    expect(headers['Crypto-Key']).toBeUndefined();
 
     const authorization = headers.Authorization;
     expect(authorization).toContain('vapid t=');

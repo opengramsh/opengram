@@ -163,7 +163,6 @@ export async function sendWebPushNotification(
     method: 'POST',
     headers: {
       Authorization: authorization,
-      'Crypto-Key': `p256ecdsa=${vapid.publicKey}`,
       'Content-Encoding': 'aes128gcm',
       'Content-Type': 'application/octet-stream',
       'Content-Length': String(ciphertext.length),
@@ -174,7 +173,8 @@ export async function sendWebPushNotification(
   });
 
   if (!response.ok) {
-    const error = new Error('Push notification failed') as Error & { statusCode: number };
+    const bodyText = await response.text().catch(() => '');
+    const error = new Error(`Push notification failed (${response.status}): ${bodyText}`) as Error & { statusCode: number };
     error.statusCode = response.status;
     throw error;
   }

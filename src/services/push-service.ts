@@ -44,12 +44,8 @@ type WebPushSubscription = {
 
 const MAX_BODY_CHARS = 240;
 const MAX_PAYLOAD_BYTES = 4000;
-const ALLOWED_PUSH_ENDPOINT_HOSTS = [
-  'fcm.googleapis.com',
-  'push.services.mozilla.com',
-  'updates.push.services.mozilla.com',
-  'web.push.apple.com',
-];
+const ALLOWED_PUSH_EXACT_HOSTS = ['fcm.googleapis.com'];
+const ALLOWED_PUSH_SUFFIX_HOSTS = ['.push.apple.com', '.push.services.mozilla.com'];
 
 function isAllowedPushEndpointHost(hostname: string) {
   const normalized = hostname.trim().toLowerCase();
@@ -57,7 +53,17 @@ function isAllowedPushEndpointHost(hostname: string) {
     return false;
   }
 
-  return ALLOWED_PUSH_ENDPOINT_HOSTS.includes(normalized);
+  if (ALLOWED_PUSH_EXACT_HOSTS.includes(normalized)) {
+    return true;
+  }
+
+  for (const suffix of ALLOWED_PUSH_SUFFIX_HOSTS) {
+    if (normalized === suffix.slice(1) || normalized.endsWith(suffix)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isDisallowedHost(hostname: string) {
@@ -291,6 +297,10 @@ async function sendPayloadToAll(payload: PushNotificationPayload) {
         const dbInner = getDb();
         removeSubscriptionByEndpoint(dbInner, record.endpoint);
         removed += 1;
+      } else {
+        const host = new URL(record.endpoint).host;
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[push] delivery failed for ${host} (status ${statusCode ?? 'unknown'}): ${message}`);
       }
     }
   }

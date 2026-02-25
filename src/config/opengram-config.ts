@@ -185,6 +185,9 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
     if (!config.push.vapidPublicKey || !config.push.vapidPrivateKey || !config.push.subject) {
       throw new Error("Config validation error: push keys and subject are required when push.enabled=true.");
     }
+    if (config.push.subject.includes("localhost")) {
+      console.warn("[push] Warning: VAPID subject contains 'localhost' — Apple Web Push will reject tokens. Update push.subject in config.");
+    }
   }
 
   if (!Number.isInteger(config.server.idempotencyTtlSeconds) || config.server.idempotencyTtlSeconds <= 0) {
@@ -388,9 +391,13 @@ export function ensurePushProvisioned(configPath?: string): void {
   }
 
   const keys = generateVapidKeys();
-  const subject = config.server.publicBaseUrl.startsWith("https://")
-    ? config.server.publicBaseUrl
-    : "mailto:opengram@localhost";
+  let subject: string;
+  if (config.server.publicBaseUrl.startsWith("https://")) {
+    subject = config.server.publicBaseUrl;
+  } else {
+    const httpsOrigin = config.server.corsOrigins.find(o => o.startsWith("https://"));
+    subject = httpsOrigin ?? "mailto:opengram@localhost";
+  }
 
   const resolvedPath = resolveConfigPath(configPath);
   let current: Record<string, unknown> = {};

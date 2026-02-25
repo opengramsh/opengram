@@ -68,4 +68,49 @@ describe('service worker notification click handling', () => {
     expect(wrongFocus).not.toHaveBeenCalled();
     expect(openWindow).not.toHaveBeenCalled();
   });
+
+  it('opens deep link when existing client cannot navigate', async () => {
+    const listeners = new Map<string, (event: WorkerEvent) => void>();
+    const rootFocus = vi.fn(async () => undefined);
+    const openWindow = vi.fn(async () => ({}));
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: WorkerEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: {
+        matchAll: vi.fn(async () => [
+          { url: 'https://app.example/', focus: rootFocus },
+        ]),
+        openWindow,
+      },
+      registration: {
+        showNotification: vi.fn(async () => undefined),
+      },
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('notificationclick');
+    expect(handler).toBeTypeOf('function');
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      notification: {
+        close: vi.fn(),
+        data: { chatId: 'chat-2' },
+      },
+      waitUntil: (promise) => {
+        pending = promise;
+      },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    expect(openWindow).toHaveBeenCalledWith('/chats/chat-2');
+    expect(rootFocus).not.toHaveBeenCalled();
+  });
 });

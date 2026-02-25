@@ -13,17 +13,28 @@ export function PushBootstrap() {
     async function setupPush() {
       try {
         const config = await fetchPushConfig();
-        if (!config.enabled) {
+        if (!config.enabled || !config.vapidPublicKey) {
           return;
         }
 
         await registerPushServiceWorker();
 
-        if (cancelled || !config.vapidPublicKey) {
+        if (cancelled) {
           return;
         }
 
-        if (getPushPermissionState() !== 'default') {
+        const permission = getPushPermissionState();
+
+        // Permission already granted — always re-sync subscription to server
+        // (handles iOS silently dropping subscriptions, reinstalls, failed
+        // initial POSTs, etc.)
+        if (permission === 'granted') {
+          await enablePushNotifications(config.vapidPublicKey);
+          return;
+        }
+
+        // First-visit prompt flow: only trigger once per device
+        if (permission !== 'default') {
           return;
         }
 
@@ -31,8 +42,9 @@ export function PushBootstrap() {
           return;
         }
 
-        window.localStorage.setItem(PROMPT_STORAGE_KEY, '1');
         await enablePushNotifications(config.vapidPublicKey);
+        // Only mark as prompted after successful subscription
+        window.localStorage.setItem(PROMPT_STORAGE_KEY, '1');
         setBrowserNotificationsEnabled(true);
       } catch (err) {
         // Notification setup is optional and should never block app startup.

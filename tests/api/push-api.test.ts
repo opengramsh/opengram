@@ -160,6 +160,21 @@ describe('push API', () => {
     expect(privateResponse.status).toBe(400);
   });
 
+  it('accepts Apple push subdomain endpoints', async () => {
+    const response = await app.request('/api/v1/push/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: 'https://p01-web.push.apple.com/sub/1',
+        keys: {
+          p256dh: 'p256dh-key',
+          auth: 'auth-key',
+        },
+      }),
+    });
+    expect(response.status).toBe(201);
+  });
+
   it('deletes subscription by endpoint', async () => {
     db.prepare(
       [
