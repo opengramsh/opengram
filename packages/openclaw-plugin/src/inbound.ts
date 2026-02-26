@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { OpenGramClient } from "./api-client.js";
 import { maybeAutoRename } from "./auto-rename.js";
+import { enqueueOrSupersede, isSuperseded, setDispatchCleanup } from "./chat-queue.js";
 import { resolveAgentForChat, trackActiveChat } from "./chat-manager.js";
 import { resolveOpenGramAccount, type OpenGramChannelConfig } from "./config.js";
 import { downloadMedia } from "./media.js";
@@ -294,42 +295,56 @@ async function handleMessageCreated(
   // Unique per dispatch to isolate concurrent stream state.
   const dispatchId = `${chatId}:${Date.now()}`;
 
-  // Eagerly create a streaming message so the frontend shows typing indicator
-  // immediately, before the SDK starts producing content.
-  const streamingMsg = await client.createMessage(chatId, {
-    role: "agent",
-    senderId: agentId,
-    streaming: true,
-  });
-  initStream(dispatchId, chatId, streamingMsg.id, agentId);
-
-  const account = resolveOpenGramAccount(cfg);
-  const stopTyping = startTypingHeartbeat(client, chatId, agentId);
-  const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
-  const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
-  const onError = (err: unknown) => {
-    stopTyping();
-    log?.error(`[opengram] Reply dispatch error: ${err}`);
-    cancelStream(client, dispatchId);
-  };
-
   log?.info(`[opengram] dispatching: content="${content.slice(0, 40)}" images=${images?.length ?? 0}`);
-  try {
-    if (dispatch) {
-      dispatch({ chatId, agentId, messageId, content, mediaUrl, images, cfg, deliver, onCleanup, onError });
-    } else {
-      await dispatchViaSdk({ chatId, agentId, messageId, content, images, tempFilePaths, tempFileMimes, tempFileUrls, cfg, deliver, onError, onSkip: () => { stopTyping(); cancelStream(client, dispatchId); }, log });
-    }
-  } catch (err) {
-    stopTyping();
-    cancelStream(client, dispatchId);
-    throw err;
-  } finally {
-    stopTyping();
-    for (const p of tempFilePaths) {
-      fs.unlink(p).catch(() => {});
-    }
-  }
+
+  // Enqueue through the per-chat queue. If another dispatch is active for
+  // this chat, it gets superseded (typing bubble + stream cancelled).
+  enqueueOrSupersede(
+    chatId,
+    dispatchId,
+    async () => {
+      // Eagerly create a streaming message so the frontend shows typing
+      // indicator immediately, before the SDK starts producing content.
+      const streamingMsg = await client.createMessage(chatId, {
+        role: "agent",
+        senderId: agentId,
+        streaming: true,
+      });
+      initStream(dispatchId, chatId, streamingMsg.id, agentId);
+
+      const account = resolveOpenGramAccount(cfg);
+      const stopTyping = startTypingHeartbeat(client, chatId, agentId);
+      const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
+      const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
+      const onError = (err: unknown) => {
+        stopTyping();
+        log?.error(`[opengram] Reply dispatch error: ${err}`);
+        cancelStream(client, dispatchId);
+      };
+
+      // Register cleanup so the queue can cancel this dispatch if superseded.
+      setDispatchCleanup(chatId, dispatchId, onCleanup);
+
+      try {
+        if (dispatch) {
+          dispatch({ chatId, agentId, messageId, content, mediaUrl, images, cfg, deliver, onCleanup, onError });
+        } else {
+          await dispatchViaSdk({ chatId, agentId, messageId, content, images, tempFilePaths, tempFileMimes, tempFileUrls, cfg, deliver, onError, onSkip: () => { stopTyping(); cancelStream(client, dispatchId); }, log });
+        }
+      } catch (err) {
+        stopTyping();
+        cancelStream(client, dispatchId);
+        throw err;
+      } finally {
+        stopTyping();
+        for (const p of tempFilePaths) {
+          fs.unlink(p).catch(() => {});
+        }
+      }
+    },
+    client,
+    log,
+  );
 }
 
 async function handleRequestResolved(
@@ -353,62 +368,71 @@ async function handleRequestResolved(
   const agentId = await resolveAgentForChat(chatId, cfg, log);
   const dispatchId = `req:${requestId}`;
 
-  // Eagerly create a streaming message so the frontend shows typing indicator
-  // immediately, before the SDK starts producing content.
-  const streamingMsg = await client.createMessage(chatId, {
-    role: "agent",
-    senderId: agentId,
-    streaming: true,
-  });
-  initStream(dispatchId, chatId, streamingMsg.id, agentId);
-
-  const account = resolveOpenGramAccount(cfg);
-  const stopTyping = startTypingHeartbeat(client, chatId, agentId);
-  const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
-  const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
-  const onError = (err: unknown) => {
-    stopTyping();
-    log?.error(`[opengram] Reply dispatch error: ${err}`);
-    cancelStream(client, dispatchId);
-  };
-
-  try {
-    if (dispatch) {
-      dispatch({
-        chatId,
-        agentId,
-        messageId: `req:${requestId}:resolved`,
-        content: body,
-        cfg,
-        deliver,
-        onCleanup,
-        onError,
+  enqueueOrSupersede(
+    chatId,
+    dispatchId,
+    async () => {
+      // Eagerly create a streaming message so the frontend shows typing
+      // indicator immediately, before the SDK starts producing content.
+      const streamingMsg = await client.createMessage(chatId, {
+        role: "agent",
+        senderId: agentId,
+        streaming: true,
       });
-    } else {
-      await dispatchViaSdk({
-        chatId,
-        agentId,
-        messageId: `req:${requestId}:resolved`,
-        content: body,
-        cfg,
-        deliver,
-        onError: (err) => { stopTyping(); log?.error(`[opengram] Reply dispatch error: ${err}`); },
-        onSkip: () => { stopTyping(); cancelStream(client, dispatchId); },
-        log,
-      });
-    }
-  } catch (err) {
-    stopTyping();
-    cancelStream(client, dispatchId);
-    throw err;
-  } finally {
-    stopTyping();
-  }
+      initStream(dispatchId, chatId, streamingMsg.id, agentId);
+
+      const account = resolveOpenGramAccount(cfg);
+      const stopTyping = startTypingHeartbeat(client, chatId, agentId);
+      const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
+      const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
+      const onError = (err: unknown) => {
+        stopTyping();
+        log?.error(`[opengram] Reply dispatch error: ${err}`);
+        cancelStream(client, dispatchId);
+      };
+
+      // Register cleanup so the queue can cancel this dispatch if superseded.
+      setDispatchCleanup(chatId, dispatchId, onCleanup);
+
+      try {
+        if (dispatch) {
+          dispatch({
+            chatId,
+            agentId,
+            messageId: `req:${requestId}:resolved`,
+            content: body,
+            cfg,
+            deliver,
+            onCleanup,
+            onError,
+          });
+        } else {
+          await dispatchViaSdk({
+            chatId,
+            agentId,
+            messageId: `req:${requestId}:resolved`,
+            content: body,
+            cfg,
+            deliver,
+            onError: (err) => { stopTyping(); log?.error(`[opengram] Reply dispatch error: ${err}`); },
+            onSkip: () => { stopTyping(); cancelStream(client, dispatchId); },
+            log,
+          });
+        }
+      } catch (err) {
+        stopTyping();
+        cancelStream(client, dispatchId);
+        throw err;
+      } finally {
+        stopTyping();
+      }
+    },
+    client,
+    log,
+  );
 }
 
 const CHANNEL_ID = "opengram";
-const AGENT_SESSION_KEY_RE = /^agent:[^:]+:(.+)$/i;
-
 function normalizeAgentIdForSessionKey(agentId: string): string {
   const trimmed = agentId.trim().toLowerCase();
   if (!trimmed) {
@@ -417,20 +441,20 @@ function normalizeAgentIdForSessionKey(agentId: string): string {
   return trimmed.replace(/[^a-z0-9_-]+/g, "-").replace(/^-+/, "").replace(/-+$/, "") || "main";
 }
 
-function buildSessionKey(chatId: string, agentId: string, routeSessionKey?: string): string {
+/**
+ * Build a per-chat session key. We intentionally ignore route.sessionKey from
+ * OpenClaw's resolveAgentRoute because OpenGram requires per-chat session
+ * isolation — a shared session key (e.g. dmScope="main" → "agent:id:main")
+ * would route all chats into one agent session, causing cross-chat reply bleed.
+ * See KAI-232.
+ */
+function buildSessionKey(chatId: string, agentId: string): string {
   const normalizedChatId = chatId.trim();
   if (!normalizedChatId) {
     throw new Error("[opengram] Cannot dispatch inbound event without chatId");
   }
 
   const normalizedAgentId = normalizeAgentIdForSessionKey(agentId);
-  const routeMatch = routeSessionKey?.trim().match(AGENT_SESSION_KEY_RE);
-  if (routeMatch?.[1]) {
-    return `agent:${normalizedAgentId}:${routeMatch[1].toLowerCase()}`;
-  }
-
-  // Fallback format keeps per-chat isolation and preserves OpenClaw's
-  // `agent:<id>:` session-key contract for agent selection.
   return `agent:${normalizedAgentId}:${CHANNEL_ID}:direct:${normalizedChatId.toLowerCase()}`;
 }
 
@@ -461,9 +485,7 @@ async function dispatchViaSdk(opts: {
     channel: CHANNEL_ID,
     peer: { kind: "direct", id: chatId },
   });
-  // Preserve route suffix (dm scope/account identity handling) but force the
-  // chat-selected agent into the `agent:<id>:` prefix.
-  const sessionKey = buildSessionKey(chatId, agentId, route.sessionKey);
+  const sessionKey = buildSessionKey(chatId, agentId);
   log?.info(
     `[opengram] dispatch route: chatId=${chatId} routeAgent=${route.agentId} selectedAgent=${agentId} matchedBy=${route.matchedBy} sessionKey=${sessionKey}`,
   );
@@ -542,6 +564,13 @@ function buildDeliver(
   log?: InboundListenerParams["log"],
 ): (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void> {
   return async (replyPayload, { kind }) => {
+    // Supersede guard: if this dispatch was superseded by a newer message,
+    // silently drop late deliver callbacks to prevent ghost messages.
+    if (isSuperseded(dispatchId)) {
+      log?.info(`[opengram] deliver no-op: dispatch ${dispatchId} was superseded (kind=${kind})`);
+      return;
+    }
+
     log?.info(
       `[opengram] buildDeliver called: kind=${kind} textLen=${replyPayload.text?.length ?? 0} hasMedia=${Boolean(replyPayload.mediaUrl)}`,
     );
