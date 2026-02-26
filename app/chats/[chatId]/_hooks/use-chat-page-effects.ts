@@ -402,6 +402,7 @@ export function useChatPageEffects(data: ChatPageData) {
       if (keyboardOffset !== keyboardOffsetRef.current) {
         keyboardOffsetRef.current = keyboardOffset;
         setKeyboardOffset(keyboardOffset);
+        document.documentElement.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
       }
 
       if (nearBottom) {
@@ -413,6 +414,7 @@ export function useChatPageEffects(data: ChatPageData) {
 
     return () => {
       unsubscribe();
+      document.documentElement.style.removeProperty('--keyboard-offset');
     };
   }, [feedRef, scrollToBottom, setKeyboardOffset]);
 

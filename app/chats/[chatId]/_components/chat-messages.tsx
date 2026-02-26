@@ -163,7 +163,8 @@ export function ChatMessages({
   return (
     <main
       ref={feedRef}
-      className="flex-1 overflow-y-auto px-3 pt-3 pb-[var(--composer-height,_5rem)]"
+      className="flex-1 overflow-y-auto px-3 pt-3"
+      style={{ paddingBottom: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
     >
       {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
       {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}
