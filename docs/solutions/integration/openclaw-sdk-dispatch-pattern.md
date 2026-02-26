@@ -36,7 +36,11 @@ export function getOpenGramRuntime(): PluginRuntime {
 
 The runtime is set during plugin registration (`register()`) and is guaranteed to be available before the gateway starts processing messages.
 
-### 2. Session key via `resolveAgentRoute`
+### 2. Session key — per-chat isolation
+
+> **WARNING (KAI-232):** Do NOT use `route.sessionKey` directly for per-chat channels like OpenGram. With `dmScope="main"` (the default), `resolveAgentRoute` returns a **shared** key (`"agent:<id>:main"`) causing all chats to share one agent session — replies go to the wrong chat. See `docs/solutions/debugging/cross-chat-session-key-bleed.md`.
+
+Build per-chat session keys that always include the chatId:
 
 ```ts
 const route = core.channel.routing.resolveAgentRoute({
@@ -44,10 +48,11 @@ const route = core.channel.routing.resolveAgentRoute({
   channel: CHANNEL_ID,
   peer: { kind: "direct", id: chatId },
 });
-const sessionKey = route.sessionKey;
+// route.sessionKey is intentionally IGNORED — OpenGram owns its session keys
+const sessionKey = `agent:${normalizedAgentId}:${CHANNEL_ID}:direct:${chatId.toLowerCase()}`;
 ```
 
-**Gotcha:** The plan called for `buildAgentPeerSessionKey()` but it's not re-exported from `openclaw/plugin-sdk`. Use `resolveAgentRoute()` instead — it returns the session key along with routing metadata.
+**Gotcha:** `buildAgentPeerSessionKey()` is not re-exported from `openclaw/plugin-sdk`. Use `resolveAgentRoute()` for routing metadata (agentId, matchedBy) but never for session keys in per-chat channels.
 
 ### 3. Build MsgContext via `finalizeInboundContext`
 
@@ -71,7 +76,7 @@ const ctx = core.channel.reply.finalizeInboundContext({
 
 Key fields:
 - `From` / `To` / `OriginatingTo`: use `channel:peerId` format
-- `SessionKey`: from `resolveAgentRoute` — ensures 1 chat = 1 isolated session
+- `SessionKey`: plugin-built per-chat key (NOT from `resolveAgentRoute` — see KAI-232)
 - `CommandAuthorized: true`: allows agent commands (set to false for untrusted sources)
 
 ### 4. Dispatch with prefix options
