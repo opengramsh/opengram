@@ -4,6 +4,7 @@ import type { OpenGramClient } from "../src/api-client.js";
 import { initializeChatManager } from "../src/chat-manager.js";
 import { clearProcessedIdsForTests, startInboundListener, type DispatchFn } from "../src/inbound.js";
 import { setOpenGramRuntime } from "../src/runtime.js";
+import { clearChatQueuesForTests } from "../src/chat-queue.js";
 import { clearActiveStreamsForTests } from "../src/streaming.js";
 import type { Chat, ListChatsResponse } from "../src/types.js";
 
@@ -13,6 +14,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     sendChunk: vi.fn().mockResolvedValue(undefined),
     completeMessage: vi.fn().mockResolvedValue(undefined),
     cancelMessage: vi.fn().mockResolvedValue(undefined),
+    cancelStreamingMessagesForChat: vi.fn().mockResolvedValue({ cancelledMessageIds: [] }),
     getChat: vi.fn().mockResolvedValue({ id: "chat-1", agentIds: ["grami"] } as Chat),
     listChats: vi.fn().mockResolvedValue({ data: [], cursor: { hasMore: false } } as ListChatsResponse),
     connectSSE: vi.fn(),
@@ -52,11 +54,13 @@ describe("inbound DM policy enforcement", () => {
   beforeEach(() => {
     clearActiveStreamsForTests();
     clearProcessedIdsForTests();
+    clearChatQueuesForTests();
   });
 
   afterEach(() => {
     clearActiveStreamsForTests();
     clearProcessedIdsForTests();
+    clearChatQueuesForTests();
   });
 
   describe("dmPolicy: open", () => {

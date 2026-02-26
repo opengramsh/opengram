@@ -720,4 +720,105 @@ describe('messages API', () => {
       streamState: 'cancelled',
     });
   });
+
+  it('POST /cancel-streaming bulk-cancels all streaming messages for a chat', async () => {
+    const chatId = 'cstrmBulkChat00000A00';
+    const now = Date.now();
+
+    db.prepare(
+      "INSERT INTO chats (id, title, agent_ids, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(chatId, 'cancel-streaming test', '["agent-default"]', 'model-default', now, now);
+
+    db.prepare(
+      'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial, stream_state, model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run('cstrmStreamMsg0000A10', chatId, 'agent', 'agent-default', now, now, null, null, 'streaming', 'model-default');
+
+    db.prepare(
+      'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial, stream_state, model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run('cstrmStreamMsg0000A20', chatId, 'agent', 'agent-default', now, now, null, null, 'streaming', 'model-default');
+
+    db.prepare(
+      'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial, stream_state, model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run('cstrmNormalMsg0000A30', chatId, 'agent', 'agent-default', now, now, 'Normal message', null, 'complete', 'model-default');
+
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages/cancel-streaming', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.cancelledMessageIds).toHaveLength(2);
+    expect(body.cancelledMessageIds).toContain('cstrmStreamMsg0000A10');
+    expect(body.cancelledMessageIds).toContain('cstrmStreamMsg0000A20');
+
+    const row1 = db.prepare('SELECT stream_state FROM messages WHERE id = ?').get('cstrmStreamMsg0000A10') as { stream_state: string };
+    expect(row1.stream_state).toBe('cancelled');
+
+    const row2 = db.prepare('SELECT stream_state FROM messages WHERE id = ?').get('cstrmStreamMsg0000A20') as { stream_state: string };
+    expect(row2.stream_state).toBe('cancelled');
+
+    const rowNormal = db.prepare('SELECT stream_state FROM messages WHERE id = ?').get('cstrmNormalMsg0000A30') as { stream_state: string };
+    expect(rowNormal.stream_state).toBe('complete');
+  });
+
+  it('POST /cancel-streaming returns empty array when no streaming messages', async () => {
+    const chatId = 'cstrmEmptyChat00000B0';
+    const now = Date.now();
+
+    db.prepare(
+      "INSERT INTO chats (id, title, agent_ids, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(chatId, 'empty cancel test', '["agent-default"]', 'model-default', now, now);
+
+    const response = await app.request('/api/v1/chats/' + chatId + '/messages/cancel-streaming', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.cancelledMessageIds).toEqual([]);
+  });
+
+  it('POST /cancel-streaming returns 404 for unknown chat', async () => {
+    const response = await app.request('/api/v1/chats/nonexistentChatId0XX0/messages/cancel-streaming', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('POST /cancel-streaming emits streaming.complete events', async () => {
+    const chatId = 'cstrmEventChat00000C0';
+    const now = Date.now();
+
+    db.prepare(
+      "INSERT INTO chats (id, title, agent_ids, model_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(chatId, 'events cancel test', '["agent-default"]', 'model-default', now, now);
+
+    db.prepare(
+      'INSERT INTO messages (id, chat_id, role, sender_id, created_at, updated_at, content_final, content_partial, stream_state, model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run('cstrmEventMsg0000C100', chatId, 'agent', 'agent-default', now, now, null, null, 'streaming', 'model-default');
+
+    const seenEvents: Array<{ messageId: string; streamState: string }> = [];
+    const unsubscribe = subscribeToEvents(false, (event) => {
+      if (event.type === 'message.streaming.complete') {
+        seenEvents.push({
+          messageId: String(event.payload.messageId),
+          streamState: String(event.payload.streamState),
+        });
+      }
+    });
+
+    await app.request('/api/v1/chats/' + chatId + '/messages/cancel-streaming', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+    unsubscribe();
+
+    expect(seenEvents).toEqual([
+      { messageId: 'cstrmEventMsg0000C100', streamState: 'cancelled' },
+    ]);
+  });
 });

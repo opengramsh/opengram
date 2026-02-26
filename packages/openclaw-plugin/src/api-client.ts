@@ -181,6 +181,17 @@ export class OpenGramClient {
     }
   }
 
+  async cancelStreamingMessagesForChat(chatId: string): Promise<{ cancelledMessageIds: string[] }> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/chats/${chatId}/messages/cancel-streaming`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) {
+      throw new Error(`cancelStreamingMessagesForChat failed: ${res.status}`);
+    }
+    return (await res.json()) as { cancelledMessageIds: string[] };
+  }
+
   async uploadMedia(chatId: string, params: {
     file: Buffer;
     filename: string;

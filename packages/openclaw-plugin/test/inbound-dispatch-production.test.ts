@@ -12,6 +12,7 @@ import type { OpenGramClient } from "../src/api-client.js";
 import { initializeChatManager } from "../src/chat-manager.js";
 import { clearProcessedIdsForTests, startInboundListener } from "../src/inbound.js";
 import { setOpenGramRuntime } from "../src/runtime.js";
+import { clearChatQueuesForTests } from "../src/chat-queue.js";
 import { clearActiveStreamsForTests } from "../src/streaming.js";
 import type { Chat, ListChatsResponse } from "../src/types.js";
 
@@ -21,6 +22,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     sendChunk: vi.fn().mockResolvedValue(undefined),
     completeMessage: vi.fn().mockResolvedValue(undefined),
     cancelMessage: vi.fn().mockResolvedValue(undefined),
+    cancelStreamingMessagesForChat: vi.fn().mockResolvedValue({ cancelledMessageIds: [] }),
     getChat: vi.fn().mockImplementation(async (chatId: string) => ({ id: chatId, agent_ids: ["grami"] } as Chat)),
     listChats: vi.fn().mockResolvedValue({ data: [], cursor: { hasMore: false } } as ListChatsResponse),
     connectSSE: vi.fn(),
@@ -125,11 +127,13 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
   beforeEach(() => {
     clearActiveStreamsForTests();
     clearProcessedIdsForTests();
+    clearChatQueuesForTests();
   });
 
   afterEach(() => {
     clearActiveStreamsForTests();
     clearProcessedIdsForTests();
+    clearChatQueuesForTests();
   });
 
   it("should dispatch message.created via SDK when no injected dispatch fn", async () => {

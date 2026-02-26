@@ -14,6 +14,7 @@ import type { OpenGramClient } from "../src/api-client.js";
 import { initializeChatManager } from "../src/chat-manager.js";
 import { clearProcessedIdsForTests, startInboundListener } from "../src/inbound.js";
 import { setOpenGramRuntime } from "../src/runtime.js";
+import { clearChatQueuesForTests } from "../src/chat-queue.js";
 import { clearActiveStreamsForTests } from "../src/streaming.js";
 import type { Chat, ListChatsResponse } from "../src/types.js";
 
@@ -23,6 +24,7 @@ function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
     sendChunk: vi.fn().mockResolvedValue(undefined),
     completeMessage: vi.fn().mockResolvedValue(undefined),
     cancelMessage: vi.fn().mockResolvedValue(undefined),
+    cancelStreamingMessagesForChat: vi.fn().mockResolvedValue({ cancelledMessageIds: [] }),
     getChat: vi.fn().mockImplementation(async (chatId: string) => ({ id: chatId, agent_ids: ["grami"] } as Chat)),
     listChats: vi.fn().mockResolvedValue({ data: [], cursor: { hasMore: false } } as ListChatsResponse),
     connectSSE: vi.fn(),
@@ -117,11 +119,13 @@ describe("KAI-232: cross-chat session key isolation with shared route", () => {
   beforeEach(() => {
     clearActiveStreamsForTests();
     clearProcessedIdsForTests();
+    clearChatQueuesForTests();
   });
 
   afterEach(() => {
     clearActiveStreamsForTests();
     clearProcessedIdsForTests();
+    clearChatQueuesForTests();
   });
 
   it("two chats with the same agent must produce different session keys", async () => {

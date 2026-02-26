@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenGramClient } from "../src/api-client.js";
 import {
+  cancelAllStreamsForChat,
   cancelStream,
   clearActiveStreamsForTests,
   finalizeStream,
@@ -404,6 +405,48 @@ describe("streaming", () => {
       expect(hasActiveStream("d-reuse")).toBe(true);
       expect(client.createMessage).toHaveBeenCalledTimes(2);
       expect(client.sendChunk).toHaveBeenCalledWith("msg-2", "Second");
+    });
+  });
+
+  describe("cancelAllStreamsForChat", () => {
+    it("cancels all streams for a given chat", async () => {
+      let msgCounter = 0;
+      const client = createMockClient({
+        createMessage: vi.fn().mockImplementation(() =>
+          Promise.resolve({ id: `msg-${++msgCounter}` }),
+        ),
+      });
+
+      initStream("d-1", "chat-1", "msg-s1", "grami");
+      initStream("d-2", "chat-1", "msg-s2", "grami");
+      initStream("d-3", "chat-2", "msg-s3", "grami");
+
+      cancelAllStreamsForChat(client, "chat-1");
+
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-s1");
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-s2");
+      expect(client.cancelMessage).not.toHaveBeenCalledWith("msg-s3");
+      expect(hasActiveStream("d-1")).toBe(false);
+      expect(hasActiveStream("d-2")).toBe(false);
+      expect(hasActiveStream("d-3")).toBe(true);
+    });
+
+    it("is a no-op when no streams exist for the chat", () => {
+      const client = createMockClient();
+      cancelAllStreamsForChat(client, "chat-nonexistent");
+      expect(client.cancelMessage).not.toHaveBeenCalled();
+    });
+
+    it("swallows errors from cancelMessage", () => {
+      const client = createMockClient({
+        cancelMessage: vi.fn().mockRejectedValue(new Error("network")),
+      });
+
+      initStream("d-err", "chat-1", "msg-err", "grami");
+
+      // Should not throw
+      cancelAllStreamsForChat(client, "chat-1");
+      expect(hasActiveStream("d-err")).toBe(false);
     });
   });
 });

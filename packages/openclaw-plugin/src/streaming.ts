@@ -117,6 +117,20 @@ export function hasActiveStream(dispatchId: string): boolean {
 }
 
 /**
+ * Cancel all active streams for a given chat.
+ * Used as a safety net when superseding dispatches — ensures no orphaned
+ * streaming messages remain for the chat.
+ */
+export function cancelAllStreamsForChat(client: OpenGramClient, chatId: string): void {
+  for (const [dispatchId, stream] of activeStreams) {
+    if (stream.chatId === chatId) {
+      client.cancelMessage(stream.messageId).catch(() => {});
+      activeStreams.delete(dispatchId);
+    }
+  }
+}
+
+/**
  * Clear all active streams. Only for testing.
  */
 export function clearActiveStreamsForTests(): void {

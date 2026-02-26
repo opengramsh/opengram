@@ -655,6 +655,54 @@ export function cancelStreamingMessage(messageId: string) {
   return completeOrCancelStreamingMessage(messageId, 'cancelled');
 }
 
+/**
+ * Bulk-cancel all streaming messages for a given chat.
+ * Used as a safety net when a new inbound message supersedes an in-progress
+ * agent response — ensures no orphaned typing bubbles remain.
+ *
+ * @returns The IDs of messages that were cancelled.
+ */
+export function cancelStreamingMessagesForChat(chatId: string): { cancelledMessageIds: string[] } {
+  const db = getDb();
+  getChatMessageMetadata(db, chatId); // Validates chat exists
+
+  const now = Date.now();
+  const streamingMessages = db
+    .prepare("SELECT id FROM messages WHERE chat_id = ? AND stream_state = 'streaming'")
+    .all(chatId) as { id: string }[];
+
+  if (streamingMessages.length === 0) {
+    return { cancelledMessageIds: [] };
+  }
+
+  const cancelled: MessageRecord[] = [];
+  const tx = db.transaction(() => {
+    for (const msg of streamingMessages) {
+      const result = db.prepare(
+        "UPDATE messages SET stream_state = 'cancelled', updated_at = ? WHERE id = ? AND stream_state = 'streaming'",
+      ).run(now, msg.id);
+      if (result.changes > 0) {
+        const updated = getMessageMetadata(db, msg.id);
+        db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(now, updated.chat_id);
+        cancelled.push(updated);
+      }
+    }
+  });
+  tx();
+
+  for (const message of cancelled) {
+    const serialized = serializeMessage(message);
+    emitEvent('message.streaming.complete', {
+      chatId: serialized.chat_id,
+      messageId: serialized.id,
+      streamState: serialized.stream_state,
+      finalText: serialized.content_final,
+    }, { timestampMs: now });
+  }
+
+  return { cancelledMessageIds: cancelled.map((m) => m.id) };
+}
+
 function autoCancelStreamingMessageIfStale(
   db: Database.Database,
   messageId: string,

@@ -5,6 +5,7 @@ import { applyReadMiddlewares, applyWriteMiddlewares } from '@/src/api/write-con
 import {
   appendStreamingChunk,
   cancelStreamingMessage,
+  cancelStreamingMessagesForChat,
   completeStreamingMessage,
   createMessage,
   ensureStreamingTimeoutSweeperStarted,
@@ -105,6 +106,18 @@ messageActions.post('/:messageId/cancel', (c) => {
     const messageId = c.req.param('messageId');
     const message = cancelStreamingMessage(messageId);
     return c.json(message);
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+});
+
+// POST /chats/:chatId/cancel-streaming - bulk-cancel all streaming messages for a chat
+messages.post('/cancel-streaming', (c) => {
+  try {
+    applyWriteMiddlewares(c.req.raw);
+    const chatId = c.req.param('chatId');
+    const result = cancelStreamingMessagesForChat(chatId);
+    return c.json(result);
   } catch (error) {
     return toErrorResponse(error);
   }
