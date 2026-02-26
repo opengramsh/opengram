@@ -304,11 +304,14 @@ export default function NewChatPage() {
         isComposerMenuOpen={isComposerMenuOpen}
         setIsComposerMenuOpen={setIsComposerMenuOpen}
         handleMicAction={recorder.handleMicAction}
+        stopRecording={recorder.stopRecording}
+        cancelRecording={recorder.cancelRecording}
+        audioLevels={recorder.audioLevels}
         isRecording={recorder.isRecording}
         recordingSeconds={recorder.recordingSeconds}
         isUploadingVoiceNote={recorder.isUploadingVoiceNote}
         showMicSettingsPrompt={recorder.showMicSettingsPrompt}
-        isUploadingAttachment={isUploadingAttachment}
+        allAttachmentsReady={!isUploadingAttachment}
         uploadComposerFiles={uploadComposerFiles}
         pendingAttachments={pendingAttachments}
         removePendingAttachment={removePendingAttachment}
