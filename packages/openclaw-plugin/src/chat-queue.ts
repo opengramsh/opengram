@@ -34,7 +34,11 @@ const activeCleanups = new Map<string, ActiveCleanup>();
 
 const supersededDispatches = new Set<string>();
 
+/** Watchdog timers that force-clean dispatches stuck longer than STUCK_DISPATCH_TIMEOUT_MS. */
+const stuckTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 const SUPERSEDE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const STUCK_DISPATCH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Enqueue a dispatch for a chat. If a previous dispatch exists for this
@@ -69,11 +73,31 @@ export function enqueueOrSupersede(
 
     // Also cancel server-side streaming messages as a safety net.
     void client.cancelStreamingMessagesForChat(chatId).catch(() => {});
+
+    // Clear the previous dispatch's watchdog timer.
+    const prevTimer = stuckTimers.get(chatId);
+    if (prevTimer) {
+      clearTimeout(prevTimer);
+      stuckTimers.delete(chatId);
+    }
   }
 
   // Set this as the latest and active dispatch.
   latestDispatches.set(chatId, dispatchId);
   activeCleanups.set(chatId, { dispatchId, cleanup: () => {} });
+
+  // Watchdog: force-clean if the dispatch hangs longer than the timeout.
+  const watchdog = setTimeout(() => {
+    const active = activeCleanups.get(chatId);
+    if (active?.dispatchId === dispatchId) {
+      log?.warn(`[chat-queue] dispatch ${dispatchId} timed out after ${STUCK_DISPATCH_TIMEOUT_MS / 1000}s, force-cleaning`);
+      active.cleanup();
+      activeCleanups.delete(chatId);
+      latestDispatches.delete(chatId);
+    }
+    stuckTimers.delete(chatId);
+  }, STUCK_DISPATCH_TIMEOUT_MS);
+  stuckTimers.set(chatId, watchdog);
 
   // Run the callback.
   callback(dispatchId).then(
@@ -103,6 +127,12 @@ function finishDispatch(chatId: string, dispatchId: string): void {
   const active = activeCleanups.get(chatId);
   if (active?.dispatchId === dispatchId) {
     activeCleanups.delete(chatId);
+  }
+  // Clear the stuck-dispatch watchdog since the dispatch completed.
+  const timer = stuckTimers.get(chatId);
+  if (timer) {
+    clearTimeout(timer);
+    stuckTimers.delete(chatId);
   }
   // latestDispatches is intentionally NOT cleared here — it's needed to detect
   // supersede even after a dispatch finishes (the deliver callback may still
@@ -138,4 +168,6 @@ export function clearChatQueuesForTests(): void {
   latestDispatches.clear();
   activeCleanups.clear();
   supersededDispatches.clear();
+  for (const timer of stuckTimers.values()) clearTimeout(timer);
+  stuckTimers.clear();
 }

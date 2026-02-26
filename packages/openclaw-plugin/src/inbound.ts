@@ -47,6 +47,8 @@ export type DispatchFn = (opts: {
   onError: (err: unknown) => void;
 }) => void;
 
+let dispatchSeq = 0;
+
 const TYPING_HEARTBEAT_INTERVAL_MS = 5_000;
 
 function startTypingHeartbeat(client: OpenGramClient, chatId: string, agentId: string): () => void {
@@ -293,7 +295,8 @@ async function handleMessageCreated(
   const images: ImageContent[] | undefined = collectedImages.length > 0 ? collectedImages : undefined;
 
   // Unique per dispatch to isolate concurrent stream state.
-  const dispatchId = `${chatId}:${Date.now()}`;
+  // Monotonic counter avoids collision if two messages arrive in the same ms.
+  const dispatchId = `${chatId}:${++dispatchSeq}`;
 
   log?.info(`[opengram] dispatching: content="${content.slice(0, 40)}" images=${images?.length ?? 0}`);
 
