@@ -97,6 +97,7 @@ function ChatV2ComposerSection() {
       audioLevels={chat.audioLevels}
       isComposerMenuOpen={chat.isComposerMenuOpen}
       allAttachmentsReady={chat.allAttachmentsReady}
+      // Model selection intentionally disabled in v2 preview — agent routing handles model choice.
       selectedModelId={''}
       models={[]}
       cameraInputRef={chat.cameraInputRef}

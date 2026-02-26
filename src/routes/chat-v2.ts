@@ -118,7 +118,7 @@ chatV2.post('/:chatId/stream', async (c) => {
               sseChunk({ type: 'finish', finishReason: 'stop' }),
               'data: [DONE]\n\n',
             );
-            void writeSequence(s, chunks).then(finish);
+            void writeSequence(s, chunks).then(finish).catch(finish);
           }
         }
 
@@ -130,6 +130,8 @@ chatV2.post('/:chatId/stream', async (c) => {
         ) {
           const delta = payload.deltaText as string;
           if (delta) {
+            // Write errors on ephemeral deltas are intentionally ignored —
+            // abort handler and timeout ensure cleanup on client disconnect.
             void s.write(sseChunk({ type: 'text-delta', delta, id: TEXT_PART_ID }));
           }
         }
@@ -146,7 +148,7 @@ chatV2.post('/:chatId/stream', async (c) => {
             sseChunk({ type: 'finish-step' }),
             sseChunk({ type: 'finish', finishReason: 'stop' }),
             'data: [DONE]\n\n',
-          ]).then(finish);
+          ]).then(finish).catch(finish);
         }
       });
 
@@ -181,7 +183,7 @@ chatV2.post('/:chatId/stream', async (c) => {
             sseChunk({ type: 'finish', finishReason: 'error' }),
             'data: [DONE]\n\n',
           );
-          void writeSequence(s, chunks).then(finish);
+          void writeSequence(s, chunks).then(finish).catch(finish);
         }, TIMEOUT_MS);
 
         // Handle client disconnect
