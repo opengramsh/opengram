@@ -57,7 +57,6 @@ function ChatMessagesSection() {
       error={chat.error}
       messages={chat.messages}
       inlineMessageMedia={chat.inlineMessageMedia}
-      keyboardOffset={chat.keyboardOffset}
       pendingReply={chat.pendingReply}
       setViewerMediaId={(id) => chat.setViewerMediaId(id)}
       setPreviewFileId={chat.setPreviewFileId}

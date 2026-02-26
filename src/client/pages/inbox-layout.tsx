@@ -14,6 +14,7 @@ import {
 import { cn } from "@/src/lib/utils";
 import { isSoundEnabled } from "@/src/lib/notification-preferences";
 import { playNotificationSound } from "@/src/lib/notification-sound";
+import { applyKeyboardCssVars, subscribeToKeyboardLayout } from "@/src/lib/keyboard-layout";
 
 function pendingLabel(total: number) {
   return total === 1 ? "1 pending request" : `${total} pending requests`;
@@ -31,19 +32,9 @@ type UnreadSummaryPayload = {
  */
 function useGlobalKeyboardReset() {
   useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    const onResize = () => {
-      const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      if (offset === 0) {
-        document.documentElement.style.setProperty('--keyboard-offset', '0px');
-        window.scrollTo(0, 0);
-      }
-    };
-
-    viewport.addEventListener('resize', onResize);
-    return () => viewport.removeEventListener('resize', onResize);
+    return subscribeToKeyboardLayout(window, document, (layout) => {
+      applyKeyboardCssVars(document.documentElement, layout);
+    });
   }, []);
 }
 
@@ -356,7 +347,7 @@ export default function InboxLayout() {
   ]);
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-background">
+    <div className="flex w-full overflow-hidden bg-background" style={{ height: 'var(--visual-viewport-height, 100dvh)' }}>
       {/* Left sidebar: always visible on md+, only visible on mobile when no chat is selected */}
       <div
         className={cn(
