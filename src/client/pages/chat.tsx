@@ -36,7 +36,7 @@ export default function ChatPage() {
 
   return (
     <ChatPageProvider key={chatId} chatId={chatId} initialChat={initialChat}>
-      <div className="flex w-full flex-col bg-background" style={{ height: 'var(--visual-viewport-height, 100dvh)' }}>
+      <div className="flex h-[100dvh] w-full flex-col bg-background">
         <ChatPageSections />
       </div>
     </ChatPageProvider>

@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useEffect, useState } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
 
 import { isTouchDevice } from '@/src/lib/utils';
@@ -72,53 +72,98 @@ export function ChatComposer({
   onCameraCapture,
   keyboardOffset,
 }: ChatComposerProps) {
-  const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const footerRef = useRef<HTMLElement | null>(null);
 
+  /*
+   * iOS Form Navigation Bar suppression.
+   * The ↑↓ arrows appear when iOS detects multiple tabbable form elements.
+   * We set tabindex=-1 on every focusable input outside the composer, and use
+   * a MutationObserver to catch elements that mount after the composer (e.g.
+   * request widget <select>, dynamically rendered inputs).
+   */
   useEffect(() => {
-    const restoreManagedTabIndexes = () => {
-      const managed = document.querySelectorAll<HTMLElement>('[data-composer-managed-tabindex="true"]');
-      for (const el of managed) {
-        const previous = el.getAttribute('data-composer-prev-tabindex');
-        if (previous === '__none__') {
-          el.removeAttribute('tabindex');
-        } else if (previous) {
-          el.setAttribute('tabindex', previous);
-        }
-        el.removeAttribute('data-composer-prev-tabindex');
-        el.removeAttribute('data-composer-managed-tabindex');
-      }
+    const FOCUSABLE = 'input, textarea, select, [contenteditable="true"]';
+    const managed = new Map<HTMLElement, string | null>();
+
+    const suppress = (el: HTMLElement) => {
+      if (el.closest('[data-chat-composer-root="true"]')) return;
+      if (managed.has(el)) return;
+      managed.set(el, el.getAttribute('tabindex'));
+      el.setAttribute('tabindex', '-1');
     };
 
-    if (!isComposerFocused) {
-      restoreManagedTabIndexes();
+    // Initial sweep
+    for (const el of document.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+      suppress(el);
+    }
+
+    // Watch for dynamically added inputs
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          // Check the node itself
+          if (node.matches(FOCUSABLE)) suppress(node);
+          // Check descendants
+          for (const child of node.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+            suppress(child);
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      for (const [element, previousTabIndex] of managed.entries()) {
+        if (previousTabIndex === null) {
+          element.removeAttribute('tabindex');
+        } else {
+          element.setAttribute('tabindex', previousTabIndex);
+        }
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) {
       return;
     }
 
-    const focusableInputs = document.querySelectorAll<HTMLElement>('input, textarea, select, [contenteditable="true"]');
-    for (const element of focusableInputs) {
-      if (element.closest('[data-chat-composer-root="true"]')) {
-        continue;
-      }
+    const root = document.documentElement;
+    const updateComposerHeight = () => {
+      const composerHeight = Math.max(0, Math.ceil(footer.getBoundingClientRect().height));
+      root.style.setProperty('--composer-height', `${composerHeight}px`);
+    };
 
-      const existingTabIndex = element.getAttribute('tabindex');
-      element.setAttribute('data-composer-prev-tabindex', existingTabIndex ?? '__none__');
-      element.setAttribute('data-composer-managed-tabindex', 'true');
-      element.setAttribute('tabindex', '-1');
+    updateComposerHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        root.style.removeProperty('--composer-height');
+      };
     }
 
+    const observer = new ResizeObserver(() => {
+      updateComposerHeight();
+    });
+    observer.observe(footer);
+
     return () => {
-      restoreManagedTabIndexes();
+      observer.disconnect();
+      root.style.removeProperty('--composer-height');
     };
-  }, [isComposerFocused]);
+  }, []);
 
   return (
     <>
       <footer
+        ref={footerRef}
         data-chat-composer-root="true"
-        className="liquid-glass fixed inset-x-0 z-40 w-full px-3 pt-3"
+        className="liquid-glass kbd-safe-pb fixed inset-x-0 z-40 w-full px-3 pt-3"
         style={{
           bottom: `${keyboardOffset}px`,
-          paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px))`,
         }}
       >
         {!isRecording && pendingAttachments.length > 0 && (
@@ -218,8 +263,6 @@ export function ChatComposer({
               inputMode="text"
               enterKeyHint="send"
               className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
-              onFocus={() => setIsComposerFocused(true)}
-              onBlur={() => setIsComposerFocused(false)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !isTouchDevice() && (composerText.trim() || pendingAttachments.length > 0)) {
                   event.preventDefault();

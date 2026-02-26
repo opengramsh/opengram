@@ -347,7 +347,7 @@ export default function InboxLayout() {
   ]);
 
   return (
-    <div className="flex w-full overflow-hidden bg-background" style={{ height: 'var(--visual-viewport-height, 100dvh)' }}>
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-background">
       {/* Left sidebar: always visible on md+, only visible on mobile when no chat is selected */}
       <div
         className={cn(
