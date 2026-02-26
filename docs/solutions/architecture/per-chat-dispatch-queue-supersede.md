@@ -85,6 +85,10 @@ POST /api/v1/chats/:chatId/messages/cancel-streaming
 
 Cancels all `stream_state='streaming'` messages for the chat in a single transaction, emits `message.streaming.complete` events for each.
 
+## Post-await supersede check (KAI-234)
+
+The supersede cleanup runs synchronously when a new message arrives, but the dispatch callback creates resources asynchronously (`await createMessage`). If the supersede happens while `createMessage` is in-flight, the newly created streaming message is orphaned. Fix: re-check `isSuperseded(dispatchId)` after every `await` that creates a cancellable resource. See [async-supersede-check-after-await.md](./async-supersede-check-after-await.md) for the full pattern.
+
 ## Testing approach
 
 Tests use the `dispatch` injection pattern (not the SDK) and manually control when `deliver` is called:
