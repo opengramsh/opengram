@@ -313,6 +313,14 @@ async function handleMessageCreated(
         senderId: agentId,
         streaming: true,
       });
+
+      // KAI-234: If this dispatch was superseded while createMessage was
+      // in-flight, cancel the orphaned streaming message and bail out.
+      if (isSuperseded(dispatchId)) {
+        await client.cancelMessage(streamingMsg.id).catch(() => {});
+        return;
+      }
+
       initStream(dispatchId, chatId, streamingMsg.id, agentId);
 
       const account = resolveOpenGramAccount(cfg);
@@ -382,6 +390,14 @@ async function handleRequestResolved(
         senderId: agentId,
         streaming: true,
       });
+
+      // KAI-234: If this dispatch was superseded while createMessage was
+      // in-flight, cancel the orphaned streaming message and bail out.
+      if (isSuperseded(dispatchId)) {
+        await client.cancelMessage(streamingMsg.id).catch(() => {});
+        return;
+      }
+
       initStream(dispatchId, chatId, streamingMsg.id, agentId);
 
       const account = resolveOpenGramAccount(cfg);
