@@ -54,10 +54,6 @@ export default function InboxV2Layout() {
     if (isSearchOpen) searchInputRef.current?.focus();
   }, [isSearchOpen]);
 
-  const loadPendingSummary = useCallback(async () => {
-    await apiFetch('/api/v1/chats/pending-summary?archived=false', { cache: 'no-store' });
-  }, []);
-
   const loadUnreadSummary = useCallback(async () => {
     const response = await apiFetch('/api/v1/chats/unread-summary?archived=false', { cache: 'no-store' });
     if (!response.ok) return;
@@ -66,15 +62,11 @@ export default function InboxV2Layout() {
     setUnreadByAgent(payload.unread_by_agent ?? {});
   }, []);
 
-  const loadExtras = useCallback(async () => {
-    await Promise.all([loadPendingSummary(), loadUnreadSummary()]);
-  }, [loadPendingSummary, loadUnreadSummary]);
-
   const chatList = useChatList({
     archived: false,
     chatsErrorMessage: 'Failed to load inbox data.',
-    onRefreshExtras: loadExtras,
-    onMutationSuccess: loadExtras,
+    onRefreshExtras: loadUnreadSummary,
+    onMutationSuccess: loadUnreadSummary,
   });
 
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());

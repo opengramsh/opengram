@@ -68,6 +68,7 @@ function ChatV2RequestWidgetSection() {
   return (
     <ChatRequestWidget
       chatLoaded={Boolean(chat.chat)}
+      keyboardOffset={chat.keyboardOffset}
       pendingRequests={chat.pendingRequests}
       isRequestWidgetOpen={chat.isRequestWidgetOpen}
       requestDrafts={chat.requestDrafts}
@@ -110,6 +111,7 @@ function ChatV2ComposerSection() {
       removePendingAttachment={chat.removePendingAttachment}
       onModelChange={async () => {}}
       onCameraCapture={() => chat.setIsCameraOpen(true)}
+      keyboardOffset={chat.keyboardOffset}
     />
   );
 }

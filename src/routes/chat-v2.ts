@@ -18,9 +18,19 @@ const chatV2 = new Hono();
 
 const TIMEOUT_MS = 120_000;
 const TEXT_PART_ID = 'text-0';
+const CHAT_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 function sseChunk(data: Record<string, unknown>): string {
   return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+async function writeSequence(
+  s: { write: (data: string) => Promise<void> },
+  chunks: string[],
+): Promise<void> {
+  for (const chunk of chunks) {
+    await s.write(chunk);
+  }
 }
 
 // POST /api/v2/chats/:chatId/stream
@@ -29,6 +39,11 @@ chatV2.post('/:chatId/stream', async (c) => {
   try {
     applyWriteMiddlewares(c.req.raw);
     const chatId = c.req.param('chatId');
+
+    // Validate chatId format
+    if (!CHAT_ID_RE.test(chatId)) {
+      return c.json({ error: 'Invalid chat ID format' }, 400);
+    }
 
     // Validate chat exists
     const db = getDb();
@@ -45,18 +60,6 @@ chatV2.post('/:chatId/stream', async (c) => {
       return c.json({ error: 'Message content or attachments required' }, 400);
     }
 
-    // Create user message
-    const userMessage = createMessage(chatId, {
-      role: 'user',
-      senderId: 'user:primary',
-      content: body.message?.trim() || '',
-      streaming: false,
-      modelId: body.modelId,
-      ...(body.attachmentIds?.length
-        ? { trace: { mediaIds: body.attachmentIds } }
-        : {}),
-    });
-
     // Set AI SDK v6 UIMessage stream SSE headers
     c.header('Content-Type', 'text/event-stream; charset=utf-8');
     c.header('Cache-Control', 'no-cache');
@@ -67,118 +70,133 @@ chatV2.post('/:chatId/stream', async (c) => {
     return stream(c, async (s) => {
       let agentMessageId: string | null = null;
       let completed = false;
-      let timedOut = false;
+      let resolveStream: (() => void) | null = null;
+      let timeoutHandle: ReturnType<typeof setTimeout>;
 
-      const timeoutHandle = setTimeout(() => {
-        timedOut = true;
-      }, TIMEOUT_MS);
+      const finish = () => {
+        if (!resolveStream) return;
+        const fn = resolveStream;
+        resolveStream = null;
+        clearTimeout(timeoutHandle);
+        unsubscribe();
+        fn();
+      };
 
-      await new Promise<void>((resolve) => {
-        const finish = () => {
-          clearTimeout(timeoutHandle);
-          resolve();
-        };
+      // Subscribe BEFORE creating the message to avoid race condition
+      // where agent responds between message creation and subscription
+      const unsubscribe = subscribeToEvents(true, (event: EventEnvelope) => {
+        if (completed) return;
 
-        const unsubscribe = subscribeToEvents(true, (event: EventEnvelope) => {
-          if (completed || timedOut) {
-            unsubscribe();
-            finish();
-            return;
+        const payload = event.payload;
+
+        // Watch for agent message creation in this chat
+        if (event.type === 'message.created' && payload.chatId === chatId) {
+          if (payload.role === 'agent' && payload.streamState === 'streaming') {
+            agentMessageId = payload.messageId as string;
+            void writeSequence(s, [
+              sseChunk({ type: 'start' }),
+              sseChunk({ type: 'start-step' }),
+              sseChunk({ type: 'text-start', id: TEXT_PART_ID }),
+            ]);
           }
 
-          const payload = event.payload;
-
-          // Watch for agent message creation in this chat
-          if (event.type === 'message.created' && payload.chatId === chatId) {
-            if (payload.role === 'agent' && payload.streamState === 'streaming') {
-              agentMessageId = payload.messageId as string;
-              // Emit start + start-step + text-start
-              void s.write(sseChunk({ type: 'start' }));
-              void s.write(sseChunk({ type: 'start-step' }));
-              void s.write(sseChunk({ type: 'text-start', id: TEXT_PART_ID }));
-            }
-
-            // Non-streaming agent message (already complete)
-            if (
-              payload.role === 'agent' &&
-              payload.streamState !== 'streaming'
-            ) {
-              const content = (payload.contentFinal as string) || '';
-              completed = true;
-              void s.write(sseChunk({ type: 'start' }));
-              void s.write(sseChunk({ type: 'start-step' }));
-              void s.write(sseChunk({ type: 'text-start', id: TEXT_PART_ID }));
-              if (content) {
-                void s.write(sseChunk({ type: 'text-delta', delta: content, id: TEXT_PART_ID }));
-              }
-              void s.write(sseChunk({ type: 'text-end', id: TEXT_PART_ID }));
-              void s.write(sseChunk({ type: 'finish-step' }));
-              void s.write(sseChunk({ type: 'finish', finishReason: 'stop' }));
-              void s.write('data: [DONE]\n\n');
-              unsubscribe();
-              finish();
-            }
-          }
-
-          // Stream chunks from the agent message
-          if (
-            event.type === 'message.streaming.chunk' &&
-            agentMessageId &&
-            payload.messageId === agentMessageId
-          ) {
-            const delta = payload.deltaText as string;
-            if (delta) {
-              void s.write(sseChunk({ type: 'text-delta', delta, id: TEXT_PART_ID }));
-            }
-          }
-
-          // Complete when streaming is done
-          if (
-            event.type === 'message.streaming.complete' &&
-            agentMessageId &&
-            payload.messageId === agentMessageId
-          ) {
+          // Non-streaming agent message (already complete)
+          if (payload.role === 'agent' && payload.streamState !== 'streaming') {
+            const content = (payload.contentFinal as string) || '';
             completed = true;
-            void s.write(sseChunk({ type: 'text-end', id: TEXT_PART_ID }));
-            void s.write(sseChunk({ type: 'finish-step' }));
-            void s.write(sseChunk({ type: 'finish', finishReason: 'stop' }));
-            void s.write('data: [DONE]\n\n');
-            unsubscribe();
-            finish();
-          }
-        });
-
-        // Handle timeout
-        const checkTimeout = setInterval(() => {
-          if (timedOut) {
-            clearInterval(checkTimeout);
-            if (!completed) {
-              completed = true;
-              // If we started a text stream, close it
-              if (agentMessageId) {
-                void s.write(sseChunk({ type: 'text-end', id: TEXT_PART_ID }));
-                void s.write(sseChunk({ type: 'finish-step' }));
-              }
-              void s.write(sseChunk({ type: 'finish', finishReason: 'error' }));
-              void s.write('data: [DONE]\n\n');
-              unsubscribe();
-              finish();
+            const chunks = [
+              sseChunk({ type: 'start' }),
+              sseChunk({ type: 'start-step' }),
+              sseChunk({ type: 'text-start', id: TEXT_PART_ID }),
+            ];
+            if (content) {
+              chunks.push(sseChunk({ type: 'text-delta', delta: content, id: TEXT_PART_ID }));
             }
+            chunks.push(
+              sseChunk({ type: 'text-end', id: TEXT_PART_ID }),
+              sseChunk({ type: 'finish-step' }),
+              sseChunk({ type: 'finish', finishReason: 'stop' }),
+              'data: [DONE]\n\n',
+            );
+            void writeSequence(s, chunks).then(finish);
           }
-        }, 1000);
+        }
+
+        // Stream chunks from the agent message
+        if (
+          event.type === 'message.streaming.chunk' &&
+          agentMessageId &&
+          payload.messageId === agentMessageId
+        ) {
+          const delta = payload.deltaText as string;
+          if (delta) {
+            void s.write(sseChunk({ type: 'text-delta', delta, id: TEXT_PART_ID }));
+          }
+        }
+
+        // Complete when streaming is done
+        if (
+          event.type === 'message.streaming.complete' &&
+          agentMessageId &&
+          payload.messageId === agentMessageId
+        ) {
+          completed = true;
+          void writeSequence(s, [
+            sseChunk({ type: 'text-end', id: TEXT_PART_ID }),
+            sseChunk({ type: 'finish-step' }),
+            sseChunk({ type: 'finish', finishReason: 'stop' }),
+            'data: [DONE]\n\n',
+          ]).then(finish);
+        }
+      });
+
+      // Now create the user message (triggers agent processing)
+      createMessage(chatId, {
+        role: 'user',
+        senderId: 'user:primary',
+        content: body.message?.trim() || '',
+        streaming: false,
+        modelId: body.modelId,
+        ...(body.attachmentIds?.length
+          ? { trace: { mediaIds: body.attachmentIds } }
+          : {}),
+      });
+
+      // Wait for completion, timeout, or disconnect
+      await new Promise<void>((resolve) => {
+        resolveStream = resolve;
+
+        // Timeout: resolve directly from setTimeout callback (no polling)
+        timeoutHandle = setTimeout(() => {
+          if (completed) return;
+          completed = true;
+          const chunks: string[] = [];
+          if (agentMessageId) {
+            chunks.push(
+              sseChunk({ type: 'text-end', id: TEXT_PART_ID }),
+              sseChunk({ type: 'finish-step' }),
+            );
+          }
+          chunks.push(
+            sseChunk({ type: 'finish', finishReason: 'error' }),
+            'data: [DONE]\n\n',
+          );
+          void writeSequence(s, chunks).then(finish);
+        }, TIMEOUT_MS);
 
         // Handle client disconnect
         c.req.raw.signal.addEventListener(
           'abort',
           () => {
-            clearTimeout(timeoutHandle);
-            clearInterval(checkTimeout);
-            unsubscribe();
-            resolve();
+            completed = true;
+            finish();
           },
           { once: true },
         );
       });
+
+      // Safety: ensure unsubscribe on any exit path
+      unsubscribe();
     });
   } catch (error) {
     console.error('ChatV2 stream error:', error);

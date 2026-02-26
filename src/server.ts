@@ -51,7 +51,7 @@ const compressionMiddleware = compress();
 
 // Global middleware
 app.use(async (c, next) => {
-  if (c.req.path === "/api/v1/events/stream" || c.req.path.endsWith("/stream")) {
+  if (c.req.path === "/api/v1/events/stream" || (c.req.path.startsWith("/api/v2/chats/") && c.req.path.endsWith("/stream"))) {
     await next();
     return;
   }

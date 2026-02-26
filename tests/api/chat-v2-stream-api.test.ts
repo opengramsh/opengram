@@ -82,6 +82,19 @@ afterEach(() => {
 });
 
 describe('v2 chat stream API', () => {
+  it('returns 400 for malformed chatId', async () => {
+    const longId = 'a'.repeat(65);
+    const response = await app.request(`/api/v2/chats/${longId}/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'hello' }),
+    });
+
+    expect(response.status).toBe(400);
+    const json = (await response.json()) as { error: string };
+    expect(json.error).toBe('Invalid chat ID format');
+  });
+
   it('returns 404 for non-existent chat', async () => {
     const response = await app.request('/api/v2/chats/nonexistent/stream', {
       method: 'POST',

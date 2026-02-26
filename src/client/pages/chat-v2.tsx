@@ -33,7 +33,7 @@ export default function ChatV2Page() {
 
   return (
     <ChatV2PageProvider key={chatId} chatId={chatId} initialChat={initialChat}>
-      <div className="flex w-full flex-col overflow-hidden bg-background" style={{ height: 'var(--app-height, 100dvh)' }}>
+      <div className="flex h-[100dvh] w-full flex-col bg-background">
         <ChatV2PageSections />
       </div>
     </ChatV2PageProvider>
