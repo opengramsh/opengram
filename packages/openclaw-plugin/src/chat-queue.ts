@@ -71,8 +71,9 @@ export function enqueueOrSupersede(
     // Cancel all plugin-side streams for this chat.
     cancelAllStreamsForChat(client, chatId);
 
-    // Also cancel server-side streaming messages as a safety net.
-    void client.cancelStreamingMessagesForChat(chatId).catch(() => {});
+    // Do not bulk-cancel server-side chat streams here.
+    // That async request can race with the newly winning dispatch's eager
+    // stream creation and cancel the winner's message.
 
     // Clear the previous dispatch's watchdog timer.
     const prevTimer = stuckTimers.get(chatId);

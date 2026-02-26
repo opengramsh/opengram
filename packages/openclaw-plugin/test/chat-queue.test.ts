@@ -85,7 +85,7 @@ describe("chat-queue", () => {
       resolveFirst();
     });
 
-    it("calls cancelStreamingMessagesForChat on server when superseding", async () => {
+    it("does not bulk-cancel server-side chat streams when superseding", async () => {
       const client = createMockClient();
       let resolveFirst!: () => void;
       const firstPromise = new Promise<void>((r) => { resolveFirst = r; });
@@ -94,7 +94,7 @@ describe("chat-queue", () => {
 
       enqueueOrSupersede("chat-1", "d-2", async () => {}, client);
 
-      expect(client.cancelStreamingMessagesForChat).toHaveBeenCalledWith("chat-1");
+      expect(client.cancelStreamingMessagesForChat).not.toHaveBeenCalled();
 
       resolveFirst();
     });

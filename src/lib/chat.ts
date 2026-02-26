@@ -98,27 +98,34 @@ export function applyStreamingComplete<T extends RealtimeMessage>(
   streamState: 'complete' | 'cancelled' = 'complete',
 ): T[] {
   let updated = false;
-  const next = messages.map((message) => {
+  const next: T[] = [];
+
+  for (const message of messages) {
     if (message.id !== messageId) {
-      return message;
+      next.push(message);
+      continue;
     }
 
     updated = true;
     if (streamState === 'cancelled') {
-      return {
-        ...message,
-        stream_state: 'cancelled',
-      };
+      const hasText = Boolean(message.content_final?.trim() || message.content_partial?.trim());
+      if (hasText) {
+        next.push({
+          ...message,
+          stream_state: 'cancelled',
+        });
+      }
+      continue;
     }
 
     const contentFinal = finalText ?? message.content_partial ?? message.content_final;
-    return {
+    next.push({
       ...message,
       content_final: contentFinal,
       content_partial: null,
       stream_state: 'complete',
-    };
-  });
+    });
+  }
 
   return updated ? next : messages;
 }

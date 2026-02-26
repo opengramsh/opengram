@@ -607,18 +607,21 @@ function buildDeliver(
     }
 
     if (kind === "final") {
-      if (replyPayload.text) {
-        const wasStreaming = await finalizeStream(client, dispatchId, replyPayload.text);
-        if (!wasStreaming) {
+      const hasTextField = typeof replyPayload.text === "string";
+      const normalizedFinalText = hasTextField && replyPayload.text.trim() ? replyPayload.text : undefined;
+
+      if (hasTextField) {
+        const wasStreaming = await finalizeStream(client, dispatchId, normalizedFinalText);
+        if (!wasStreaming && normalizedFinalText) {
           // No active stream — send as a normal message.
           await client.createMessage(chatId, {
             role: "agent",
             senderId: agentId,
-            content: replyPayload.text,
+            content: normalizedFinalText,
           });
         }
       } else {
-        // No text in final reply (media-only or empty) — cancel the eager stream.
+        // Media-only final reply — cancel the eager stream.
         cancelStream(client, dispatchId);
       }
       if (replyPayload.mediaUrl) {

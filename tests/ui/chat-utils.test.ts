@@ -92,6 +92,23 @@ describe('chat utils', () => {
     expect(cancelled[0]?.stream_state).toBe('cancelled');
   });
 
+  it('drops cancelled streaming message when it has no text', () => {
+    const initial = [
+      {
+        id: 'm1',
+        role: 'agent' as const,
+        sender_id: 'agent-default',
+        created_at: '2026-02-18T10:00:00.000Z',
+        content_final: null,
+        content_partial: '',
+        stream_state: 'streaming' as const,
+      },
+    ];
+
+    const cancelled = applyStreamingComplete(initial, 'm1', undefined, 'cancelled');
+    expect(cancelled).toEqual([]);
+  });
+
   it('returns same reference when chunk targets an unknown message', () => {
     const initial = [
       {
