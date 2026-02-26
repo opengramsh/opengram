@@ -248,6 +248,31 @@ describe("streaming", () => {
       expect(hasActiveStream("dispatch-pre")).toBe(false);
     });
 
+    it("cancels an eager stream when final text is omitted and no blocks were streamed", async () => {
+      const client = createMockClient();
+
+      initStream("dispatch-empty", "chat-1", "msg-eager-empty", "grami");
+      const result = await finalizeStream(client, "dispatch-empty");
+
+      expect(result).toBe(true);
+      expect(client.cancelMessage).toHaveBeenCalledWith("msg-eager-empty");
+      expect(client.completeMessage).not.toHaveBeenCalled();
+      expect(hasActiveStream("dispatch-empty")).toBe(false);
+    });
+
+    it("completes from partial content when final text is omitted after blocks", async () => {
+      const client = createMockClient();
+
+      initStream("dispatch-partial", "chat-1", "msg-eager-partial", "grami");
+      await handleBlockReply(client, "chat-1", "grami", "dispatch-partial", { text: "Partial" });
+      const result = await finalizeStream(client, "dispatch-partial");
+
+      expect(result).toBe(true);
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-eager-partial");
+      expect(client.cancelMessage).not.toHaveBeenCalledWith("msg-eager-partial");
+      expect(hasActiveStream("dispatch-partial")).toBe(false);
+    });
+
     it("allows cancelStream without any blocks", () => {
       const client = createMockClient();
 

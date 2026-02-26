@@ -57,30 +57,41 @@ export async function handleBlockReply(
 
 /**
  * Called when the agent reply is finalized (from deliver(kind: "final")).
- * Completes the streaming message with final text.
+ * Completes the streaming message with final text, or (when no final text is
+ * provided) finalizes from streamed chunks.
  *
  * @returns true if a stream was active and completed, false if no stream existed.
  */
 export async function finalizeStream(
   client: OpenGramClient,
   dispatchId: string,
-  finalText: string,
+  finalText?: string,
 ): Promise<boolean> {
   const stream = activeStreams.get(dispatchId);
   if (!stream) return false;
 
   try {
-    await client.completeMessage(stream.messageId, finalText);
+    if (finalText === undefined) {
+      if (stream.lastSentLength > 0) {
+        await client.completeMessage(stream.messageId);
+      } else {
+        await client.cancelMessage(stream.messageId);
+      }
+    } else {
+      await client.completeMessage(stream.messageId, finalText);
+    }
   } catch {
     // completeMessage can fail with 409 Conflict when the OpenGram server's
     // stale-streaming sweeper has already cancelled the message (e.g. no chunks
     // sent for >60s during extended thinking). Fall back to a regular message
     // so the reply text is not lost.
-    await client.createMessage(stream.chatId, {
-      role: "agent",
-      senderId: stream.agentId,
-      content: finalText,
-    });
+    if (finalText && finalText.trim()) {
+      await client.createMessage(stream.chatId, {
+        role: "agent",
+        senderId: stream.agentId,
+        content: finalText,
+      });
+    }
   }
   activeStreams.delete(dispatchId);
   return true;

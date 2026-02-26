@@ -172,6 +172,52 @@ describe("inbound deliver integration", () => {
       abortController.abort();
     });
 
+    it("keeps streamed block content when final payload text is empty", async () => {
+      const client = createMockClient();
+      await initializeChatManager(client, baseCfg);
+
+      let capturedDeliver!: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
+
+      const dispatch: DispatchFn = ({ deliver }) => {
+        capturedDeliver = deliver;
+      };
+
+      const mockEs = createMockEventSource();
+      (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+      const abortController = new AbortController();
+      startInboundListener({
+        client,
+        cfg: baseCfg,
+        abortSignal: abortController.signal,
+        reconnectDelayMs: 100,
+        dispatch,
+      });
+
+      mockEs.triggerMessage({
+        id: "evt-2b",
+        type: "message.created",
+        payload: {
+          chatId: "chat-1",
+          messageId: "user-msg-2b",
+          role: "user",
+          content: "Quick question",
+          senderId: "user:primary",
+        },
+      });
+
+      await vi.waitFor(() => expect(capturedDeliver).toBeDefined());
+
+      await capturedDeliver({ text: "Partial answer from blocks" }, { kind: "block" });
+      await capturedDeliver({ text: "" }, { kind: "final" });
+
+      // Empty final text should finalize from accumulated partial content.
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-1");
+      expect(client.cancelMessage).not.toHaveBeenCalledWith("msg-1");
+
+      abortController.abort();
+    });
+
     it("sends tool messages as role=tool", async () => {
       const client = createMockClient();
       await initializeChatManager(client, baseCfg);
