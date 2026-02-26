@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { setActiveChatId } from '@/app/chats/[chatId]/_lib/active-chat-idb';
 import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { apiFetch } from '@/src/lib/api-fetch';
-import { applyKeyboardCssVars, subscribeToKeyboardLayout } from '@/src/lib/keyboard-layout';
+import { subscribeToKeyboardLayout } from '@/src/lib/keyboard-layout';
 import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
 import {
   applyStreamingChunk,
@@ -26,7 +26,6 @@ export function useChatPageEffects(data: ChatPageData) {
   const titleTypingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshMediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyboardOffsetRef = useRef(0);
-  const viewportHeightRef = useRef(0);
   const {
     chat,
     chatId,
@@ -394,22 +393,16 @@ export function useChatPageEffects(data: ChatPageData) {
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToKeyboardLayout(window, document, ({ keyboardOffset, visualViewportHeight }) => {
+    const unsubscribe = subscribeToKeyboardLayout(window, document, ({ keyboardOffset }) => {
       const feed = feedRef.current;
       const nearBottom = feed
         ? (feed.scrollHeight - feed.scrollTop - feed.clientHeight) <= 80
         : false;
 
-      if (visualViewportHeight !== viewportHeightRef.current) {
-        viewportHeightRef.current = visualViewportHeight;
-      }
-
       if (keyboardOffset !== keyboardOffsetRef.current) {
         keyboardOffsetRef.current = keyboardOffset;
         setKeyboardOffset(keyboardOffset);
       }
-
-      applyKeyboardCssVars(document.documentElement, { keyboardOffset, visualViewportHeight });
 
       if (nearBottom) {
         window.requestAnimationFrame(() => {

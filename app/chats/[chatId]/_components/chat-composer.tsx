@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useEffect, useState } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
 
 import { isTouchDevice } from '@/src/lib/utils';
@@ -72,48 +72,67 @@ export function ChatComposer({
   onCameraCapture,
   keyboardOffset,
 }: ChatComposerProps) {
-  const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const footerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const restoreManagedTabIndexes = () => {
-      const managed = document.querySelectorAll<HTMLElement>('[data-composer-managed-tabindex="true"]');
-      for (const el of managed) {
-        const previous = el.getAttribute('data-composer-prev-tabindex');
-        if (previous === '__none__') {
-          el.removeAttribute('tabindex');
-        } else if (previous) {
-          el.setAttribute('tabindex', previous);
-        }
-        el.removeAttribute('data-composer-prev-tabindex');
-        el.removeAttribute('data-composer-managed-tabindex');
-      }
-    };
-
-    if (!isComposerFocused) {
-      restoreManagedTabIndexes();
-      return;
-    }
-
+    const managed = new Map<HTMLElement, string | null>();
     const focusableInputs = document.querySelectorAll<HTMLElement>('input, textarea, select, [contenteditable="true"]');
     for (const element of focusableInputs) {
       if (element.closest('[data-chat-composer-root="true"]')) {
         continue;
       }
 
-      const existingTabIndex = element.getAttribute('tabindex');
-      element.setAttribute('data-composer-prev-tabindex', existingTabIndex ?? '__none__');
-      element.setAttribute('data-composer-managed-tabindex', 'true');
+      managed.set(element, element.getAttribute('tabindex'));
       element.setAttribute('tabindex', '-1');
     }
 
     return () => {
-      restoreManagedTabIndexes();
+      for (const [element, previousTabIndex] of managed.entries()) {
+        if (previousTabIndex === null) {
+          element.removeAttribute('tabindex');
+          continue;
+        }
+
+        element.setAttribute('tabindex', previousTabIndex);
+      }
     };
-  }, [isComposerFocused]);
+  }, []);
+
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) {
+      return;
+    }
+
+    const root = document.documentElement;
+    const updateComposerHeight = () => {
+      const composerHeight = Math.max(0, Math.ceil(footer.getBoundingClientRect().height));
+      root.style.setProperty('--composer-height', `${composerHeight}px`);
+    };
+
+    updateComposerHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        root.style.removeProperty('--composer-height');
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateComposerHeight();
+    });
+    observer.observe(footer);
+
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--composer-height');
+    };
+  }, []);
 
   return (
     <>
       <footer
+        ref={footerRef}
         data-chat-composer-root="true"
         className="liquid-glass fixed inset-x-0 z-40 w-full px-3 pt-3"
         style={{
@@ -218,8 +237,6 @@ export function ChatComposer({
               inputMode="text"
               enterKeyHint="send"
               className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
-              onFocus={() => setIsComposerFocused(true)}
-              onBlur={() => setIsComposerFocused(false)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !isTouchDevice() && (composerText.trim() || pendingAttachments.length > 0)) {
                   event.preventDefault();

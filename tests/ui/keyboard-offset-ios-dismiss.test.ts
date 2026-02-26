@@ -54,17 +54,17 @@ function createMockVisualViewport(overrides: { height: number; offsetTop?: numbe
 
 describe('KAI-218: keyboard offset calculation', () => {
   it('computes non-zero offset when keyboard is open', () => {
-    const layout = calculateKeyboardLayout(852, 512, 0, 0);
+    const layout = calculateKeyboardLayout(852, 512);
     expect(layout.keyboardOffset).toBe(340);
   });
 
   it('computes zero offset when keyboard is dismissed and viewport is full', () => {
-    const layout = calculateKeyboardLayout(852, 852, 0, 0);
+    const layout = calculateKeyboardLayout(852, 852);
     expect(layout.keyboardOffset).toBe(0);
   });
 
   it('computes zero when viewport height exceeds innerHeight (iOS edge case)', () => {
-    const layout = calculateKeyboardLayout(852, 900, 0, 0);
+    const layout = calculateKeyboardLayout(852, 900);
     expect(layout.keyboardOffset).toBe(0);
   });
 });
