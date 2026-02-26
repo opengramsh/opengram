@@ -109,6 +109,25 @@ body {
   }
 }
 
+/*
+ * iOS keyboard safe-area workaround (WebKit bug #217754).
+ * env(safe-area-inset-bottom) does NOT update when the virtual keyboard opens,
+ * creating a ~34px gap above the keyboard. We only apply safe-area padding when
+ * no text input is focused (i.e. keyboard is closed).
+ */
+.kbd-safe-pb {
+  padding-bottom: 12px;
+}
+:root:not(
+  :has(
+    input:focus-visible,
+    textarea:focus-visible,
+    [contenteditable]:focus-visible
+  )
+) .kbd-safe-pb {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
 @keyframes typing-dot {
   0%, 60%, 100% { transform: translateY(0); }
   30% { transform: translateY(-4px); }

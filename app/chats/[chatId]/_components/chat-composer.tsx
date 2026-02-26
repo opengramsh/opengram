@@ -74,26 +74,53 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const footerRef = useRef<HTMLElement | null>(null);
 
+  /*
+   * iOS Form Navigation Bar suppression.
+   * The ↑↓ arrows appear when iOS detects multiple tabbable form elements.
+   * We set tabindex=-1 on every focusable input outside the composer, and use
+   * a MutationObserver to catch elements that mount after the composer (e.g.
+   * request widget <select>, dynamically rendered inputs).
+   */
   useEffect(() => {
+    const FOCUSABLE = 'input, textarea, select, [contenteditable="true"]';
     const managed = new Map<HTMLElement, string | null>();
-    const focusableInputs = document.querySelectorAll<HTMLElement>('input, textarea, select, [contenteditable="true"]');
-    for (const element of focusableInputs) {
-      if (element.closest('[data-chat-composer-root="true"]')) {
-        continue;
-      }
 
-      managed.set(element, element.getAttribute('tabindex'));
-      element.setAttribute('tabindex', '-1');
+    const suppress = (el: HTMLElement) => {
+      if (el.closest('[data-chat-composer-root="true"]')) return;
+      if (managed.has(el)) return;
+      managed.set(el, el.getAttribute('tabindex'));
+      el.setAttribute('tabindex', '-1');
+    };
+
+    // Initial sweep
+    for (const el of document.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+      suppress(el);
     }
 
+    // Watch for dynamically added inputs
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          // Check the node itself
+          if (node.matches(FOCUSABLE)) suppress(node);
+          // Check descendants
+          for (const child of node.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+            suppress(child);
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
     return () => {
+      observer.disconnect();
       for (const [element, previousTabIndex] of managed.entries()) {
         if (previousTabIndex === null) {
           element.removeAttribute('tabindex');
-          continue;
+        } else {
+          element.setAttribute('tabindex', previousTabIndex);
         }
-
-        element.setAttribute('tabindex', previousTabIndex);
       }
     };
   }, []);
@@ -134,10 +161,9 @@ export function ChatComposer({
       <footer
         ref={footerRef}
         data-chat-composer-root="true"
-        className="liquid-glass fixed inset-x-0 z-40 w-full px-3 pt-3"
+        className="liquid-glass kbd-safe-pb fixed inset-x-0 z-40 w-full px-3 pt-3"
         style={{
           bottom: `${keyboardOffset}px`,
-          paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px))`,
         }}
       >
         {!isRecording && pendingAttachments.length > 0 && (
