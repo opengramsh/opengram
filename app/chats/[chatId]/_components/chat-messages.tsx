@@ -151,6 +151,17 @@ export function ChatMessages({
   setViewerMediaId,
   setPreviewFileId,
 }: ChatMessagesProps) {
+  const visibleMessages = messages.filter((message) => {
+    const attachments = inlineMessageMedia.get(message.id) ?? [];
+    if (attachments.length > 0) {
+      return true;
+    }
+    if (message.stream_state === 'streaming') {
+      return true;
+    }
+    return Boolean(message.content_final?.trim() || message.content_partial?.trim());
+  });
+
   return (
     <main
       ref={feedRef}
@@ -160,15 +171,15 @@ export function ChatMessages({
       {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
       {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}
 
-      {!loading && !error && messagesLoading && messages.length === 0 && <MessageSkeletons />}
+      {!loading && !error && messagesLoading && visibleMessages.length === 0 && <MessageSkeletons />}
 
-      {!loading && !error && !messagesLoading && messages.length === 0 && (
+      {!loading && !error && !messagesLoading && visibleMessages.length === 0 && (
         <p className="px-2 py-6 text-sm text-muted-foreground">No messages yet.</p>
       )}
 
       {!loading &&
         !error &&
-        messages.map((message) => {
+        visibleMessages.map((message) => {
           const attachments = inlineMessageMedia.get(message.id) ?? [];
           const imageItems = attachments.filter((item) => item.kind === 'image');
           const audioItems = attachments.filter((item) => item.kind === 'audio');
