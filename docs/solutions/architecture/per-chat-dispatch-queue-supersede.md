@@ -3,7 +3,7 @@ title: "Per-chat dispatch queue with supersede pattern"
 category: architecture
 tags: [openclaw, dispatch, streaming, supersede, chat-queue, concurrency]
 date: 2026-02-26
-task: KAI-232
+task: KAI-230
 ---
 
 # Per-Chat Dispatch Queue with Supersede Pattern
@@ -54,6 +54,27 @@ export function markSuperseded(dispatchId: string): void {
 ### Why separate `latestDispatches` from `activeCleanups`?
 
 `latestDispatches` persists after a dispatch completes (needed for late-delivery detection). `activeCleanups` is cleared when the dispatch finishes (cleanup is only meaningful while the dispatch is running).
+
+### Why use a monotonic counter for dispatchId instead of Date.now()?
+
+`Date.now()` can produce duplicate IDs if two messages for the same chat arrive within the same millisecond, causing the second dispatch to supersede itself. A module-level `++dispatchSeq` counter guarantees uniqueness within the process:
+
+```ts
+let dispatchSeq = 0;
+const dispatchId = `${chatId}:${++dispatchSeq}`;
+```
+
+### Why add a stuck-dispatch watchdog timer?
+
+If an SDK dispatch hangs indefinitely and no new message supersedes it, the `activeCleanups` and `latestDispatches` entries persist forever. A 5-minute watchdog timer force-cleans stuck dispatches:
+
+```ts
+const watchdog = setTimeout(() => {
+  // force-clean: call cleanup, delete from activeCleanups + latestDispatches
+}, STUCK_DISPATCH_TIMEOUT_MS);
+```
+
+The timer is cleared on normal completion (`finishDispatch`) and on supersede (replaced by the new dispatch's watchdog).
 
 ## Server-side bulk cancel endpoint
 
