@@ -16,7 +16,6 @@ type ChatMessagesProps = {
   error: string | null;
   messages: Message[];
   inlineMessageMedia: Map<string, MediaItem[]>;
-  keyboardOffset: number;
   pendingReply: boolean;
   setViewerMediaId: (id: string) => void;
   setPreviewFileId: (id: string | null) => void;
@@ -146,7 +145,6 @@ export function ChatMessages({
   error,
   messages,
   inlineMessageMedia,
-  keyboardOffset,
   pendingReply,
   setViewerMediaId,
   setPreviewFileId,
@@ -155,7 +153,7 @@ export function ChatMessages({
     <main
       ref={feedRef}
       className="flex-1 overflow-y-auto px-3 pt-3"
-      style={{ paddingBottom: `calc(170px + ${keyboardOffset}px)` }}
+      style={{ paddingBottom: 'calc(170px + env(safe-area-inset-bottom, 0px))' }}
     >
       {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
       {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}

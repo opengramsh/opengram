@@ -32,18 +32,28 @@ type UnreadSummaryPayload = {
 function useGlobalKeyboardReset() {
   useEffect(() => {
     const viewport = window.visualViewport;
-    if (!viewport) return;
+    if (!viewport) {
+      document.documentElement.style.setProperty('--visual-viewport-height', `${window.innerHeight}px`);
+      return;
+    }
 
-    const onResize = () => {
+    const updateLayoutVars = () => {
+      const viewportHeight = Math.max(0, viewport.height + viewport.offsetTop);
       const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      document.documentElement.style.setProperty('--visual-viewport-height', `${viewportHeight}px`);
+      document.documentElement.style.setProperty('--keyboard-offset', `${offset}px`);
       if (offset === 0) {
-        document.documentElement.style.setProperty('--keyboard-offset', '0px');
         window.scrollTo(0, 0);
       }
     };
 
-    viewport.addEventListener('resize', onResize);
-    return () => viewport.removeEventListener('resize', onResize);
+    updateLayoutVars();
+    viewport.addEventListener('resize', updateLayoutVars);
+    viewport.addEventListener('scroll', updateLayoutVars);
+    return () => {
+      viewport.removeEventListener('resize', updateLayoutVars);
+      viewport.removeEventListener('scroll', updateLayoutVars);
+    };
   }, []);
 }
 
@@ -356,7 +366,7 @@ export default function InboxLayout() {
   ]);
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-background">
+    <div className="flex w-full overflow-hidden bg-background" style={{ height: 'var(--visual-viewport-height, 100dvh)' }}>
       {/* Left sidebar: always visible on md+, only visible on mobile when no chat is selected */}
       <div
         className={cn(

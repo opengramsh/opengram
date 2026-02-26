@@ -24,6 +24,9 @@ export function useChatPageEffects(data: ChatPageData) {
   const typingExpiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTypingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshMediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keyboardLayoutRafRef = useRef<number | null>(null);
+  const keyboardOffsetRef = useRef(0);
+  const viewportHeightRef = useRef(0);
   const {
     chat,
     chatId,
@@ -38,6 +41,7 @@ export function useChatPageEffects(data: ChatPageData) {
     refreshPendingRequests,
     resetRecordingState,
     scrollToBottom,
+    feedRef,
     setIsLoadingTagSuggestions,
     setKeyboardOffset,
     setMessages,
@@ -392,15 +396,63 @@ export function useChatPageEffects(data: ChatPageData) {
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) {
+      document.documentElement.style.setProperty('--visual-viewport-height', `${window.innerHeight}px`);
       return;
     }
 
-    const updateOffset = () => {
-      const nextOffset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      setKeyboardOffset(nextOffset);
+    const readSafeAreaBottom = () => {
+      const probe = document.createElement('div');
+      probe.style.position = 'absolute';
+      probe.style.bottom = '0';
+      probe.style.visibility = 'hidden';
+      probe.style.pointerEvents = 'none';
+      probe.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)';
+      document.body.appendChild(probe);
+      const parsed = Number.parseFloat(window.getComputedStyle(probe).paddingBottom);
+      probe.remove();
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const updateLayout = () => {
+      const safeAreaBottom = readSafeAreaBottom();
+      const viewportHeight = Math.max(0, viewport.height + viewport.offsetTop);
+      const rawKeyboardOffset = window.innerHeight - viewport.height - viewport.offsetTop;
+      const nextOffset = Math.max(0, rawKeyboardOffset - safeAreaBottom);
+      const feed = feedRef.current;
+      const nearBottom = feed
+        ? (feed.scrollHeight - feed.scrollTop - feed.clientHeight) <= 80
+        : false;
+
+      if (viewportHeight !== viewportHeightRef.current) {
+        viewportHeightRef.current = viewportHeight;
+        document.documentElement.style.setProperty('--visual-viewport-height', `${viewportHeight}px`);
+      }
+
+      if (nextOffset !== keyboardOffsetRef.current) {
+        keyboardOffsetRef.current = nextOffset;
+        document.documentElement.style.setProperty('--keyboard-offset', `${nextOffset}px`);
+        setKeyboardOffset(nextOffset);
+      }
+
       if (nextOffset === 0) {
         window.scrollTo(0, 0);
       }
+
+      if (nearBottom) {
+        window.requestAnimationFrame(() => {
+          scrollToBottom();
+        });
+      }
+    };
+
+    const scheduleLayoutUpdate = () => {
+      if (keyboardLayoutRafRef.current !== null) {
+        return;
+      }
+      keyboardLayoutRafRef.current = window.requestAnimationFrame(() => {
+        keyboardLayoutRafRef.current = null;
+        updateLayout();
+      });
     };
 
     // iOS PWA sometimes fails to fire visualViewport resize when the keyboard
@@ -413,23 +465,27 @@ export function useChatPageEffects(data: ChatPageData) {
         focusoutTimer = null;
         const active = document.activeElement;
         if (!active || active === document.body || active === document.documentElement) {
-          updateOffset();
+          scheduleLayoutUpdate();
         }
       }, 300);
     };
 
-    updateOffset();
-    viewport.addEventListener('resize', updateOffset);
-    viewport.addEventListener('scroll', updateOffset);
+    scheduleLayoutUpdate();
+    viewport.addEventListener('resize', scheduleLayoutUpdate);
+    viewport.addEventListener('scroll', scheduleLayoutUpdate);
     window.addEventListener('focusout', handleFocusOut);
 
     return () => {
-      viewport.removeEventListener('resize', updateOffset);
-      viewport.removeEventListener('scroll', updateOffset);
+      viewport.removeEventListener('resize', scheduleLayoutUpdate);
+      viewport.removeEventListener('scroll', scheduleLayoutUpdate);
       window.removeEventListener('focusout', handleFocusOut);
       if (focusoutTimer) clearTimeout(focusoutTimer);
+      if (keyboardLayoutRafRef.current !== null) {
+        window.cancelAnimationFrame(keyboardLayoutRafRef.current);
+        keyboardLayoutRafRef.current = null;
+      }
     };
-  }, [setKeyboardOffset]);
+  }, [feedRef, scrollToBottom, setKeyboardOffset]);
 
   useEffect(() => {
     const handleTouchStart = (event: TouchEvent) => {

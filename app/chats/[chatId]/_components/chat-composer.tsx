@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useState } from 'react';
+import { type RefObject, useEffect, useState } from 'react';
 import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
 
 import { isTouchDevice } from '@/src/lib/utils';
@@ -72,9 +72,49 @@ export function ChatComposer({
   onCameraCapture,
   keyboardOffset,
 }: ChatComposerProps) {
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
+
+  useEffect(() => {
+    const restoreManagedTabIndexes = () => {
+      const managed = document.querySelectorAll<HTMLElement>('[data-composer-managed-tabindex="true"]');
+      for (const el of managed) {
+        const previous = el.getAttribute('data-composer-prev-tabindex');
+        if (previous === '__none__') {
+          el.removeAttribute('tabindex');
+        } else if (previous) {
+          el.setAttribute('tabindex', previous);
+        }
+        el.removeAttribute('data-composer-prev-tabindex');
+        el.removeAttribute('data-composer-managed-tabindex');
+      }
+    };
+
+    if (!isComposerFocused) {
+      restoreManagedTabIndexes();
+      return;
+    }
+
+    const focusableInputs = document.querySelectorAll<HTMLElement>('input, textarea, select, [contenteditable="true"]');
+    for (const element of focusableInputs) {
+      if (element.closest('[data-chat-composer-root="true"]')) {
+        continue;
+      }
+
+      const existingTabIndex = element.getAttribute('tabindex');
+      element.setAttribute('data-composer-prev-tabindex', existingTabIndex ?? '__none__');
+      element.setAttribute('data-composer-managed-tabindex', 'true');
+      element.setAttribute('tabindex', '-1');
+    }
+
+    return () => {
+      restoreManagedTabIndexes();
+    };
+  }, [isComposerFocused]);
+
   return (
     <>
       <footer
+        data-chat-composer-root="true"
         className="liquid-glass fixed inset-x-0 z-40 w-full px-3 pt-3"
         style={{
           bottom: `${keyboardOffset}px`,
@@ -174,7 +214,12 @@ export function ChatComposer({
               value={composerText}
               onChange={(event) => setComposerText(event.target.value)}
               placeholder="Message"
+              autoComplete="off"
+              inputMode="text"
+              enterKeyHint="send"
               className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
+              onFocus={() => setIsComposerFocused(true)}
+              onBlur={() => setIsComposerFocused(false)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !isTouchDevice() && (composerText.trim() || pendingAttachments.length > 0)) {
                   event.preventDefault();

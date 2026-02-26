@@ -235,7 +235,7 @@ export default function NewChatPage() {
   });
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-background">
+    <div className="flex w-full flex-col bg-background" style={{ height: 'var(--visual-viewport-height, 100dvh)' }}>
       {/* Header */}
       <header className="sticky top-0 z-30 h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
         <div className="flex items-center gap-3">
