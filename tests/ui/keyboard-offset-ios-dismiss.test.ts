@@ -148,11 +148,18 @@ describe('KAI-218: offset resets on focusout (missing — should FAIL)', () => {
       'app/chats/[chatId]/_hooks/use-chat-page-effects.ts',
       'utf-8',
     );
+    const keyboardLayoutSource = readFileSync(
+      'src/lib/keyboard-layout.ts',
+      'utf-8',
+    );
 
     // The effect should listen for focusout or blur to reset the offset.
     // This can be on window, document, or a specific element.
     const hasFocusOutReset =
-      source.includes('focusout') || source.includes("'blur'") || source.includes('"blur"');
+      source.includes('focusout') ||
+      keyboardLayoutSource.includes('focusout') ||
+      source.includes("'blur'") ||
+      source.includes('"blur"');
 
     expect(
       hasFocusOutReset,

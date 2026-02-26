@@ -14,6 +14,7 @@ import {
 import { cn } from "@/src/lib/utils";
 import { isSoundEnabled } from "@/src/lib/notification-preferences";
 import { playNotificationSound } from "@/src/lib/notification-sound";
+import { applyKeyboardCssVars, subscribeToKeyboardLayout } from "@/src/lib/keyboard-layout";
 
 function pendingLabel(total: number) {
   return total === 1 ? "1 pending request" : `${total} pending requests`;
@@ -31,29 +32,9 @@ type UnreadSummaryPayload = {
  */
 function useGlobalKeyboardReset() {
   useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) {
-      document.documentElement.style.setProperty('--visual-viewport-height', `${window.innerHeight}px`);
-      return;
-    }
-
-    const updateLayoutVars = () => {
-      const viewportHeight = Math.max(0, viewport.height + viewport.offsetTop);
-      const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      document.documentElement.style.setProperty('--visual-viewport-height', `${viewportHeight}px`);
-      document.documentElement.style.setProperty('--keyboard-offset', `${offset}px`);
-      if (offset === 0) {
-        window.scrollTo(0, 0);
-      }
-    };
-
-    updateLayoutVars();
-    viewport.addEventListener('resize', updateLayoutVars);
-    viewport.addEventListener('scroll', updateLayoutVars);
-    return () => {
-      viewport.removeEventListener('resize', updateLayoutVars);
-      viewport.removeEventListener('scroll', updateLayoutVars);
-    };
+    return subscribeToKeyboardLayout(window, document, (layout) => {
+      applyKeyboardCssVars(document.documentElement, layout);
+    });
   }, []);
 }
 

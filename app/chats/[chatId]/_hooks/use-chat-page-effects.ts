@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { setActiveChatId } from '@/app/chats/[chatId]/_lib/active-chat-idb';
 import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { apiFetch } from '@/src/lib/api-fetch';
+import { applyKeyboardCssVars, subscribeToKeyboardLayout } from '@/src/lib/keyboard-layout';
 import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
 import {
   applyStreamingChunk,
@@ -24,7 +25,6 @@ export function useChatPageEffects(data: ChatPageData) {
   const typingExpiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTypingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshMediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const keyboardLayoutRafRef = useRef<number | null>(null);
   const keyboardOffsetRef = useRef(0);
   const viewportHeightRef = useRef(0);
   const {
@@ -394,96 +394,32 @@ export function useChatPageEffects(data: ChatPageData) {
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) {
-      document.documentElement.style.setProperty('--visual-viewport-height', `${window.innerHeight}px`);
-      return;
-    }
-
-    const readSafeAreaBottom = () => {
-      const probe = document.createElement('div');
-      probe.style.position = 'absolute';
-      probe.style.bottom = '0';
-      probe.style.visibility = 'hidden';
-      probe.style.pointerEvents = 'none';
-      probe.style.paddingBottom = 'env(safe-area-inset-bottom, 0px)';
-      document.body.appendChild(probe);
-      const parsed = Number.parseFloat(window.getComputedStyle(probe).paddingBottom);
-      probe.remove();
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-
-    const updateLayout = () => {
-      const safeAreaBottom = readSafeAreaBottom();
-      const viewportHeight = Math.max(0, viewport.height + viewport.offsetTop);
-      const rawKeyboardOffset = window.innerHeight - viewport.height - viewport.offsetTop;
-      const nextOffset = Math.max(0, rawKeyboardOffset - safeAreaBottom);
+    const unsubscribe = subscribeToKeyboardLayout(window, document, ({ keyboardOffset, visualViewportHeight }) => {
       const feed = feedRef.current;
       const nearBottom = feed
         ? (feed.scrollHeight - feed.scrollTop - feed.clientHeight) <= 80
         : false;
 
-      if (viewportHeight !== viewportHeightRef.current) {
-        viewportHeightRef.current = viewportHeight;
-        document.documentElement.style.setProperty('--visual-viewport-height', `${viewportHeight}px`);
+      if (visualViewportHeight !== viewportHeightRef.current) {
+        viewportHeightRef.current = visualViewportHeight;
       }
 
-      if (nextOffset !== keyboardOffsetRef.current) {
-        keyboardOffsetRef.current = nextOffset;
-        document.documentElement.style.setProperty('--keyboard-offset', `${nextOffset}px`);
-        setKeyboardOffset(nextOffset);
+      if (keyboardOffset !== keyboardOffsetRef.current) {
+        keyboardOffsetRef.current = keyboardOffset;
+        setKeyboardOffset(keyboardOffset);
       }
 
-      if (nextOffset === 0) {
-        window.scrollTo(0, 0);
-      }
+      applyKeyboardCssVars(document.documentElement, { keyboardOffset, visualViewportHeight });
 
       if (nearBottom) {
         window.requestAnimationFrame(() => {
           scrollToBottom();
         });
       }
-    };
-
-    const scheduleLayoutUpdate = () => {
-      if (keyboardLayoutRafRef.current !== null) {
-        return;
-      }
-      keyboardLayoutRafRef.current = window.requestAnimationFrame(() => {
-        keyboardLayoutRafRef.current = null;
-        updateLayout();
-      });
-    };
-
-    // iOS PWA sometimes fails to fire visualViewport resize when the keyboard
-    // is dismissed. Listen for focusout as a fallback: if no input is focused
-    // after a short delay, recalculate (which yields 0 when keyboard is gone).
-    let focusoutTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleFocusOut = () => {
-      if (focusoutTimer) clearTimeout(focusoutTimer);
-      focusoutTimer = setTimeout(() => {
-        focusoutTimer = null;
-        const active = document.activeElement;
-        if (!active || active === document.body || active === document.documentElement) {
-          scheduleLayoutUpdate();
-        }
-      }, 300);
-    };
-
-    scheduleLayoutUpdate();
-    viewport.addEventListener('resize', scheduleLayoutUpdate);
-    viewport.addEventListener('scroll', scheduleLayoutUpdate);
-    window.addEventListener('focusout', handleFocusOut);
+    });
 
     return () => {
-      viewport.removeEventListener('resize', scheduleLayoutUpdate);
-      viewport.removeEventListener('scroll', scheduleLayoutUpdate);
-      window.removeEventListener('focusout', handleFocusOut);
-      if (focusoutTimer) clearTimeout(focusoutTimer);
-      if (keyboardLayoutRafRef.current !== null) {
-        window.cancelAnimationFrame(keyboardLayoutRafRef.current);
-        keyboardLayoutRafRef.current = null;
-      }
+      unsubscribe();
     };
   }, [feedRef, scrollToBottom, setKeyboardOffset]);
 
