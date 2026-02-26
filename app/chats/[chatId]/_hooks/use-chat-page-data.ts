@@ -16,6 +16,7 @@ import type {
   Message,
   MessagesResponse,
   Model,
+  PendingAttachment,
   RequestItem,
   RequestsResponse,
   TagSuggestion,
@@ -57,8 +58,7 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
   const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
-  const [pendingAttachments, setPendingAttachments] = useState<MediaItem[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
   const [isLoadingTagSuggestions, setIsLoadingTagSuggestions] = useState(false);
@@ -353,6 +353,8 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
     }
   }, [chat, titleInput]);
 
+  const allAttachmentsReady = pendingAttachments.length === 0 || pendingAttachments.every((a) => a.status === 'ready');
+
   const sendMessage = useCallback(async () => {
     if (!chat || isSending) {
       return;
@@ -363,11 +365,18 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
       return;
     }
 
+    // Block send if any attachment is still uploading
+    const readyAttachments = pendingAttachments.filter((a) => a.status === 'ready' && a.mediaItem);
+    if (pendingAttachments.length > 0 && readyAttachments.length !== pendingAttachments.length) {
+      return;
+    }
+
     setIsSending(true);
     try {
+      const mediaIds = readyAttachments.map((a) => a.mediaItem!.id);
       const body: Record<string, unknown> = { role: 'user', senderId: 'user:primary' };
       if (content) body.content = content;
-      if (pendingAttachments.length > 0) body.trace = { mediaIds: pendingAttachments.map((a) => a.id) };
+      if (mediaIds.length > 0) body.trace = { mediaIds };
 
       const response = await apiFetch(`/api/v1/chats/${chat.id}/messages`, {
         method: 'POST',
@@ -381,9 +390,13 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
 
       const message = (await response.json()) as Message;
       setComposerText('');
+      // Revoke object URLs before clearing
+      for (const att of pendingAttachments) {
+        if (att.localPreviewUrl) URL.revokeObjectURL(att.localPreviewUrl);
+      }
       setPendingAttachments([]);
       setMessages((current) => upsertFeedMessage(current, message));
-      if (pendingAttachments.length > 0) await refreshMedia();
+      if (mediaIds.length > 0) await refreshMedia();
       scrollToBottom(true);
     } catch {
       setError('Failed to send message.');
@@ -393,39 +406,65 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
   }, [chat, composerText, isSending, pendingAttachments, refreshMedia, scrollToBottom]);
 
   const uploadComposerFiles = useCallback(async (fileList: FileList | null, forcedKind?: 'image' | 'file') => {
-    if (!chat || !fileList || fileList.length === 0 || isUploadingAttachment) {
+    if (!chat || !fileList || fileList.length === 0) {
       return;
     }
 
-    setIsUploadingAttachment(true);
-    try {
-      const newItems: MediaItem[] = [];
-      for (const file of Array.from(fileList)) {
-        const formData = new FormData();
-        formData.append('file', file, file.name);
-        if (forcedKind) {
-          formData.append('kind', forcedKind);
-        }
+    const files = Array.from(fileList);
 
-        const uploadResponse = await apiFetch(`/api/v1/chats/${chat.id}/media`, { method: 'POST', body: formData });
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload media');
-        }
+    // Create local preview entries immediately
+    const newEntries: PendingAttachment[] = files.map((file) => {
+      const isImage = forcedKind === 'image' || (!forcedKind && file.type.startsWith('image/'));
+      const kind = forcedKind ?? (isImage ? 'image' : 'file');
+      return {
+        localId: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        localPreviewUrl: isImage ? URL.createObjectURL(file) : null,
+        file,
+        filename: file.name,
+        kind,
+        contentType: file.type,
+        status: 'uploading' as const,
+        mediaItem: null,
+      };
+    });
 
-        newItems.push((await uploadResponse.json()) as MediaItem);
+    setPendingAttachments((prev) => [...prev, ...newEntries]);
+    setIsComposerMenuOpen(false);
+
+    // Upload each file in parallel in the background
+    for (const entry of newEntries) {
+      const formData = new FormData();
+      formData.append('file', entry.file, entry.file.name);
+      if (forcedKind) {
+        formData.append('kind', forcedKind);
       }
 
-      setPendingAttachments((prev) => [...prev, ...newItems]);
-      setIsComposerMenuOpen(false);
-    } catch {
-      toast.error('Failed to upload attachment.');
-    } finally {
-      setIsUploadingAttachment(false);
+      apiFetch(`/api/v1/chats/${chat.id}/media`, { method: 'POST', body: formData })
+        .then(async (uploadResponse) => {
+          if (!uploadResponse.ok) throw new Error('Failed to upload media');
+          const mediaItem = (await uploadResponse.json()) as MediaItem;
+          setPendingAttachments((prev) =>
+            prev.map((a) => (a.localId === entry.localId ? { ...a, status: 'ready' as const, mediaItem } : a)),
+          );
+        })
+        .catch(() => {
+          toast.error(`Failed to upload ${entry.filename}.`);
+          // Remove failed attachment and revoke its URL
+          setPendingAttachments((prev) => {
+            const failed = prev.find((a) => a.localId === entry.localId);
+            if (failed?.localPreviewUrl) URL.revokeObjectURL(failed.localPreviewUrl);
+            return prev.filter((a) => a.localId !== entry.localId);
+          });
+        });
     }
-  }, [chat, isUploadingAttachment]);
+  }, [chat]);
 
-  const removePendingAttachment = useCallback((mediaId: string) => {
-    setPendingAttachments((prev) => prev.filter((m) => m.id !== mediaId));
+  const removePendingAttachment = useCallback((localId: string) => {
+    setPendingAttachments((prev) => {
+      const removed = prev.find((a) => a.localId === localId);
+      if (removed?.localPreviewUrl) URL.revokeObjectURL(removed.localPreviewUrl);
+      return prev.filter((a) => a.localId !== localId);
+    });
   }, []);
 
   const addTagToChat = useCallback(async (rawTag: string) => {
@@ -480,7 +519,7 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
     pendingReply,
     setPendingReply,
     isComposerMenuOpen,
-    isUploadingAttachment,
+    allAttachmentsReady,
     pendingAttachments,
     removePendingAttachment,
     isMediaGalleryOpen,

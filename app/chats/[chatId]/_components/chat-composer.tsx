@@ -3,10 +3,9 @@
 import { type RefObject, useState } from 'react';
 import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
 
-import { buildFileUrl } from '@/src/lib/api-fetch';
 import { isTouchDevice } from '@/src/lib/utils';
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
-import type { MediaItem, Model } from '@/app/chats/[chatId]/_lib/types';
+import type { Model, PendingAttachment } from '@/app/chats/[chatId]/_lib/types';
 import { RecordingWaveform } from '@/app/chats/[chatId]/_components/recording-waveform';
 import { Button } from '@/src/components/ui/button';
 import {
@@ -34,10 +33,10 @@ type ChatComposerProps = {
   recordingSeconds: number;
   isUploadingVoiceNote: boolean;
   showMicSettingsPrompt: boolean;
-  isUploadingAttachment: boolean;
+  allAttachmentsReady: boolean;
   uploadComposerFiles: (files: FileList | null, forcedKind?: 'image' | 'file') => Promise<void>;
-  pendingAttachments: MediaItem[];
-  removePendingAttachment: (mediaId: string) => void;
+  pendingAttachments: PendingAttachment[];
+  removePendingAttachment: (localId: string) => void;
   cameraInputRef: RefObject<HTMLInputElement | null>;
   photosInputRef: RefObject<HTMLInputElement | null>;
   filesInputRef: RefObject<HTMLInputElement | null>;
@@ -63,7 +62,7 @@ export function ChatComposer({
   recordingSeconds,
   isUploadingVoiceNote,
   showMicSettingsPrompt,
-  isUploadingAttachment,
+  allAttachmentsReady,
   uploadComposerFiles,
   pendingAttachments,
   removePendingAttachment,
@@ -86,24 +85,36 @@ export function ChatComposer({
           <div className="mb-2 overflow-x-auto">
             <div className="flex gap-2 pb-1">
               {pendingAttachments.map((att) => (
-                <div key={att.id} className="relative shrink-0">
-                  {att.kind === 'image' ? (
-                    <img
-                      src={buildFileUrl(att.id)}
-                      alt={att.filename}
-                      className="h-16 w-16 rounded-xl object-cover border border-border"
-                    />
+                <div key={att.localId} className="relative shrink-0">
+                  {att.kind === 'image' && att.localPreviewUrl ? (
+                    <div className="relative">
+                      <img
+                        src={att.localPreviewUrl}
+                        alt={att.filename}
+                        className="h-16 w-16 rounded-xl object-cover border border-border animate-in fade-in duration-200"
+                      />
+                      {att.status === 'uploading' && (
+                        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <div className="flex h-16 w-32 items-center justify-center rounded-xl border border-border bg-muted/60 px-2">
+                    <div className="relative flex h-16 w-32 items-center justify-center rounded-xl border border-border bg-muted/60 px-2">
                       <FileText size={16} className="shrink-0 text-muted-foreground" />
                       <span className="ml-1.5 truncate text-xs text-foreground">{att.filename}</span>
+                      {att.status === 'uploading' && (
+                        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/10">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/50 border-t-transparent" />
+                        </div>
+                      )}
                     </div>
                   )}
                   <Button
                     variant="outline"
                     size="icon"
                     className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border-border bg-background p-0"
-                    onClick={() => removePendingAttachment(att.id)}
+                    onClick={() => removePendingAttachment(att.localId)}
                   >
                     <X size={10} />
                   </Button>
@@ -176,7 +187,7 @@ export function ChatComposer({
               size="icon-xl"
               aria-label="Send message"
               onClick={() => void sendMessage()}
-              disabled={isSending || (!composerText.trim() && pendingAttachments.length === 0)}
+              disabled={isSending || !allAttachmentsReady || (!composerText.trim() && pendingAttachments.length === 0)}
             >
               <ArrowUp size={16} />
             </Button>
@@ -256,7 +267,7 @@ export function ChatComposer({
             <button
               type="button"
               className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              disabled={isUploadingAttachment}
+              disabled={!allAttachmentsReady}
               onClick={() => filesInputRef.current?.click()}
             >
               <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
@@ -268,7 +279,7 @@ export function ChatComposer({
             <button
               type="button"
               className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              disabled={isUploadingAttachment}
+              disabled={!allAttachmentsReady}
               onClick={() => {
                 setIsComposerMenuOpen(false);
                 onCameraCapture();
@@ -283,7 +294,7 @@ export function ChatComposer({
             <button
               type="button"
               className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              disabled={isUploadingAttachment}
+              disabled={!allAttachmentsReady}
               onClick={() => photosInputRef.current?.click()}
             >
               <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
@@ -293,7 +304,7 @@ export function ChatComposer({
             </button>
           </div>
 
-          {isUploadingAttachment && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment...</p>}
+          {!allAttachmentsReady && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment...</p>}
         </DrawerContent>
       </Drawer>
     </>

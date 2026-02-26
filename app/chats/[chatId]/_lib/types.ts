@@ -89,6 +89,19 @@ export type MediaResponse = {
   hasMore?: boolean;
 };
 
+export type PendingAttachmentStatus = 'uploading' | 'ready' | 'error';
+
+export type PendingAttachment = {
+  localId: string;
+  localPreviewUrl: string | null;
+  file: File;
+  filename: string;
+  kind: MediaKind;
+  contentType: string;
+  status: PendingAttachmentStatus;
+  mediaItem: MediaItem | null;
+};
+
 export type MediaFilter = 'all' | MediaKind;
 
 export type TagSuggestion = {

@@ -99,7 +99,7 @@ function ChatComposerSection() {
       cancelRecording={chat.cancelRecording}
       audioLevels={chat.audioLevels}
       isComposerMenuOpen={chat.isComposerMenuOpen}
-      isUploadingAttachment={chat.isUploadingAttachment}
+      allAttachmentsReady={chat.allAttachmentsReady}
       selectedModelId={''}
       models={[]}
       cameraInputRef={chat.cameraInputRef}
