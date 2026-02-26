@@ -118,6 +118,53 @@ describe("inbound deliver integration", () => {
       abortController.abort();
     });
 
+    it("keeps block content when final payload text is empty", async () => {
+      const client = createMockClient();
+      await initializeChatManager(client, baseCfg);
+
+      let capturedDeliver!: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
+
+      const dispatch: DispatchFn = ({ deliver }) => {
+        capturedDeliver = deliver;
+      };
+
+      const mockEs = createMockEventSource();
+      (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+
+      const abortController = new AbortController();
+      startInboundListener({
+        client,
+        cfg: baseCfg,
+        abortSignal: abortController.signal,
+        reconnectDelayMs: 100,
+        dispatch,
+      });
+
+      mockEs.triggerMessage({
+        id: "evt-empty-final-1",
+        type: "message.created",
+        payload: {
+          chatId: "chat-1",
+          messageId: "user-msg-empty-final-1",
+          role: "user",
+          content: "Tell me something",
+          senderId: "user:primary",
+        },
+      });
+
+      await vi.waitFor(() => expect(capturedDeliver).toBeDefined());
+
+      await capturedDeliver({ text: "Accumulated answer from blocks." }, { kind: "block" });
+      await capturedDeliver({ text: "" }, { kind: "final" });
+
+      // Expected: finalize eager stream with previously streamed block content.
+      // Current behavior cancels the stream and leaves an empty bubble.
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-1", "Accumulated answer from blocks.");
+      expect(client.cancelMessage).not.toHaveBeenCalledWith("msg-1");
+
+      abortController.abort();
+    });
+
     it("finalizes eager stream on final message when no blocks preceded", async () => {
       const client = createMockClient();
       await initializeChatManager(client, baseCfg);
