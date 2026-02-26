@@ -14,8 +14,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.103",
     "@hono/node-server": "^1.19.9",
     "@sinclair/typebox": "^0.34.48",
+    "ai": "^6.0.101",
     "better-sqlite3": "^12.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
