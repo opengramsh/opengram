@@ -93,11 +93,13 @@ chatV2.post('/:chatId/stream', async (c) => {
         if (event.type === 'message.created' && payload.chatId === chatId) {
           if (payload.role === 'agent' && payload.streamState === 'streaming') {
             agentMessageId = payload.messageId as string;
+            // .catch(finish) ensures stream is torn down even if client disconnects
+            // during the start-sequence write rather than waiting for abort/timeout.
             void writeSequence(s, [
               sseChunk({ type: 'start' }),
               sseChunk({ type: 'start-step' }),
               sseChunk({ type: 'text-start', id: TEXT_PART_ID }),
-            ]);
+            ]).catch(finish);
           }
 
           // Non-streaming agent message (already complete)

@@ -65,6 +65,7 @@ export function ChatListPage({
     markChatUnread,
     togglePin,
     toggleArchive,
+    renameChat,
     isNewChatOpen,
     openNewChatSheet,
     closeNewChatSheet,
@@ -211,6 +212,7 @@ export function ChatListPage({
           onMarkUnread={markChatUnread}
           onTogglePin={togglePin}
           onToggleArchive={toggleArchive}
+          onRenameChat={renameChat}
         />
       )}
 

@@ -8,13 +8,8 @@ import { apiFetch } from '@/src/lib/api-fetch';
 import { sortInboxChats } from '@/src/lib/inbox';
 import type { Chat } from '@/src/components/chats/types';
 import { useChatList } from '@/src/components/chats/use-chat-list';
-import {
-  subscribeToEventsStream,
-  type FrontendStreamEvent,
-} from '@/src/lib/events-stream';
+import { useInboxV2Sse } from '@/src/components/chats/use-inbox-v2-sse';
 import { cn, FACEHASH_COLORS } from '@/src/lib/utils';
-import { isSoundEnabled } from '@/src/lib/notification-preferences';
-import { playNotificationSound } from '@/src/lib/notification-sound';
 import { applyKeyboardCssVars, subscribeToKeyboardLayout } from '@/src/lib/keyboard-layout';
 import { ChatList } from '@/src/components/chats/chat-list';
 import { NewChatSheet } from '@/src/components/chats/new-chat-sheet';
@@ -43,7 +38,6 @@ export default function InboxV2Layout() {
   const navigate = useNavigate();
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadByAgent, setUnreadByAgent] = useState<Record<string, number>>({});
-  const [streamingChatIds, setStreamingChatIds] = useState<Set<string>>(new Set());
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isChatSelected = !useMatch('/v2');
@@ -69,7 +63,6 @@ export default function InboxV2Layout() {
     onMutationSuccess: loadUnreadSummary,
   });
 
-  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const chatsRef = useRef<Chat[]>([]);
   useEffect(() => { chatsRef.current = chatList.chats; }, [chatList.chats]);
 
@@ -93,101 +86,21 @@ export default function InboxV2Layout() {
     [matchesActiveFilters, setChats],
   );
 
-  // SSE subscription for real-time updates (mirrors InboxLayout)
-  useEffect(() => {
-    const unsubscribe = subscribeToEventsStream((event: FrontendStreamEvent) => {
-      const chatIdFromEvent = typeof event.payload.chatId === 'string' ? event.payload.chatId : null;
-      const refreshesPendingSummary =
-        event.type === 'request.created' || event.type === 'request.resolved' || event.type === 'request.cancelled';
-
-      // Typing indicator
-      if (event.type === 'chat.typing' && chatIdFromEvent) {
-        setStreamingChatIds((prev) => new Set(prev).add(chatIdFromEvent));
-        const existing = typingTimersRef.current.get(chatIdFromEvent);
-        if (existing) clearTimeout(existing);
-        typingTimersRef.current.set(chatIdFromEvent, setTimeout(() => {
-          typingTimersRef.current.delete(chatIdFromEvent);
-          setStreamingChatIds((prev) => {
-            if (!prev.has(chatIdFromEvent)) return prev;
-            const next = new Set(prev); next.delete(chatIdFromEvent); return next;
-          });
-        }, 12_000));
-      }
-
-      if (event.type === 'message.created' && chatIdFromEvent &&
-        event.payload.role !== 'user' && event.payload.streamState !== 'streaming') {
-        const timer = typingTimersRef.current.get(chatIdFromEvent);
-        if (timer) { clearTimeout(timer); typingTimersRef.current.delete(chatIdFromEvent); }
-        setStreamingChatIds((prev) => {
-          if (!prev.has(chatIdFromEvent)) return prev;
-          const next = new Set(prev); next.delete(chatIdFromEvent); return next;
-        });
-      }
-
-      if (event.type === 'message.streaming.complete' && chatIdFromEvent) {
-        const timer = typingTimersRef.current.get(chatIdFromEvent);
-        if (timer) { clearTimeout(timer); typingTimersRef.current.delete(chatIdFromEvent); }
-        setStreamingChatIds((prev) => {
-          if (!prev.has(chatIdFromEvent)) return prev;
-          const next = new Set(prev); next.delete(chatIdFromEvent); return next;
-        });
-      }
-
-      // Notification sounds
-      if (
-        (event.type === 'message.created' || event.type === 'message.streaming.complete') &&
-        chatIdFromEvent && event.payload.role !== 'user' && event.payload.streamState !== 'streaming'
-      ) {
-        const chat = chatsRef.current.find((c) => c.id === chatIdFromEvent);
-        if (!chat?.notifications_muted && isSoundEnabled()) playNotificationSound();
-      }
-
-      const isStreamingStart = event.type === 'message.created' && event.payload.streamState === 'streaming';
-      const isUserMessage = event.type === 'message.created' && event.payload.role === 'user';
-
-      if (isUserMessage && chatIdFromEvent) {
-        const content = typeof event.payload.contentFinal === 'string' ? event.payload.contentFinal : null;
-        const preview = content ? content.trim().slice(0, 180) : null;
-        const createdAt = typeof event.payload.createdAt === 'string' ? event.payload.createdAt : null;
-        setChats((current) => sortInboxChats(current.map((c) =>
-          c.id === chatIdFromEvent
-            ? { ...c, ...(preview != null && { last_message_preview: preview }), last_message_role: 'user', ...(createdAt != null && { last_message_at: createdAt }) }
-            : c,
-        )));
-        return;
-      }
-
-      if (!isStreamingStart && !isUserMessage &&
-        (event.type === 'chat.created' || event.type === 'chat.updated' || event.type === 'chat.unarchived' ||
-          event.type === 'chat.read' || event.type === 'chat.unread' || event.type === 'message.created' ||
-          event.type === 'message.streaming.complete' || event.type === 'request.created' ||
-          event.type === 'request.resolved' || event.type === 'request.cancelled')) {
-        if (!chatIdFromEvent) { void (refreshesPendingSummary ? refreshChats() : loadChats()); return; }
-        void Promise.all([
-          refreshSingleInboxChat(chatIdFromEvent).catch(() => void loadChats()),
-          loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); }),
-        ]);
-        return;
-      }
-
-      if (event.type === 'chat.archived') {
-        if (!chatIdFromEvent) { void refreshChats(); return; }
-        setChats((current) => current.filter((c) => c.id !== chatIdFromEvent));
-        void loadUnreadSummary().catch(() => { setTotalUnread(0); setUnreadByAgent({}); });
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      for (const timer of typingTimersRef.current.values()) clearTimeout(timer);
-      typingTimersRef.current.clear();
-    };
-  }, [loadChats, loadUnreadSummary, refreshChats, refreshSingleInboxChat, setChats]);
+  const streamingChatIds = useInboxV2Sse({
+    chatsRef,
+    loadChats,
+    refreshChats,
+    loadUnreadSummary,
+    refreshSingleInboxChat,
+    setChats,
+    setTotalUnread,
+    setUnreadByAgent,
+  });
 
   const {
     agents, models, chats, loading, error,
     searchInput, setSearchInput, selectedAgentId, setSelectedAgentId, agentsById,
-    markChatRead, markChatUnread, togglePin, toggleArchive,
+    markChatRead, markChatUnread, togglePin, toggleArchive, renameChat,
     isNewChatOpen, openNewChatSheet, closeNewChatSheet,
     newChatAgentId, setNewChatAgentId, newChatModelId, setNewChatModelId,
     newChatFirstMessage, setNewChatFirstMessage, newChatError, setNewChatError,
@@ -305,6 +218,7 @@ export default function InboxV2Layout() {
               onMarkUnread={markChatUnread}
               onTogglePin={togglePin}
               onToggleArchive={toggleArchive}
+              onRenameChat={renameChat}
             />
           )}
 

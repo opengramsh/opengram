@@ -3,13 +3,21 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Facehash } from 'facehash';
-import { Archive, Inbox, Mail, MailOpen, Pin, PinOff } from 'lucide-react';
+import { Archive, Inbox, Mail, MailOpen, Pencil, Pin, PinOff } from 'lucide-react';
 
 import { formatInboxTimestamp, resolveInboxSwipeEnd, shouldStartInboxSwipeDrag } from '@/src/lib/inbox';
 import type { Agent, Chat } from '@/src/components/chats/types';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
 import { Badge } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog';
+import { Input } from '@/src/components/ui/input';
 import { UnreadBadge } from '@/src/components/chats/unread-badge';
 import {
   DropdownMenu,
@@ -45,6 +53,7 @@ type ChatListProps = {
   onMarkUnread: (chat: Chat) => Promise<void>;
   onTogglePin: (chat: Chat) => Promise<void>;
   onToggleArchive: (chat: Chat) => Promise<void>;
+  onRenameChat: (chat: Chat, newTitle: string) => Promise<void>;
   rowActionLabel: 'Archive' | 'Unarchive';
   activeChatId?: string;
   streamingChatIds?: Set<string>;
@@ -61,44 +70,98 @@ export function ChatList({
   onMarkUnread,
   onTogglePin,
   onToggleArchive,
+  onRenameChat,
   rowActionLabel,
   activeChatId,
   streamingChatIds,
 }: ChatListProps) {
   const [activeContextChatId, setActiveContextChatId] = useState<string | null>(null);
+  const [renamingChat, setRenamingChat] = useState<Chat | null>(null);
+  const [renameTitle, setRenameTitle] = useState('');
+
+  function openRenameDialog(chat: Chat) {
+    setRenamingChat(chat);
+    setRenameTitle(chat.title);
+  }
+
+  function closeRenameDialog() {
+    setRenamingChat(null);
+    setRenameTitle('');
+  }
+
+  function submitRename() {
+    if (!renamingChat) return;
+    void onRenameChat(renamingChat, renameTitle);
+    closeRenameDialog();
+  }
 
   return (
-    <main className="flex-1 overflow-y-auto px-2 pt-2" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
-      {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading chats...</p>}
-      {!loading && error && <p className="px-4 py-6 text-sm text-red-300">{error}</p>}
-      {!loading && !error && chats.length === 0 && <p className="px-4 py-8 text-sm text-muted-foreground">{emptyLabel}</p>}
-      {!loading &&
-        !error &&
-        chats.map((chat) => {
-          const firstAgentId = chat.agent_ids[0];
-          const agent = firstAgentId ? agentsById.get(firstAgentId) : undefined;
-          return (
-            <ChatRow
-              key={chat.id}
-              chat={chat}
-              agentName={agent?.name ?? chat.title}
-              actionLabel={rowActionLabel}
-              isActive={activeChatId === chat.id}
-              isStreaming={streamingChatIds?.has(chat.id) ?? false}
-              isContextMenuOpen={activeContextChatId === chat.id}
-              onOpen={() => onOpenChat(chat)}
-              onAction={() => void onToggleArchive(chat)}
-              onLongPress={() => setActiveContextChatId(chat.id)}
-              onContextMenuOpenChange={(open) => setActiveContextChatId(open ? chat.id : null)}
-              onMarkReadToggle={() => {
-                if (chat.unread_count > 0) void onMarkRead(chat);
-                else void onMarkUnread(chat);
-              }}
-              onTogglePin={() => void onTogglePin(chat)}
-            />
-          );
-        })}
-    </main>
+    <>
+      <main className="flex-1 overflow-y-auto px-2 pt-2" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))' }}>
+        {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading chats...</p>}
+        {!loading && error && <p className="px-4 py-6 text-sm text-red-300">{error}</p>}
+        {!loading && !error && chats.length === 0 && <p className="px-4 py-8 text-sm text-muted-foreground">{emptyLabel}</p>}
+        {!loading &&
+          !error &&
+          chats.map((chat) => {
+            const firstAgentId = chat.agent_ids[0];
+            const agent = firstAgentId ? agentsById.get(firstAgentId) : undefined;
+            return (
+              <ChatRow
+                key={chat.id}
+                chat={chat}
+                agentName={agent?.name ?? chat.title}
+                actionLabel={rowActionLabel}
+                isActive={activeChatId === chat.id}
+                isStreaming={streamingChatIds?.has(chat.id) ?? false}
+                isContextMenuOpen={activeContextChatId === chat.id}
+                onOpen={() => onOpenChat(chat)}
+                onAction={() => void onToggleArchive(chat)}
+                onLongPress={() => setActiveContextChatId(chat.id)}
+                onContextMenuOpenChange={(open) => setActiveContextChatId(open ? chat.id : null)}
+                onMarkReadToggle={() => {
+                  if (chat.unread_count > 0) void onMarkRead(chat);
+                  else void onMarkUnread(chat);
+                }}
+                onTogglePin={() => void onTogglePin(chat)}
+                onRename={() => {
+                  setActiveContextChatId(null);
+                  openRenameDialog(chat);
+                }}
+              />
+            );
+          })}
+      </main>
+
+      <Dialog open={renamingChat !== null} onOpenChange={(open) => { if (!open) closeRenameDialog(); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename chat</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={renameTitle}
+            onChange={(e) => setRenameTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submitRename(); }
+              if (e.key === 'Escape') { e.preventDefault(); closeRenameDialog(); }
+            }}
+            placeholder="Chat name"
+            className="mt-1"
+          />
+          <DialogFooter className="mt-2 flex gap-2 justify-end">
+            <Button variant="ghost" size="sm" onClick={closeRenameDialog}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={!renameTitle.trim() || renameTitle.trim() === renamingChat?.title}
+              onClick={submitRename}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -115,11 +178,12 @@ type ChatRowProps = {
   onContextMenuOpenChange: (open: boolean) => void;
   onMarkReadToggle: () => void;
   onTogglePin: () => void;
+  onRename: () => void;
 };
 
 const TITLE_TYPING_SPEED_MS = 40;
 
-function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming = false, isContextMenuOpen, onOpen, onAction, onLongPress, onContextMenuOpenChange, onMarkReadToggle, onTogglePin }: ChatRowProps) {
+function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming = false, isContextMenuOpen, onOpen, onAction, onLongPress, onContextMenuOpenChange, onMarkReadToggle, onTogglePin, onRename }: ChatRowProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [typingTitle, setTypingTitle] = useState<string | null>(null);
@@ -355,6 +419,14 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
       <DropdownMenu open={isContextMenuOpen} onOpenChange={onContextMenuOpenChange}>
         <DropdownMenuTrigger className="pointer-events-none absolute bottom-0 left-0 opacity-0" tabIndex={-1} aria-hidden="true" />
         <DropdownMenuContent align="start" className="min-w-48">
+          <DropdownMenuItem
+            onClick={() => {
+              onContextMenuOpenChange(false);
+              onRename();
+            }}
+          >
+            <Pencil size={16} /> Rename
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
               onContextMenuOpenChange(false);

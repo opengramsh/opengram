@@ -285,6 +285,28 @@ export function useChatList(options: UseChatListOptions) {
     [mutateChat],
   );
 
+  const renameChat = useCallback(
+    async (chat: Chat, newTitle: string) => {
+      const trimmed = newTitle.trim();
+      if (!trimmed || trimmed === chat.title) return;
+      await mutateChat(
+        chat.id,
+        (current) => ({
+          ...current,
+          title: trimmed,
+          title_source: 'manual' as const,
+        }),
+        () =>
+          apiFetch(`/api/v1/chats/${chat.id}`, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ title: trimmed, titleAutoRenamed: false }),
+          }),
+      );
+    },
+    [mutateChat],
+  );
+
   const toggleArchive = useCallback(
     async (chat: Chat) => {
       const endpoint = archived ? 'unarchive' : 'archive';
@@ -395,6 +417,7 @@ export function useChatList(options: UseChatListOptions) {
     markChatUnread,
     togglePin,
     toggleArchive,
+    renameChat,
     isNewChatOpen,
     openNewChatSheet,
     closeNewChatSheet,
