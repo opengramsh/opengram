@@ -252,7 +252,7 @@ export function useChatList(options: UseChatListOptions) {
         chat.id,
         (current) => ({
           ...current,
-          unread_count: Math.max(1, current.unread_count),
+          unread_count: 1,
           last_read_at: null,
         }),
         () =>

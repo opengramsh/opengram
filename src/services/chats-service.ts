@@ -763,6 +763,7 @@ export function markChatUnread(chatId: string) {
     chatId,
   );
   updateDenormalizedFields(db, chatId);
+  db.prepare('UPDATE chats SET unread_count = 1 WHERE id = ?').run(chatId);
 
   emitEvent('chat.unread', {
     chatId,
