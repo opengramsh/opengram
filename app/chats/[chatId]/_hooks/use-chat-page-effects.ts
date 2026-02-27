@@ -241,7 +241,7 @@ export function useChatPageEffects(data: ChatPageData) {
           void refreshMessages();
         }
 
-        if (role !== 'user') {
+        if (role === 'agent') {
           setPendingReply(false);
           if (typingExpiryTimerRef.current) {
             clearTimeout(typingExpiryTimerRef.current);

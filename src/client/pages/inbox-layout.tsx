@@ -179,10 +179,10 @@ export default function InboxLayout() {
         }
         if (event.type === "message.created" && chatIdFromEvent) {
           if (
-            event.payload.role !== "user" &&
+            event.payload.role === "agent" &&
             event.payload.streamState !== "streaming"
           ) {
-            // Non-streaming agent/system message arrived → no pending reply for this chat.
+            // Non-streaming agent message arrived → no pending reply for this chat.
             const timer = typingTimers.get(chatIdFromEvent);
             if (timer) {
               clearTimeout(timer);
@@ -210,16 +210,21 @@ export default function InboxLayout() {
           });
         }
 
-        // Play notification sound for incoming non-user messages
-        if (
-          (event.type === "message.created" || event.type === "message.streaming.complete") &&
+        // Play notification sound for completed agent messages only
+        const shouldPlaySound =
           chatIdFromEvent &&
-          event.payload.role !== "user" &&
-          event.payload.streamState !== "streaming"
-        ) {
+          (
+            (event.type === "message.created" &&
+              event.payload.role === "agent" &&
+              event.payload.streamState !== "streaming" &&
+              event.payload.streamState !== "cancelled") ||
+            (event.type === "message.streaming.complete" &&
+              event.payload.streamState === "complete")
+          );
+        if (shouldPlaySound) {
           const chat = chatsRef.current.find((c) => c.id === chatIdFromEvent);
           if (!(chat?.notifications_muted) && isSoundEnabled()) {
-            playNotificationSound();
+            playNotificationSound(chatIdFromEvent);
           }
         }
 

@@ -638,6 +638,7 @@ function completeOrCancelStreamingMessage(
   emitEvent('message.streaming.complete', {
     chatId: serialized.chat_id,
     messageId: serialized.id,
+    role: serialized.role,
     streamState: serialized.stream_state,
     finalText: serialized.content_final,
   }, { timestampMs: now });
@@ -767,6 +768,7 @@ export function sweepStaleStreamingMessages(nowMs = Date.now()): SweepResult {
     emitEvent('message.streaming.complete', {
       chatId: serialized.chat_id,
       messageId: serialized.id,
+      role: serialized.role,
       streamState: serialized.stream_state,
       finalText: serialized.content_final,
     }, { timestampMs: nowMs });

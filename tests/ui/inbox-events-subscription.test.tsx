@@ -12,6 +12,18 @@ const streamMock = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
 }));
 
+const soundMock = vi.hoisted(() => ({
+  playNotificationSound: vi.fn(),
+}));
+
+vi.mock('@/src/lib/notification-sound', () => ({
+  playNotificationSound: soundMock.playNotificationSound,
+}));
+
+vi.mock('@/src/lib/notification-preferences', () => ({
+  isSoundEnabled: () => true,
+}));
+
 vi.mock('facehash', () => ({
   Facehash: ({ name }: { name: string }) => <div data-testid={`facehash-${name}`} />,
 }));
@@ -228,5 +240,115 @@ describe('inbox event subscriptions', () => {
     await emitEvent('chat.unarchived', { chatId: 'chat-live' });
 
     await screen.findByText('Live chat');
+  });
+
+  describe('notification sound filtering', () => {
+    function setupWithChat() {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/api/v1/config') {
+          return new Response(
+            JSON.stringify({
+              appName: 'OpenGram',
+              defaultModelIdForNewChats: 'model-a',
+              agents: [{ id: 'agent-a', name: 'Agent A', description: 'Alpha' }],
+              models: [{ id: 'model-a', name: 'Model A', description: 'Alpha' }],
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url.startsWith('/api/v1/chats/pending-summary')) {
+          return new Response(JSON.stringify({ pending_requests_total: 0 }), { status: 200 });
+        }
+
+        if (url.startsWith('/api/v1/chats?')) {
+          return new Response(
+            JSON.stringify({
+              data: [{ ...baseChat, id: 'chat-1', title: 'Chat one' }],
+              cursor: { next: null, hasMore: false },
+            }),
+            { status: 200 },
+          );
+        }
+
+        if (url === '/api/v1/chats/chat-1') {
+          return new Response(
+            JSON.stringify({ ...baseChat, id: 'chat-1', title: 'Chat one' }),
+            { status: 200 },
+          );
+        }
+
+        return new Response('not found', { status: 404 });
+      });
+    }
+
+    beforeEach(() => {
+      soundMock.playNotificationSound.mockReset();
+    });
+
+    it('does NOT play sound for tool messages', async () => {
+      setupWithChat();
+      renderHome();
+      await screen.findByText('Chat one');
+
+      await emitEvent('message.created', {
+        chatId: 'chat-1',
+        messageId: 'msg-tool-1',
+        role: 'tool',
+        streamState: 'none',
+        contentFinal: '{"result": "ok"}',
+      });
+
+      expect(soundMock.playNotificationSound).not.toHaveBeenCalled();
+    });
+
+    it('plays sound for a complete agent message', async () => {
+      setupWithChat();
+      renderHome();
+      await screen.findByText('Chat one');
+
+      await emitEvent('message.created', {
+        chatId: 'chat-1',
+        messageId: 'msg-agent-1',
+        role: 'agent',
+        streamState: 'complete',
+        contentFinal: 'Hello!',
+      });
+
+      expect(soundMock.playNotificationSound).toHaveBeenCalledWith('chat-1');
+    });
+
+    it('does NOT play sound for cancelled streaming', async () => {
+      setupWithChat();
+      renderHome();
+      await screen.findByText('Chat one');
+
+      await emitEvent('message.streaming.complete', {
+        chatId: 'chat-1',
+        messageId: 'msg-stream-1',
+        role: 'agent',
+        streamState: 'cancelled',
+      });
+
+      expect(soundMock.playNotificationSound).not.toHaveBeenCalled();
+    });
+
+    it('plays sound for completed streaming', async () => {
+      setupWithChat();
+      renderHome();
+      await screen.findByText('Chat one');
+
+      await emitEvent('message.streaming.complete', {
+        chatId: 'chat-1',
+        messageId: 'msg-stream-2',
+        role: 'agent',
+        streamState: 'complete',
+        finalText: 'Done!',
+      });
+
+      expect(soundMock.playNotificationSound).toHaveBeenCalledWith('chat-1');
+    });
   });
 });

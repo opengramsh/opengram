@@ -1,5 +1,8 @@
 let audioCtx: AudioContext | null = null;
 
+const DEBOUNCE_MS = 2_000;
+const lastPlayedAt = new Map<string, number>();
+
 function getAudioContext(): AudioContext | null {
   try {
     if (!audioCtx) {
@@ -14,8 +17,17 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-export function playNotificationSound(): void {
+export function playNotificationSound(chatId?: string): void {
   try {
+    if (chatId) {
+      const now = Date.now();
+      const last = lastPlayedAt.get(chatId);
+      if (last && now - last < DEBOUNCE_MS) {
+        return;
+      }
+      lastPlayedAt.set(chatId, now);
+    }
+
     const ctx = getAudioContext();
     if (!ctx) return;
 
