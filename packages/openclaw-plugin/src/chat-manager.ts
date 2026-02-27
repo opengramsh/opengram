@@ -60,7 +60,9 @@ export async function resolveAgentForChat(
 
   const resolvedCfg = cfg ?? configRef;
   const agents = (resolvedCfg?.channels as Record<string, any> | undefined)?.opengram?.agents;
-  return agents?.[0] ?? "unknown";
+  const fallback = agents?.[0] ?? "unknown";
+  log?.warn(`[opengram] resolveAgentForChat(${chatId}): no agent found via API, using config fallback "${fallback}"`);
+  return fallback;
 }
 
 export function resolveChatIdFromTarget(target: string): string {
