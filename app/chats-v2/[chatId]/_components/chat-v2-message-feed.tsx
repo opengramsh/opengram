@@ -43,8 +43,7 @@ export function ChatV2MessageFeed() {
   return (
     <div
       ref={feedRef}
-      className="flex flex-1 flex-col gap-3 overflow-y-auto p-4"
-      style={{ paddingBottom: 'calc(var(--composer-height, 60px) + 8px)' }}
+      className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 pb-3"
     >
       {messagesLoading && visibleMessages.length === 0 && (
         <div className="flex flex-col gap-3">

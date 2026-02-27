@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { FileIcon, ImageIcon, Plus, X } from 'lucide-react';
 
 import {
@@ -32,25 +32,11 @@ export function ChatV2Composer() {
     [send, attachments.readyIds.length],
   );
 
-  // Track composer height for feed padding
-  useEffect(() => {
-    const el = composerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => {
-      document.documentElement.style.setProperty('--composer-height', `${el.offsetHeight}px`);
-    });
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      document.documentElement.style.removeProperty('--composer-height');
-    };
-  }, []);
-
   return (
     <div
       ref={composerRef}
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md"
-      style={{ paddingBottom: keyboardOffset > 0 ? keyboardOffset : 'env(safe-area-inset-bottom, 0px)' }}
+      className="shrink-0 border-t border-border/50 bg-background/95 backdrop-blur-md"
+      style={{ paddingBottom: keyboardOffset > 0 ? `${keyboardOffset}px` : 'env(safe-area-inset-bottom, 0px)' }}
     >
       {/* Pending attachment previews */}
       {attachments.attachments.length > 0 && (

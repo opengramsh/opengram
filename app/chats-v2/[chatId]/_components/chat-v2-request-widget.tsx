@@ -15,10 +15,7 @@ export function ChatV2RequestWidget() {
   if (!data.chat || requests.pendingRequests.length === 0) return null;
 
   return (
-    <div
-      className="fixed inset-x-0 z-30 px-3"
-      style={{ bottom: 'calc(var(--composer-height, 60px) + 4px)' }}
-    >
+    <div className="shrink-0 border-t border-amber-300/20 px-3 py-2">
       <div className="rounded-2xl border border-amber-300/40 bg-amber-500/10 backdrop-blur-md">
         {/* Header */}
         <button

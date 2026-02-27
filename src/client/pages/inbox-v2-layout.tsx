@@ -244,10 +244,9 @@ export default function InboxV2Layout() {
       {/* Right panel: active chat or empty state */}
       <div
         className={cn(
-          'flex-1 min-w-0',
-          isChatSelected ? 'flex' : 'hidden md:flex md:items-center md:justify-center',
+          'flex-1 min-w-0 min-h-0',
+          isChatSelected ? 'flex flex-col' : 'hidden md:flex md:items-center md:justify-center',
         )}
-        style={{ transform: 'translateZ(0)' }}
       >
         <Outlet />
         {!isChatSelected && (
