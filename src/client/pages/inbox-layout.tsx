@@ -40,6 +40,12 @@ function useGlobalKeyboardReset() {
 
 export default function InboxLayout() {
   useGlobalKeyboardReset();
+
+  // Prefetch chat route chunk while user browses inbox
+  useEffect(() => {
+    import("@/src/client/pages/chat");
+  }, []);
+
   const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadByAgent, setUnreadByAgent] = useState<Record<string, number>>(

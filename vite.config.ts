@@ -13,6 +13,21 @@ export default defineConfig({
   build: {
     outDir: "dist/client",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router"],
+          "vendor-streamdown": [
+            "streamdown",
+            "@streamdown/cjk",
+            "@streamdown/code",
+          ],
+          "vendor-katex": ["@streamdown/math"],
+          "vendor-mermaid": ["@streamdown/mermaid"],
+          "vendor-shiki": ["shiki"],
+        },
+      },
+    },
   },
   server: {
     allowedHosts: [".ts.net"],
