@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenGramClient } from "../src/api-client.js";
 import { initializeChatManager } from "../src/chat-manager.js";
-import { clearChatQueuesForTests, isSuperseded } from "../src/chat-queue.js";
+import { clearChatQueuesForTests } from "../src/chat-queue.js";
 import { clearProcessedIdsForTests, startInboundListener, type DispatchFn, type ReplyPayload, type DeliverKind } from "../src/inbound.js";
-import { clearActiveStreamsForTests, hasActiveStream } from "../src/streaming.js";
+import { clearActiveStreamsForTests } from "../src/streaming.js";
 import type { Chat, ListChatsResponse } from "../src/types.js";
 
 function createMockClient(overrides?: Partial<OpenGramClient>): OpenGramClient {
@@ -54,11 +54,9 @@ describe("inbound deliver integration", () => {
       await initializeChatManager(client, baseCfg);
 
       let capturedDeliver!: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
-      let capturedCleanup!: () => void;
 
-      const dispatch: DispatchFn = ({ deliver, onCleanup }) => {
+      const dispatch: DispatchFn = ({ deliver }) => {
         capturedDeliver = deliver;
-        capturedCleanup = onCleanup;
       };
 
       // Simulate SSE event by creating a mock EventSource

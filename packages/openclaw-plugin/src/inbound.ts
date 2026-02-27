@@ -305,10 +305,7 @@ async function handleMessageCreated(
     }
   }
 
-  // Keep legacy singular vars for the mock dispatch path (backwards-compatible)
   const mediaUrl = tempFileUrls[0];
-  const tempFilePath = tempFilePaths[0];
-  const tempFileMime = tempFileMimes[0];
   const images: ImageContent[] | undefined = collectedImages.length > 0 ? collectedImages : undefined;
 
   // Unique per dispatch to isolate concurrent stream state.

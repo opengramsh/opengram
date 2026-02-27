@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenGramClient } from "../src/api-client.js";
 import { initializeChatManager } from "../src/chat-manager.js";
-import { clearProcessedIdsForTests, startInboundListener, type DispatchFn } from "../src/inbound.js";
+import { clearProcessedIdsForTests, startInboundListener } from "../src/inbound.js";
 import { setOpenGramRuntime } from "../src/runtime.js";
 import { clearChatQueuesForTests } from "../src/chat-queue.js";
 import { clearActiveStreamsForTests } from "../src/streaming.js";

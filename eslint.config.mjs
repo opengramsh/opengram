@@ -16,6 +16,12 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["dist/**", "build/**", "packages/**", ".next/**"],
+    ignores: [
+      "dist/**",
+      "build/**",
+      ".next/**",
+      "packages/*/node_modules/**",
+      "packages/*/dist/**",
+    ],
   },
 );

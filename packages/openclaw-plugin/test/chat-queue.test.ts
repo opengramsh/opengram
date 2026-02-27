@@ -210,7 +210,6 @@ describe("chat-queue", () => {
     });
 
     it("no-ops if dispatch is not the active one", () => {
-      const client = createMockClient();
       const cleanup = vi.fn();
 
       // No active dispatch for this chat
