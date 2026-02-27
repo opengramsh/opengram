@@ -161,60 +161,49 @@ export function ChatComposer({
       <footer
         ref={footerRef}
         data-chat-composer-root="true"
-        className="liquid-glass kbd-safe-pb fixed inset-x-0 z-40 w-full px-3 pt-3"
+        className="fixed inset-x-0 z-40 w-full border-t border-border/50 bg-background/95 backdrop-blur-md"
         style={{
           bottom: `${keyboardOffset}px`,
         }}
       >
         {!isRecording && pendingAttachments.length > 0 && (
-          <div className="mb-2 overflow-x-auto">
-            <div className="flex gap-2 pb-1">
-              {pendingAttachments.map((att) => (
-                <div key={att.localId} className="relative shrink-0">
-                  {att.kind === 'image' && att.localPreviewUrl ? (
-                    <div className="relative">
-                      <img
-                        src={att.localPreviewUrl}
-                        alt={att.filename}
-                        className="h-16 w-16 rounded-xl object-cover border border-border animate-in fade-in duration-200"
-                      />
-                      {att.status === 'uploading' && (
-                        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30">
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="relative flex h-16 w-32 items-center justify-center rounded-xl border border-border bg-muted/60 px-2">
-                      <FileText size={16} className="shrink-0 text-muted-foreground" />
-                      <span className="ml-1.5 truncate text-xs text-foreground">{att.filename}</span>
-                      {att.status === 'uploading' && (
-                        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/10">
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/50 border-t-transparent" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full border-border bg-background p-0"
-                    onClick={() => removePendingAttachment(att.localId)}
-                  >
-                    <X size={10} />
-                  </Button>
-                </div>
-              ))}
-            </div>
+          <div className="flex gap-2 overflow-x-auto px-3 pt-2 pb-1">
+            {pendingAttachments.map((att) => (
+              <div key={att.localId} className="relative shrink-0">
+                {att.kind === 'image' && att.localPreviewUrl ? (
+                  <img
+                    src={att.localPreviewUrl}
+                    alt={att.filename}
+                    className="h-14 w-14 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-muted text-xs text-muted-foreground">
+                    <FileText size={18} />
+                  </div>
+                )}
+                {att.status === 'uploading' && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removePendingAttachment(att.localId)}
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
         {isRecording ? (
           /* Recording mode: [Trash/Cancel] [Waveform + Timer] [Send] */
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-2">
             <Button
               variant="outline"
-              size="icon-xl"
+              size="icon-lg"
               aria-label="Cancel recording"
               className="border-red-300/50 bg-red-500/20 text-red-400 hover:bg-red-500/30"
               onClick={cancelRecording}
@@ -231,7 +220,7 @@ export function ChatComposer({
             </div>
 
             <Button
-              size="icon-xl"
+              size="icon-lg"
               aria-label="Send voice note"
               onClick={stopRecording}
             >
@@ -239,15 +228,15 @@ export function ChatComposer({
             </Button>
           </div>
         ) : isUploadingVoiceNote ? (
-          <div className="flex items-center justify-center py-2.5">
+          <div className="flex items-center justify-center px-3 py-3">
             <p className="text-[11px] text-muted-foreground">Sending voice note...</p>
           </div>
         ) : (
           /* Normal mode: [+] [Textarea] [Send] [Mic] */
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 px-3 py-2">
             <Button
               variant="outline"
-              size="icon-xl"
+              size="icon-lg"
               aria-label="Open composer menu"
               onClick={() => setIsComposerMenuOpen(true)}
             >
@@ -262,7 +251,7 @@ export function ChatComposer({
               autoComplete="off"
               inputMode="text"
               enterKeyHint="send"
-              className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl px-3 py-2.5"
+              className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border-0 bg-transparent px-3 py-2.5 text-sm shadow-none focus-visible:ring-0"
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !isTouchDevice() && (composerText.trim() || pendingAttachments.length > 0)) {
                   event.preventDefault();
@@ -272,7 +261,7 @@ export function ChatComposer({
             />
 
             <Button
-              size="icon-xl"
+              size="icon-lg"
               aria-label="Send message"
               onClick={() => void sendMessage()}
               disabled={isSending || !allAttachmentsReady || (!composerText.trim() && pendingAttachments.length === 0)}
@@ -282,7 +271,7 @@ export function ChatComposer({
 
             <Button
               variant="outline"
-              size="icon-xl"
+              size="icon-lg"
               aria-label="Record voice note"
               onClick={() => void handleMicAction()}
               disabled={isUploadingVoiceNote}
@@ -292,7 +281,7 @@ export function ChatComposer({
           </div>
         )}
         {showMicSettingsPrompt && (
-          <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
+          <div className="mx-3 mb-2 rounded-lg border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
             <p>Microphone access is blocked. Enable it in your browser or OS settings for this site.</p>
             <Button
               variant="outline"
@@ -347,7 +336,7 @@ export function ChatComposer({
 
       {/* Composer Menu */}
       <Drawer open={isComposerMenuOpen} onOpenChange={setIsComposerMenuOpen}>
-        <DrawerContent className="liquid-glass border-x border-t border-border px-4 pb-5 pt-3">
+        <DrawerContent className="pb-safe px-4 pb-5 pt-3">
           <DrawerTitle className="sr-only">Composer menu</DrawerTitle>
 
           {/* Attachment buttons */}
@@ -355,8 +344,7 @@ export function ChatComposer({
             <button
               type="button"
               className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              disabled={!allAttachmentsReady}
-              onClick={() => filesInputRef.current?.click()}
+              onClick={() => { setIsComposerMenuOpen(false); filesInputRef.current?.click(); }}
             >
               <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
                 <FileText size={20} className="text-primary" />
@@ -367,11 +355,7 @@ export function ChatComposer({
             <button
               type="button"
               className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              disabled={!allAttachmentsReady}
-              onClick={() => {
-                setIsComposerMenuOpen(false);
-                onCameraCapture();
-              }}
+              onClick={() => { setIsComposerMenuOpen(false); cameraInputRef.current?.click(); }}
             >
               <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
                 <Camera size={20} className="text-primary" />
@@ -382,8 +366,7 @@ export function ChatComposer({
             <button
               type="button"
               className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              disabled={!allAttachmentsReady}
-              onClick={() => photosInputRef.current?.click()}
+              onClick={() => { setIsComposerMenuOpen(false); photosInputRef.current?.click(); }}
             >
               <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
                 <Images size={20} className="text-primary" />
@@ -392,7 +375,7 @@ export function ChatComposer({
             </button>
           </div>
 
-          {!allAttachmentsReady && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment...</p>}
+          {!allAttachmentsReady && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment…</p>}
         </DrawerContent>
       </Drawer>
     </>

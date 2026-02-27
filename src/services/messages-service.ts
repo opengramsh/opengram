@@ -319,7 +319,7 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
   const streamState = normalized.streaming ? 'streaming' : 'complete';
   const contentFinal = normalized.streaming ? null : normalized.content;
 
-  const tx = db.transaction(() => {
+  const tx = db.transaction((): MediaRecord[] => {
     const linkedMediaList: MediaRecord[] = [];
 
     for (const ref of normalized.mediaReferences) {
@@ -410,12 +410,24 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
         chat.id,
       );
     }
+
+    return linkedMediaList;
   });
 
-  tx();
+  const linkedMediaList = tx();
 
   const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as MessageRecord;
   const serialized = serializeMessage(message);
+
+  for (const linkedMedia of linkedMediaList) {
+    emitEvent('media.attached', {
+      chatId,
+      mediaId: linkedMedia.id,
+      messageId,
+      kind: linkedMedia.kind,
+    });
+  }
+
   emitEvent('message.created', {
     chatId,
     messageId: serialized.id,
