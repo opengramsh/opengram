@@ -20,7 +20,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/src/components/ui/tabs";
-import { apiFetch, setApiSecret } from "@/src/lib/api-fetch";
+import { apiFetch } from "@/src/lib/api-fetch";
 import { cn } from "@/src/lib/utils";
 import type { ConfigResponse } from "./_settings/types";
 import { AppSettingsTab } from "./_settings/app-settings-tab";
@@ -144,7 +144,6 @@ export default function SettingsPage() {
       const response = await apiFetch("/api/v1/config", { cache: "no-store" });
       if (!response.ok) throw new Error("Failed to load config");
       const loaded = (await response.json()) as ConfigResponse;
-      setApiSecret(loaded.security?.instanceSecret ?? null);
       setConfig(loaded);
     } catch {
       setError("Failed to load configuration.");

@@ -16,9 +16,6 @@ export type FrontendConfigCache = {
   defaultModelIdForNewChats?: string;
   agents: CachedAgent[];
   models: CachedModel[];
-  security?: {
-    instanceSecret?: string | null;
-  };
 };
 
 let cache: FrontendConfigCache | null = null;

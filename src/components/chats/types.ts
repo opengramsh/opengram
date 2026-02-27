@@ -19,7 +19,6 @@ export type ConfigResponse = {
   defaultModelIdForNewChats: string;
   security?: {
     instanceSecretEnabled?: boolean;
-    instanceSecret?: string;
     readEndpointsRequireInstanceSecret?: boolean;
   };
 };

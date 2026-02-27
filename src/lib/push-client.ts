@@ -1,4 +1,4 @@
-import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
+import { apiFetch } from '@/src/lib/api-fetch';
 
 export type PushConfigResponse = {
   enabled: boolean;
@@ -48,12 +48,7 @@ export async function fetchPushConfig(): Promise<PushConfigResponse> {
       enabled?: boolean;
       vapidPublicKey?: string;
     };
-    security?: {
-      instanceSecret?: string;
-    };
   };
-
-  setApiSecret(parsed.security?.instanceSecret ?? null);
 
   return {
     enabled: Boolean(parsed.push?.enabled),

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
@@ -115,13 +117,27 @@ app.use(
 // Static files (manifest, icons, etc.)
 app.use("/*", serveStatic({ root: "./dist/client" }));
 
-// SPA fallback: serve index.html for client-side routes
-const spaFallback = serveStatic({ path: "./dist/client/index.html" });
-app.get("/*", async (c, next) => {
+// SPA fallback: serve index.html with bootstrap injection
+let spaHtmlTemplate: string | null = null;
+
+function getSpaHtml(): string {
+  if (!spaHtmlTemplate) {
+    spaHtmlTemplate = readFileSync("./dist/client/index.html", "utf8");
+  }
+  return spaHtmlTemplate;
+}
+
+app.get("/*", (c) => {
   if (c.req.path === "/api" || c.req.path.startsWith("/api/")) {
     return c.notFound();
   }
-  return spaFallback(c, next);
+  const cfg = loadOpengramConfig();
+  const bootstrap = {
+    instanceSecret: cfg.security.instanceSecretEnabled ? cfg.security.instanceSecret : null,
+  };
+  const json = JSON.stringify(bootstrap).replace(/<\//g, "<\\/");
+  const script = `<script>window.__OPENGRAM_BOOTSTRAP__=${json};</script>`;
+  return c.html(getSpaHtml().replace("</head>", `${script}</head>`));
 });
 
 // Start background jobs (replaces instrumentation-node.ts)

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 
 import { toast } from 'sonner';
 
-import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
+import { apiFetch } from '@/src/lib/api-fetch';
 import { getFrontendConfigCache, setFrontendConfigCache } from '@/src/lib/frontend-config-cache';
 import { buildInlineMessageMedia, mediaSortAsc, normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type {
@@ -248,7 +248,6 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
           return {
             agents: existing.agents,
             models: existing.models,
-            security: existing.security,
           } as ConfigResponse;
         }
 
@@ -275,9 +274,7 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
       setFrontendConfigCache({
         agents: config.agents ?? [],
         models: config.models ?? [],
-        security: { instanceSecret: config.security?.instanceSecret ?? null },
       });
-      setApiSecret(config.security?.instanceSecret ?? null);
       const chatPayload = (await chatResponse.json()) as Chat;
       const messagesPayload = (await messagesResponse.json()) as MessagesResponse;
       const requestsPayload = (await requestsResponse.json()) as RequestsResponse;

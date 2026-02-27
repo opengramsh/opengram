@@ -8,7 +8,7 @@ import { Facehash } from 'facehash';
 
 import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
 import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
-import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
+import { apiFetch } from '@/src/lib/api-fetch';
 import { Button } from '@/src/components/ui/button';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
 import {
@@ -53,8 +53,7 @@ export default function NewChatPage() {
       try {
         const response = await apiFetch('/api/v1/config', { cache: 'no-store' });
         if (!response.ok) return;
-        const config = (await response.json()) as { agents: Agent[]; models: Model[]; security?: { instanceSecret?: string } };
-        setApiSecret(config.security?.instanceSecret ?? null);
+        const config = (await response.json()) as { agents: Agent[]; models: Model[] };
         setAgents(config.agents ?? []);
         setRawModels(config.models ?? []);
 

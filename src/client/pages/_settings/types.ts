@@ -23,7 +23,6 @@ export type ConfigResponse = {
   };
   security?: {
     instanceSecretEnabled?: boolean;
-    instanceSecret?: string;
     readEndpointsRequireInstanceSecret?: boolean;
   };
 };

@@ -26,7 +26,7 @@ import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
 import { Checkbox } from "@/src/components/ui/checkbox";
 import { Switch } from "@/src/components/ui/switch";
-import { setApiSecret } from "@/src/lib/api-fetch";
+import { getApiSecret, setApiSecret } from "@/src/lib/api-fetch";
 import {
   disablePushNotifications,
   enablePushNotifications,
@@ -66,7 +66,7 @@ function SecurityCard({
   const [enabled, setEnabled] = useState(
     config.security?.instanceSecretEnabled ?? false,
   );
-  const [secret, setSecret] = useState(config.security?.instanceSecret ?? "");
+  const [secret, setSecret] = useState(getApiSecret() ?? "");
   const [requireForReads, setRequireForReads] = useState(
     config.security?.readEndpointsRequireInstanceSecret ?? false,
   );
@@ -78,19 +78,17 @@ function SecurityCard({
 
   useEffect(() => {
     setEnabled(config.security?.instanceSecretEnabled ?? false);
-    setSecret(config.security?.instanceSecret ?? "");
     setRequireForReads(
       config.security?.readEndpointsRequireInstanceSecret ?? false,
     );
   }, [
     config.security?.instanceSecretEnabled,
-    config.security?.instanceSecret,
     config.security?.readEndpointsRequireInstanceSecret,
   ]);
 
   const isDirty =
     enabled !== (config.security?.instanceSecretEnabled ?? false) ||
-    secret !== (config.security?.instanceSecret ?? "") ||
+    secret !== (getApiSecret() ?? "") ||
     requireForReads !==
       (config.security?.readEndpointsRequireInstanceSecret ?? false);
 
@@ -108,9 +106,9 @@ function SecurityCard({
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
-      const currentServerSecret = config.security?.instanceSecret;
-      if (currentServerSecret) {
-        headers.Authorization = `Bearer ${currentServerSecret}`;
+      const currentSecret = getApiSecret();
+      if (currentSecret) {
+        headers.Authorization = `Bearer ${currentSecret}`;
       }
       const res = await fetch("/api/v1/config/admin", {
         method: "PATCH",

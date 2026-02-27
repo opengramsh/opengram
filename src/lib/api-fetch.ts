@@ -15,9 +15,15 @@ function readFromStorage(): string | null {
   }
 }
 
+function readFromBootstrap(): string | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as typeof window & { __OPENGRAM_BOOTSTRAP__?: { instanceSecret?: string | null } };
+  return w.__OPENGRAM_BOOTSTRAP__?.instanceSecret?.trim() || null;
+}
+
 export function getApiSecret(): string | null {
   if (cachedSecret === undefined) {
-    cachedSecret = readFromStorage();
+    cachedSecret = readFromStorage() || readFromBootstrap() || null;
   }
 
   return cachedSecret;

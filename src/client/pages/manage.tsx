@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { apiFetch, setApiSecret } from '@/src/lib/api-fetch';
+import { apiFetch } from '@/src/lib/api-fetch';
 import { HamburgerMenu } from '@/src/components/navigation/hamburger-menu';
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card';
 
@@ -29,8 +29,7 @@ export default function ManagePage() {
           throw new Error('Failed to load config');
         }
 
-        const payload = (await response.json()) as ConfigViewerResponse & { security?: { instanceSecret?: string } };
-        setApiSecret(payload.security?.instanceSecret ?? null);
+        const payload = (await response.json()) as ConfigViewerResponse;
         setConfig(payload);
       } catch {
         setError('Failed to load config viewer data.');

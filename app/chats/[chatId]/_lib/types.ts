@@ -17,7 +17,6 @@ export type ConfigResponse = {
   models: Model[];
   security?: {
     instanceSecretEnabled?: boolean;
-    instanceSecret?: string;
     readEndpointsRequireInstanceSecret?: boolean;
   };
 };
