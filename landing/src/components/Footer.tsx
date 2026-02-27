@@ -34,17 +34,17 @@ export function Footer() {
   return (
     <footer className="py-16 md:py-24 px-4">
       <div className="max-w-4xl mx-auto">
-        {/* Agent message closer */}
+        {/* Agent message closer — big and centered */}
         <div
           ref={bubbleRef}
-          className={`mb-16 max-w-md transition-all duration-500 ${
+          className={`mb-20 flex flex-col items-center transition-all duration-500 ${
             visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
           }`}
         >
-          <div className="flex items-end gap-2.5">
+          <div className="flex items-end gap-3 max-w-lg">
             {/* Avatar */}
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold"
+              className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold"
               style={{
                 background: "rgba(124, 91, 250, 0.15)",
                 color: "#7c5bfa",
@@ -54,9 +54,12 @@ export function Footer() {
             </div>
 
             {/* Bubble */}
-            <div className="bg-elevated rounded-2xl rounded-bl-md border border-line/70 px-3 py-2">
-              <p className="text-sm leading-relaxed">
-                That&apos;s OpenGram. Questions or issues &rarr;{" "}
+            <div className="bg-elevated rounded-2xl rounded-bl-md border border-line/70 px-5 py-4">
+              <p className="text-lg md:text-xl leading-relaxed font-medium">
+                That&apos;s OpenGram.
+              </p>
+              <p className="text-sm text-secondary mt-2 leading-relaxed">
+                Questions, issues, or want to contribute? &rarr;{" "}
                 <a
                   href="https://github.com/opengramsh/opengram"
                   target="_blank"
@@ -65,14 +68,13 @@ export function Footer() {
                 >
                   GitHub
                 </a>
-                .
               </p>
             </div>
           </div>
 
           {/* Timestamp + checkmark */}
-          <div className="flex items-center gap-1.5 ml-10 mt-1.5">
-            <span className="text-[10px] text-tertiary">just now</span>
+          <div className="flex items-center gap-1.5 mt-2 ml-13">
+            <span className="text-[11px] text-tertiary">just now</span>
             {showCheck && (
               <svg
                 width="14"
@@ -100,6 +102,18 @@ export function Footer() {
               </svg>
             )}
           </div>
+        </div>
+
+        {/* Tech stack badges */}
+        <div className="flex flex-wrap justify-center gap-2 mb-12">
+          {["React 19", "Next.js", "SQLite", "Hono", "Tailwind CSS", "TypeScript", "SSE"].map((tech) => (
+            <span
+              key={tech}
+              className="px-2.5 py-1 rounded-md font-mono text-xs text-tertiary border border-line/30 bg-surface/50"
+            >
+              {tech}
+            </span>
+          ))}
         </div>
 
         {/* Footer links */}

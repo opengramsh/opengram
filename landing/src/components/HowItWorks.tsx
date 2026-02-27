@@ -26,7 +26,7 @@ export function HowItWorks() {
       <div className="max-w-4xl mx-auto">
         <SectionReveal>
           <p className="font-mono text-xs text-accent uppercase tracking-widest mb-12 text-center">
-            How it works
+            $ cat how-it-works.md
           </p>
 
           {/* SVG animation */}
@@ -243,29 +243,66 @@ export function HowItWorks() {
         </SectionReveal>
 
         <SectionReveal>
-          <p className="text-secondary text-base md:text-lg leading-relaxed max-w-3xl mx-auto text-center mb-8">
-            OpenGram is a Next.js app with an embedded SQLite database.
-            There&apos;s no separate database service to manage — just one
-            systemd process. Your agents talk to it over a REST API. Your phone
-            talks to it as a PWA. It&apos;s designed to sit behind Tailscale so
-            you never expose it to the public internet.
+          {/* Protocols & data flow */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12 max-w-3xl mx-auto text-center">
+            <div className="glass rounded-lg px-4 py-3">
+              <p className="font-mono text-xs text-accent mb-1">REST API</p>
+              <p className="text-xs text-secondary">JSON over HTTP/S</p>
+            </div>
+            <div className="glass rounded-lg px-4 py-3">
+              <p className="font-mono text-xs text-accent mb-1">SSE Stream</p>
+              <p className="text-xs text-secondary">Real-time events</p>
+            </div>
+            <div className="glass rounded-lg px-4 py-3">
+              <p className="font-mono text-xs text-accent mb-1">SQLite</p>
+              <p className="text-xs text-secondary">Single-file database</p>
+            </div>
+          </div>
+          <p className="text-secondary text-sm md:text-base leading-relaxed max-w-2xl mx-auto text-center mb-10">
+            One systemd process. No separate database service. Connect via the{" "}
+            <span className="text-primary">OpenClaw plugin</span> or any HTTP
+            client. Designed for Tailscale — no public internet required.
           </p>
         </SectionReveal>
 
         <SectionReveal>
-          {/* Code snippet */}
-          <div className="glass rounded-xl overflow-hidden max-w-2xl mx-auto">
-            <div className="px-4 py-2 border-b border-line/30 flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-success/60" />
-              <span className="font-mono text-xs text-tertiary">
-                Send a message to any chat
-              </span>
+          {/* Code snippets — two side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
+            {/* Send a message */}
+            <div className="glass rounded-xl overflow-hidden">
+              <div className="px-4 py-2 border-b border-line/30 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-success/60" />
+                <span className="font-mono text-xs text-tertiary">
+                  Send a message
+                </span>
+              </div>
+              <pre className="px-4 py-4 text-xs font-mono overflow-x-auto text-secondary leading-relaxed bg-code">
+                <code>{`curl -X POST /api/v1/chats/:id/messages \\
+  -d '{
+    "role": "agent",
+    "content": "Deploy complete.",
+    "stream": true
+  }'`}</code>
+              </pre>
             </div>
-            <pre className="px-4 py-4 text-sm font-mono overflow-x-auto text-secondary leading-relaxed">
-              <code>{`curl -X POST https://your-opengram/api/v1/chats/abc123/messages \\
-  -H "Content-Type: application/json" \\
-  -d '{"role": "agent", "content": "Task completed."}'`}</code>
-            </pre>
+
+            {/* Create a request */}
+            <div className="glass rounded-xl overflow-hidden">
+              <div className="px-4 py-2 border-b border-line/30 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-amber-400/60" />
+                <span className="font-mono text-xs text-tertiary">
+                  Create a request
+                </span>
+              </div>
+              <pre className="px-4 py-4 text-xs font-mono overflow-x-auto text-secondary leading-relaxed bg-code">
+                <code>{`curl -X POST /api/v1/chats/:id/requests \\
+  -d '{
+    "type": "choice",
+    "question": "Rollback?",
+    "options": ["Yes", "No"]
+  }'`}</code>
+              </pre>
+            </div>
           </div>
         </SectionReveal>
       </div>

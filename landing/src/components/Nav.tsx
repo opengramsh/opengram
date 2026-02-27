@@ -62,8 +62,8 @@ export function Nav() {
       <div className="max-w-6xl mx-auto px-4 h-[52px] flex items-center justify-between">
         {/* Left: Logo + wordmark */}
         <a href="/" className="flex items-center gap-2.5">
-          <img src="/opengram-logo-sm.webp" alt="OpenGram" className="w-7 h-7 rounded-lg" />
-          <span className="font-mono font-semibold text-primary text-sm tracking-tight">
+          <img src="/opengram-logo-sm.webp" alt="OpenGram" className="w-9 h-9 rounded-lg" />
+          <span className="font-mono font-bold text-primary text-lg tracking-tight">
             opengram
           </span>
         </a>

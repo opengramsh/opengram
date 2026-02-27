@@ -468,33 +468,90 @@ export function InteractiveDemo() {
     </div>
   );
 
+  /* ─── Phone frame wrapper ─── */
+  const phoneMockup = (
+    <div className="w-[300px] sm:w-[320px] shrink-0">
+      <div className="rounded-[2.5rem] border-2 border-line/40 bg-surface overflow-hidden shadow-2xl shadow-black/40">
+        {/* Notch */}
+        <div className="flex justify-center pt-2 pb-1 bg-surface">
+          <div className="w-20 h-5 rounded-full bg-page" />
+        </div>
+        {/* Status bar */}
+        <div className="flex items-center justify-between px-5 py-1 text-[10px] text-tertiary">
+          <span>9:41</span>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-2 rounded-sm border border-tertiary/50">
+              <div className="w-2.5 h-1 rounded-sm bg-success m-px" />
+            </div>
+          </div>
+        </div>
+        {/* App content */}
+        <div className="bg-page" style={{ height: 460 }}>
+          <div className="h-full">
+            {showList ? chatList : chatView}
+          </div>
+        </div>
+        {/* Home indicator */}
+        <div className="flex justify-center py-2 bg-surface">
+          <div className="w-24 h-1 rounded-full bg-line" />
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ─── Desktop browser frame wrapper ─── */
+  const desktopMockup = (
+    <div className="hidden lg:block w-[520px] shrink-0">
+      <div className="rounded-xl border border-line/40 bg-surface overflow-hidden shadow-2xl shadow-black/40">
+        {/* Title bar */}
+        <div className="flex items-center gap-3 px-3 py-2 border-b border-line/30 bg-surface">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+          </div>
+          <div className="flex-1 flex justify-center">
+            <div className="bg-page rounded-md px-3 py-0.5 text-[10px] text-tertiary font-mono flex items-center gap-1.5">
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              opengram.tail1234.ts.net
+            </div>
+          </div>
+        </div>
+        {/* App content — split view */}
+        <div className="grid grid-cols-[240px_1fr] bg-page" style={{ height: 480 }}>
+          <div className="border-r border-line/30">{chatList}</div>
+          <div>{chatView}</div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <section id="demo" className="py-24 md:py-32 px-4 bg-demo-bg">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <SectionReveal>
-          <p className="font-mono text-xs text-accent uppercase tracking-widest mb-6">
-            Try it
+          <p className="font-mono text-xs text-accent uppercase tracking-widest mb-3">
+            $ opengram demo --interactive
+          </p>
+          <h2 className="text-2xl md:text-3xl font-bold mb-2">Try it live</h2>
+          <p className="text-secondary text-sm mb-8">
+            Type a message. Watch it stream. Click a request card.
           </p>
         </SectionReveal>
 
         <SectionReveal>
-          {/* Demo container */}
-          <div className="glass rounded-2xl overflow-hidden h-[520px] md:h-[560px]">
-            {/* Desktop: split view */}
-            <div className="hidden md:grid md:grid-cols-[280px_1fr] h-full">
-              <div className="border-r border-line/30">{chatList}</div>
-              <div>{chatView}</div>
-            </div>
+          {/* Dual device layout */}
+          <div className="flex items-start justify-center gap-8">
+            {/* Phone — always visible */}
+            {phoneMockup}
 
-            {/* Mobile: single panel */}
-            <div className="md:hidden h-full">
-              {showList ? chatList : chatView}
-            </div>
+            {/* Desktop — large screens */}
+            {desktopMockup}
           </div>
 
           {/* Label */}
-          <p className="text-tertiary text-xs text-center mt-4">
-            This is what the actual app looks like. No screenshots edited.
+          <p className="text-tertiary text-xs text-center mt-6">
+            Both devices share the same state. This is the actual app UI — no screenshots.
           </p>
         </SectionReveal>
       </div>

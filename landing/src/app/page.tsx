@@ -2,14 +2,12 @@ import { Nav } from "@/components/Nav";
 import { Hero } from "@/components/Hero";
 import { GhostConversations } from "@/components/GhostConversations";
 import { ProblemSection } from "@/components/ProblemSection";
-import { ScreenshotPlaceholder } from "@/components/ScreenshotPlaceholder";
 import { Features } from "@/components/Features";
+import { OpenClawSection } from "@/components/OpenClawSection";
 import { InteractiveDemo } from "@/components/InteractiveDemo";
-import { VideoPlaceholder } from "@/components/VideoPlaceholder";
 import { HowItWorks } from "@/components/HowItWorks";
 import { InstallSection } from "@/components/InstallSection";
 import { Footer } from "@/components/Footer";
-import { ThreadTimeline } from "@/components/ThreadTimeline";
 import { MobileInstallSheet } from "@/components/MobileInstallSheet";
 
 export default function Home() {
@@ -25,20 +23,14 @@ export default function Home() {
             <Hero />
           </div>
 
-          <div className="relative">
-            <ThreadTimeline />
+          <ProblemSection />
+          <Features />
+          <OpenClawSection />
 
-            <ProblemSection />
-            <ScreenshotPlaceholder />
-            <Features />
+          <InteractiveDemo />
 
-            <InteractiveDemo />
-
-            <VideoPlaceholder />
-
-            <HowItWorks />
-            <InstallSection />
-          </div>
+          <HowItWorks />
+          <InstallSection />
 
           <Footer />
         </main>

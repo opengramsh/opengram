@@ -9,7 +9,7 @@ function Bubble({
     <div
       className={`${width} h-8 rounded-2xl ${
         align === "left" ? "rounded-bl-sm" : "rounded-br-sm self-end"
-      } ${align === "left" ? "bg-white/10" : "bg-accent/10"}`}
+      } ${align === "left" ? "bg-white/[0.12]" : "bg-[#7c5bfa]/[0.15]"}`}
     />
   );
 }
@@ -20,11 +20,11 @@ function LongBubble({ align = "left" }: { align?: "left" | "right" }) {
       <div
         className={`w-52 h-7 rounded-2xl ${
           align === "left" ? "rounded-bl-none" : "rounded-br-none"
-        } ${align === "left" ? "bg-white/10" : "bg-accent/10"}`}
+        } ${align === "left" ? "bg-white/[0.12]" : "bg-[#7c5bfa]/[0.15]"}`}
       />
       <div
         className={`w-36 h-7 rounded-2xl ${
-          align === "left" ? "bg-white/10" : "bg-accent/10"
+          align === "left" ? "bg-white/[0.12]" : "bg-[#7c5bfa]/[0.15]"
         }`}
       />
     </div>
@@ -33,11 +33,11 @@ function LongBubble({ align = "left" }: { align?: "left" | "right" }) {
 
 function RequestOutline() {
   return (
-    <div className="w-56 h-20 rounded-xl border border-white/15 flex flex-col items-center justify-center gap-2 p-3">
-      <div className="w-32 h-3 rounded bg-white/10" />
+    <div className="w-56 h-20 rounded-xl border border-white/[0.15] flex flex-col items-center justify-center gap-2 p-3">
+      <div className="w-32 h-3 rounded bg-white/[0.12]" />
       <div className="flex gap-2">
-        <div className="w-16 h-6 rounded-md bg-white/10" />
-        <div className="w-16 h-6 rounded-md bg-white/10" />
+        <div className="w-16 h-6 rounded-md bg-white/[0.12]" />
+        <div className="w-16 h-6 rounded-md bg-white/[0.12]" />
       </div>
     </div>
   );
@@ -66,7 +66,7 @@ export function GhostConversations() {
       <div className="absolute inset-0 dot-grid opacity-40" />
 
       {/* Columns — 3 on desktop, 2 on mobile */}
-      <div className="absolute inset-0 flex gap-6 px-4 md:px-8" style={{ filter: "blur(2px)" }}>
+      <div className="absolute inset-0 flex gap-6 px-4 md:px-8" style={{ filter: "blur(1px)" }}>
         {/* Column 1 */}
         <Column className="ghost-col-1 w-1/2 md:w-1/3 pt-8">
           <Bubble width="w-40" />

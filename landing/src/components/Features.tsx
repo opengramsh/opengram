@@ -125,6 +125,11 @@ export function Features() {
     <section className="py-24 md:py-32 px-4">
       <div className="max-w-4xl mx-auto">
         <SectionReveal>
+          <p className="font-mono text-xs text-accent uppercase tracking-widest mb-8">
+            $ cat features.md
+          </p>
+        </SectionReveal>
+        <SectionReveal>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FeatureCard
               icon={<MessageSquare size={20} />}
