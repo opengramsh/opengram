@@ -607,8 +607,11 @@ function buildDeliver(
     }
 
     if (kind === "final") {
+      const normalizedFinalText =
+        typeof replyPayload.text === "string" && replyPayload.text.trim()
+          ? replyPayload.text
+          : undefined;
       const hasTextField = typeof replyPayload.text === "string";
-      const normalizedFinalText = hasTextField && replyPayload.text.trim() ? replyPayload.text : undefined;
 
       if (hasTextField) {
         const wasStreaming = await finalizeStream(client, dispatchId, normalizedFinalText);
