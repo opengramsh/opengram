@@ -30,6 +30,7 @@ export function ChatV2PageProvider({ chatId, initialChat, children }: ChatV2Page
     pendingAttachmentIds: attachments.readyIds,
     onSendStart: () => data.setPendingReply(true),
     onSendComplete: () => data.scrollToBottom(true),
+    onSendError: () => data.setPendingReply(false),
     clearAttachments: attachments.clearAll,
   });
   const requests = useChatV2Requests({

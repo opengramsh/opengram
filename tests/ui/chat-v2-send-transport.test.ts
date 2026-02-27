@@ -1,39 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getApiSecret, setApiSecret } from '@/src/lib/api-fetch';
-
-/**
- * Tests the v2 chat send transport logic: the prepareSendMessagesRequest
- * function that builds headers and body for the AI SDK DefaultChatTransport.
- *
- * We replicate the prepare function from use-chat-v2-send.ts to test it
- * in isolation without React hooks.
- */
-
-type MessagePart = { type: string; text?: string };
-type PrepareMessage = { parts?: MessagePart[] };
-
-/** Extracted from use-chat-v2-send.ts prepareSendMessagesRequest */
-function prepareSendMessagesRequest(
-  messages: PrepareMessage[],
-  attachmentIds: string[],
-) {
-  const lastMsg = messages[messages.length - 1];
-  const text =
-    lastMsg?.parts
-      ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-      .map((p) => p.text)
-      .join('') ?? '';
-
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  const secret = getApiSecret();
-  if (secret) headers['authorization'] = `Bearer ${secret}`;
-
-  return {
-    body: { message: text, attachmentIds },
-    headers,
-  };
-}
+import { setApiSecret } from '@/src/lib/api-fetch';
+import { prepareSendMessagesRequest } from '@/app/chats-v2/[chatId]/_lib/prepare-send-request';
 
 describe('v2 send transport', () => {
   beforeEach(() => {
