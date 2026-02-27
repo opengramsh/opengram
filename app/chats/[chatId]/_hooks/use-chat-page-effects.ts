@@ -413,7 +413,7 @@ export function useChatPageEffects(data: ChatPageData) {
 
   useEffect(() => {
     const unsubscribe = subscribeToKeyboardLayout(window, document, ({ keyboardOffset }) => {
-      const feed = feedRef.current;
+      const feed = feedRef.current?.scrollRef.current;
       const nearBottom = feed
         ? (feed.scrollHeight - feed.scrollTop - feed.clientHeight) <= 80
         : false;

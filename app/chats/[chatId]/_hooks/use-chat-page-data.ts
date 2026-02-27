@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import type { StickToBottomContext } from 'use-stick-to-bottom';
 
 import { toast } from 'sonner';
 
@@ -72,7 +73,7 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId 
   const photosInputRef = useRef<HTMLInputElement | null>(null);
   const filesInputRef = useRef<HTMLInputElement | null>(null);
   const tagSuggestionsTimerRef = useRef<number | null>(null);
-  const feedRef = useRef<HTMLDivElement | null>(null);
+  const feedRef = useRef<StickToBottomContext | null>(null);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const hasOptimisticChatRef = useRef(Boolean(initialChat));
   const swipeRef = useRef({
@@ -157,12 +158,7 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId 
   }, []);
 
   const scrollToBottom = useCallback((smooth = false) => {
-    const feed = feedRef.current;
-    if (!feed) {
-      return;
-    }
-
-    feed.scrollTo({ top: feed.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    feedRef.current?.scrollToBottom(smooth ? 'smooth' : 'instant');
   }, []);
 
   const refreshMessages = useCallback(async () => {
@@ -492,7 +488,13 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId 
   }, [chat, patchChatSettings]);
 
   const getChatId = useCallback(async () => chat?.id ?? null, [chat]);
-  const recorder = useChatRecorder({ getChatId, setError, setMessages, setMedia });
+  const recorder = useChatRecorder({
+    getChatId,
+    setError,
+    setMessages,
+    setMedia,
+    onVoiceNoteUploaded: () => scrollToBottom(true),
+  });
   const requests = useChatRequestActions({
     setPendingRequests,
     setChat,

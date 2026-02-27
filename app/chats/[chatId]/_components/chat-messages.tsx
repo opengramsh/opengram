@@ -1,4 +1,5 @@
 import { type RefObject } from 'react';
+import type { StickToBottomContext } from 'use-stick-to-bottom';
 import { ChevronRight, File, FileSpreadsheet, FileText, Video } from 'lucide-react';
 
 import { buildFileUrl } from '@/src/lib/api-fetch';
@@ -24,7 +25,7 @@ import {
 } from '@/src/components/ai-elements/conversation';
 
 type ChatMessagesProps = {
-  feedRef: RefObject<HTMLDivElement | null>;
+  feedRef: RefObject<StickToBottomContext | null>;
   loading: boolean;
   messagesLoading: boolean;
   error: string | null;
@@ -206,8 +207,7 @@ export function ChatMessages({
 
   return (
     <Conversation
-      // @ts-expect-error ref forwarded through spread props at runtime
-      ref={feedRef}
+      contextRef={feedRef}
       className="flex-1"
       style={{ paddingBottom: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
       initial={scrollToMessageId ? false : 'smooth'}
