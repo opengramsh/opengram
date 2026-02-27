@@ -3,7 +3,7 @@ import { dirname, extname, join, posix, resolve, sep } from 'node:path';
 
 import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
-import type Vips from 'wasm-vips';
+import sharp from 'sharp';
 
 import {
   conflictError,
@@ -174,34 +174,15 @@ function ensureChatAndMessage(db: Database.Database, chatId: string, messageId: 
   }
 }
 
-let vipsInstance: typeof Vips | null = null;
-
-async function getVips() {
-  if (vipsInstance) return vipsInstance;
-  const VipsInit = (await import('wasm-vips')).default;
-  vipsInstance = await VipsInit();
-  return vipsInstance;
-}
-
 async function createThumbnail(fileBytes: Uint8Array): Promise<Uint8Array> {
-  const vips = await getVips();
-  let image: Vips.Image | null = null;
-  let rotated: Vips.Image | null = null;
-  let thumb: Vips.Image | null = null;
-
-  try {
-    image = vips.Image.newFromBuffer(fileBytes);
-    rotated = image.autorot();
-    thumb = rotated.thumbnailImage(512, {
-      height: 512,
-      size: vips.Size.down,
-    });
-    return thumb.writeToBuffer('.webp', { Q: 80 });
-  } finally {
-    thumb?.delete();
-    rotated?.delete();
-    image?.delete();
-  }
+  return sharp(fileBytes)
+    .rotate()
+    .resize(512, 512, {
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 80 })
+    .toBuffer();
 }
 
 function isInvalidImageContentError(error: unknown) {
