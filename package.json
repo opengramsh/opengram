@@ -11,7 +11,8 @@
     "db:migrate": "node deploy/docker/run-migrations.js",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
