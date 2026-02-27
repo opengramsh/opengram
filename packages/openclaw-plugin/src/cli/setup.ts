@@ -310,14 +310,15 @@ async function promptAgents(
     initialValues: defaultSelection,
   });
 
-  const agentConfigs: ImportedAgent[] = selected.map((id) => {
-    const a = agentList.find((item) => item.id === id)!;
-    return {
+  const agentConfigs: ImportedAgent[] = selected.flatMap((id) => {
+    const a = agentList.find((item) => item.id === id);
+    if (!a) return [];
+    return [{
       id: a.id,
       name: a.name ?? a.id,
       description: "Imported from OpenClaw",
       ...(a.model ? { defaultModelId: a.model } : {}),
-    };
+    }];
   });
 
   return { agentIds: selected, agentConfigs };
@@ -358,7 +359,8 @@ async function promptAutoRename(
     initialValue: defaultProvider,
   });
 
-  const provider = RENAME_PROVIDERS.find((p) => p.id === providerId)!;
+  const provider = RENAME_PROVIDERS.find((p) => p.id === providerId);
+  if (!provider) return undefined;
 
   // --- API key ---
   const envKey = detectApiKey(provider);

@@ -259,10 +259,10 @@ describe("runSetupWizard", () => {
         .mockResolvedValueOnce("http://localhost:3000"),  // baseUrl
       confirm: vi.fn()
         .mockResolvedValueOnce(false)    // instance secret: no
+        .mockResolvedValueOnce(false)    // auto-rename: no
         .mockResolvedValueOnce(false),   // restart: no
       multiselect: vi.fn()
-        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models
-        .mockResolvedValueOnce(["agent-1"]),                      // agents
+        .mockResolvedValueOnce(["agent-1"]),              // agents
     });
 
     const cfg = createMinimalConfig();
@@ -286,10 +286,10 @@ describe("runSetupWizard", () => {
         .mockResolvedValueOnce("s3cr3t"),                  // instanceSecret
       confirm: vi.fn()
         .mockResolvedValueOnce(true)     // instance secret: yes
+        .mockResolvedValueOnce(false)    // auto-rename: no
         .mockResolvedValueOnce(false),   // restart: no
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])  // models
-        .mockResolvedValueOnce([]), // agents
+        .mockResolvedValueOnce([]),      // agents
     });
 
     const cfg = createMinimalConfig();
@@ -305,10 +305,10 @@ describe("runSetupWizard", () => {
         .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn()
         .mockResolvedValueOnce(false)    // instance secret: no
+        .mockResolvedValueOnce(false)    // auto-rename: no
         .mockResolvedValueOnce(true),    // restart: yes
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])  // models
-        .mockResolvedValueOnce([]), // agents
+        .mockResolvedValueOnce([]),      // agents
     });
 
     const cfg = createMinimalConfig();
@@ -322,8 +322,7 @@ describe("runSetupWizard", () => {
         .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]),
+        .mockResolvedValueOnce([]),  // agents
     });
 
     const cfg = createMinimalConfig();
@@ -353,35 +352,11 @@ describe("runSetupWizard", () => {
     expect(section.agents).toEqual([]);
   });
 
-  it("shows model selection from cfg.agents.defaults.models", async () => {
-    const prompter = createMockPrompter({
-      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
-      confirm: vi.fn().mockResolvedValue(false),
-      multiselect: vi.fn()
-        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models selected
-        .mockResolvedValueOnce(["agent-1"]),                      // agents selected
-    });
-
-    const cfg = createMinimalConfig();
-    await runSetupWizard(prompter, cfg);
-
-    // First multiselect should be models
-    const firstMultiselectCall = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(firstMultiselectCall.message).toMatch(/model/i);
-    expect(firstMultiselectCall.options).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ value: "anthropic/claude-sonnet-4-6" }),
-        expect.objectContaining({ value: "anthropic/claude-opus-4-6" }),
-      ]),
-    );
-  });
-
   it("imports agents with model from agent.model in openclaw config", async () => {
     const prompter = createMockPrompter({
       text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])             // no models selected
         .mockResolvedValueOnce(["agent-1"]),   // agent-1 selected
     });
 
@@ -405,40 +380,13 @@ describe("runSetupWizard", () => {
     }
   });
 
-  it("calls PATCH /api/v1/config/admin with selected models", async () => {
-    const prompter = createMockPrompter({
-      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
-      confirm: vi.fn().mockResolvedValue(false),
-      multiselect: vi.fn()
-        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models
-        .mockResolvedValueOnce([]),                               // no agents
-    });
-
-    const cfg = createMinimalConfig();
-    await runSetupWizard(prompter, cfg);
-
-    const fetchCall = mockFetch.mock.calls.find((call) =>
-      typeof call[0] === "string" && call[0].includes("/api/v1/config/admin"),
-    );
-    expect(fetchCall).toBeDefined();
-    if (fetchCall) {
-      const body = JSON.parse(fetchCall[1].body as string);
-      expect(body.models).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: "anthropic/claude-sonnet-4-6" }),
-        ]),
-      );
-    }
-  });
-
-  it("skips push when no models and no agents selected", async () => {
+  it("skips push when no agents selected", async () => {
     mockFetch.mockClear();
 
     const prompter = createMockPrompter({
       text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])   // no models
         .mockResolvedValueOnce([]),  // no agents
     });
 
@@ -459,8 +407,7 @@ describe("runSetupWizard", () => {
         .mockResolvedValueOnce("http://100.1.2.3:3333"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]),
+        .mockResolvedValueOnce([]),  // agents
     });
 
     const cfg = createMinimalConfig();
@@ -479,8 +426,7 @@ describe("runSetupWizard", () => {
         .mockResolvedValueOnce("http://localhost:3000///"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]),
+        .mockResolvedValueOnce([]),  // agents
     });
 
     const cfg = createMinimalConfig();
@@ -504,8 +450,7 @@ describe("pre-populating from existing config", () => {
         .mockResolvedValueOnce("http://myhost:3333"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]),
+        .mockResolvedValueOnce([]),  // agents
     });
 
     const cfg = createMinimalConfig({
@@ -538,10 +483,10 @@ describe("pre-populating from existing config", () => {
         .mockResolvedValueOnce("existing-secret"),
       confirm: vi.fn()
         .mockResolvedValueOnce(true)     // instance secret: yes (pre-selected)
+        .mockResolvedValueOnce(false)    // auto-rename: no
         .mockResolvedValueOnce(false),   // restart: no
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]),
+        .mockResolvedValueOnce([]),      // agents
     });
 
     const cfg = createMinimalConfig({
@@ -584,8 +529,7 @@ describe("pre-populating from existing config", () => {
         .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])         // models
-        .mockResolvedValueOnce(["agent-1"]), // agents
+        .mockResolvedValueOnce(["agent-1"]),  // agents
     });
 
     const cfg = createMinimalConfig({
@@ -614,8 +558,7 @@ describe("pre-populating from existing config", () => {
         .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce(["agent-1", "agent-2"]),
+        .mockResolvedValueOnce(["agent-1", "agent-2"]),  // agents
     });
 
     const cfg = createMinimalConfig({
@@ -637,80 +580,13 @@ describe("pre-populating from existing config", () => {
     expect(agentCall?.[0].initialValues).toEqual(["agent-1", "agent-2"]);
   });
 
-  it("pre-selects only models already in OpenGram instance", async () => {
-    // Simulate OpenGram instance returning only one model
-    mockFetch.mockImplementation((url: string) => {
-      if (typeof url === "string" && url.includes("/api/v1/config")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({
-            models: [{ id: "anthropic/claude-sonnet-4-6", name: "sonnet" }],
-          }),
-        });
-      }
-      return Promise.resolve({ ok: true });
-    });
-
-    const prompter = createMockPrompter({
-      text: vi.fn()
-        .mockResolvedValueOnce("http://localhost:3000"),
-      confirm: vi.fn().mockResolvedValue(false),
-      multiselect: vi.fn()
-        .mockResolvedValueOnce(["anthropic/claude-sonnet-4-6"])  // models
-        .mockResolvedValueOnce([]),                               // agents
-    });
-
-    const cfg = createMinimalConfig();
-    await runSetupWizard(prompter, cfg);
-
-    // Model multiselect should only pre-select the model already in OpenGram
-    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
-    const modelCall = multiselectCalls.find(
-      (call: any) => call[0].message.match(/model/i),
-    );
-    expect(modelCall?.[0].initialValues).toEqual(["anthropic/claude-sonnet-4-6"]);
-  });
-
-  it("selects all models when OpenGram config fetch fails", async () => {
-    // Simulate OpenGram instance being unreachable for config fetch
-    mockFetch.mockImplementation((url: string) => {
-      if (typeof url === "string" && url.includes("/api/v1/config")) {
-        return Promise.reject(new Error("ECONNREFUSED"));
-      }
-      return Promise.resolve({ ok: true });
-    });
-
-    const prompter = createMockPrompter({
-      text: vi.fn()
-        .mockResolvedValueOnce("http://localhost:3000"),
-      confirm: vi.fn().mockResolvedValue(false),
-      multiselect: vi.fn()
-        .mockResolvedValueOnce([])  // models
-        .mockResolvedValueOnce([]), // agents
-    });
-
-    const cfg = createMinimalConfig();
-    await runSetupWizard(prompter, cfg);
-
-    // Model multiselect should have ALL models pre-selected (fallback)
-    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
-    const modelCall = multiselectCalls.find(
-      (call: any) => call[0].message.match(/model/i),
-    );
-    expect(modelCall?.[0].initialValues).toEqual([
-      "anthropic/claude-sonnet-4-6",
-      "anthropic/claude-opus-4-6",
-    ]);
-  });
-
   it("filters out previously configured agents that no longer exist", async () => {
     const prompter = createMockPrompter({
       text: vi.fn()
         .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
       multiselect: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce(["agent-1"]),
+        .mockResolvedValueOnce(["agent-1"]),  // agents
     });
 
     const cfg = createMinimalConfig({
