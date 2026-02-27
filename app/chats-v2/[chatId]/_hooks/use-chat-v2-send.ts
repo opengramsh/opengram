@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 
+import { getApiSecret } from '@/src/lib/api-fetch';
+
 type UseChatV2SendArgs = {
   chatId: string;
   pendingAttachmentIds: string[];
@@ -29,12 +31,16 @@ export function useChatV2Send({ chatId, pendingAttachmentIds, onSendStart, onSen
               .map((p) => p.text)
               .join('') ?? '';
 
+          const headers: Record<string, string> = { 'content-type': 'application/json' };
+          const secret = getApiSecret();
+          if (secret) headers['authorization'] = `Bearer ${secret}`;
+
           return {
             body: {
               message: text,
               attachmentIds: attachmentIdsRef.current,
             },
-            headers: { 'content-type': 'application/json' },
+            headers,
           };
         },
       }),
@@ -49,10 +55,10 @@ export function useChatV2Send({ chatId, pendingAttachmentIds, onSendStart, onSen
     clearAttachments();
     try {
       await sendMessage({ text });
+      onSendComplete();
     } catch {
       // Send errors are non-fatal; SSE will still deliver the message
     }
-    onSendComplete();
   }, [sendMessage, pendingAttachmentIds, onSendStart, onSendComplete, clearAttachments]);
 
   return {

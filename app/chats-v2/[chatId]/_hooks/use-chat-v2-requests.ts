@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { apiFetch } from '@/src/lib/api-fetch';
 import { requestSortAsc } from '../_lib/chat-utils';
@@ -25,15 +25,21 @@ export function useChatV2Requests({
   const [errors, setErrors] = useState<RequestErrorMap>({});
   const [resolving, setResolving] = useState<Record<string, boolean>>({});
 
+  // Refs for resolve callback to avoid dependency churn
+  const resolvingRef = useRef(resolving);
+  resolvingRef.current = resolving;
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+
   const updateDraft = useCallback((requestId: string, updater: (draft: Record<string, unknown>) => Record<string, unknown>) => {
     setDrafts((current) => ({ ...current, [requestId]: updater(current[requestId] ?? {}) }));
     setErrors((current) => ({ ...current, [requestId]: null }));
   }, []);
 
   const resolve = useCallback(async (request: RequestItem) => {
-    if (resolving[request.id]) return;
+    if (resolvingRef.current[request.id]) return;
 
-    const validation = validateRequestResolutionPayload(request, drafts);
+    const validation = validateRequestResolutionPayload(request, draftsRef.current);
     if (!validation.payload) {
       setErrors((current) => ({ ...current, [request.id]: validation.error ?? 'Invalid request response.' }));
       return;
@@ -65,7 +71,7 @@ export function useChatV2Requests({
     } finally {
       setResolving((current) => { const next = { ...current }; delete next[request.id]; return next; });
     }
-  }, [drafts, refreshPendingRequests, resolving, setChat, setError, setPendingRequests]);
+  }, [refreshPendingRequests, setChat, setError, setPendingRequests]);
 
   return {
     isWidgetOpen,

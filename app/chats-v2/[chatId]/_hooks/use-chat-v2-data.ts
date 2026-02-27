@@ -55,6 +55,8 @@ export function useChatV2Data({ chatId, initialChat = null }: UseChatV2DataArgs)
   const refreshMediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keyboardOffsetRef = useRef(0);
   const swipeRef = useRef({ active: false, startX: 0, startY: 0, startAt: 0, triggered: false, moved: false });
+  const chatTitleRef = useRef<string | undefined>(chat?.title);
+  chatTitleRef.current = chat?.title;
 
   // Computed values
   const agentsById = useMemo(() => {
@@ -348,7 +350,7 @@ export function useChatV2Data({ chatId, initialChat = null }: UseChatV2DataArgs)
           .then(async (res) => {
             if (!res.ok) return;
             const newChat = (await res.json()) as Chat;
-            const prevTitle = chat?.title;
+            const prevTitle = chatTitleRef.current;
             setChat(newChat);
             if (newChat.title_source === 'auto' && newChat.title !== prevTitle) {
               if (titleTypingIntervalRef.current) clearInterval(titleTypingIntervalRef.current);
@@ -389,7 +391,7 @@ export function useChatV2Data({ chatId, initialChat = null }: UseChatV2DataArgs)
       if (typingExpiryTimerRef.current) { clearTimeout(typingExpiryTimerRef.current); typingExpiryTimerRef.current = null; }
       if (refreshMediaTimerRef.current) { clearTimeout(refreshMediaTimerRef.current); refreshMediaTimerRef.current = null; }
     };
-  }, [chat, chatId, refreshMedia, refreshMessages, refreshPendingRequests]);
+  }, [chatId, refreshMedia, refreshMessages, refreshPendingRequests]);
 
   // Effect: auto-scroll on new messages
   useEffect(() => {

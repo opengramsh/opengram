@@ -22,10 +22,11 @@ type ChatV2PageProviderProps = {
 };
 
 export function ChatV2PageProvider({ chatId, initialChat, children }: ChatV2PageProviderProps) {
+  const safeChatId = chatId ?? '';
   const data = useChatV2Data({ chatId, initialChat });
-  const attachments = useChatV2Attachments(chatId!);
+  const attachments = useChatV2Attachments(safeChatId);
   const send = useChatV2Send({
-    chatId: chatId!,
+    chatId: safeChatId,
     pendingAttachmentIds: attachments.readyIds,
     onSendStart: () => data.setPendingReply(true),
     onSendComplete: () => data.scrollToBottom(true),

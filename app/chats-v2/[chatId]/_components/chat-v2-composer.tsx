@@ -21,7 +21,8 @@ export function ChatV2Composer() {
   const photosInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
 
-  const canSend = attachments.readyIds.length > 0 || attachments.allReady;
+  // Disable submit only while attachments are still uploading
+  const hasUploading = attachments.attachments.some((a) => a.status === 'uploading');
 
   const handleSubmit = useCallback(
     async (message: { text: string }) => {
@@ -97,7 +98,7 @@ export function ChatV2Composer() {
           <PromptInputSubmit
             status={send.status}
             onStop={send.stop}
-            disabled={!canSend && !send.isStreaming}
+            disabled={hasUploading && !send.isStreaming}
           />
         </PromptInputFooter>
       </PromptInput>
