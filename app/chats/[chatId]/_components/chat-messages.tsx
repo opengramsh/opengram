@@ -5,9 +5,23 @@ import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatBytes, isMessageTyping, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
-import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
 import { VoiceMessagePlayer } from '@/app/chats/[chatId]/_components/voice-message-player';
-import { MarkdownContent } from '@/app/chats/[chatId]/_components/markdown-content';
+import { MessageResponse } from '@/src/components/ai-elements/message';
+import { Tool, ToolHeader, ToolContent } from '@/src/components/ai-elements/tool';
+import {
+  AudioPlayer,
+  AudioPlayerElement,
+  AudioPlayerControlBar,
+  AudioPlayerPlayButton,
+  AudioPlayerTimeRange,
+  AudioPlayerTimeDisplay,
+  AudioPlayerDurationDisplay,
+} from '@/src/components/ai-elements/audio-player';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/src/components/ai-elements/conversation';
 
 type ChatMessagesProps = {
   feedRef: RefObject<HTMLDivElement | null>;
@@ -126,6 +140,35 @@ function FileAttachmentCard({
   );
 }
 
+function InlineAudioItem({ item }: { item: MediaItem }) {
+  return (
+    <AudioPlayer className="rounded-xl border border-border/70 bg-card/40">
+      <AudioPlayerElement src={buildFileUrl(item.id)} />
+      <AudioPlayerControlBar>
+        <AudioPlayerPlayButton />
+        <AudioPlayerTimeDisplay />
+        <AudioPlayerTimeRange />
+        <AudioPlayerDurationDisplay />
+      </AudioPlayerControlBar>
+    </AudioPlayer>
+  );
+}
+
+function ToolMessage({ text }: { text: string }) {
+  return (
+    <div className="mb-2 flex w-full">
+      <div className="mx-auto w-full max-w-[92%]">
+        <Tool>
+          <ToolHeader title="Tool" type="tool-invocation" state="output-available" />
+          <ToolContent>
+            <MessageResponse className="text-xs">{text}</MessageResponse>
+          </ToolContent>
+        </Tool>
+      </div>
+    </div>
+  );
+}
+
 function MessageSkeletons() {
   return (
     <div className="space-y-3 py-4" aria-label="Loading messages">
@@ -161,86 +204,64 @@ export function ChatMessages({
   });
 
   return (
-    <main
+    <Conversation
       ref={feedRef}
-      className="flex-1 overflow-y-auto px-3 pt-3"
+      className="flex-1"
       style={{ paddingBottom: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
     >
-      {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
-      {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}
+      <ConversationContent className="px-3 pt-3 gap-0 p-0">
+        {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
+        {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}
 
-      {!loading && !error && messagesLoading && visibleMessages.length === 0 && <MessageSkeletons />}
+        {!loading && !error && messagesLoading && visibleMessages.length === 0 && <MessageSkeletons />}
 
-      {!loading && !error && !messagesLoading && visibleMessages.length === 0 && (
-        <p className="px-2 py-6 text-sm text-muted-foreground">No messages yet.</p>
-      )}
+        {!loading && !error && !messagesLoading && visibleMessages.length === 0 && (
+          <p className="px-2 py-6 text-sm text-muted-foreground">No messages yet.</p>
+        )}
 
-      {!loading &&
-        !error &&
-        visibleMessages.map((message) => {
-          const attachments = inlineMessageMedia.get(message.id) ?? [];
-          const imageItems = attachments.filter((item) => item.kind === 'image');
-          const audioItems = attachments.filter((item) => item.kind === 'audio');
-          const fileItems = attachments.filter((item) => item.kind === 'file');
+        {!loading &&
+          !error &&
+          visibleMessages.map((message) => {
+            const attachments = inlineMessageMedia.get(message.id) ?? [];
+            const imageItems = attachments.filter((item) => item.kind === 'image');
+            const audioItems = attachments.filter((item) => item.kind === 'audio');
+            const fileItems = attachments.filter((item) => item.kind === 'file');
 
-          const typing = isMessageTyping(message);
-          const text = messageText(message);
-          const hasText = !!text.trim();
-          const isImageOnly =
-            imageItems.length > 0 && !hasText && audioItems.length === 0 && fileItems.length === 0;
-          const isAudioOnly =
-            audioItems.length > 0 && !hasText && imageItems.length === 0 && fileItems.length === 0;
+            const typing = isMessageTyping(message);
+            const text = messageText(message);
+            const hasText = !!text.trim();
+            const isImageOnly =
+              imageItems.length > 0 && !hasText && audioItems.length === 0 && fileItems.length === 0;
+            const isAudioOnly =
+              audioItems.length > 0 && !hasText && imageItems.length === 0 && fileItems.length === 0;
 
-          const baseBubbleClass = messageBubbleClass(message.role);
-          const bubbleClass = isImageOnly
-            ? baseBubbleClass.replace('px-3 py-2', 'p-0 overflow-hidden')
-            : isAudioOnly
-              ? baseBubbleClass.replace('px-3 py-2', 'px-2.5 py-2')
-              : baseBubbleClass;
+            // Tool messages use a dedicated collapsible component
+            if (message.role === 'tool' && hasText) {
+              return <ToolMessage key={message.id} text={text} />;
+            }
 
-          return (
-            <div key={message.id} className="mb-2 flex w-full">
-              <div className={bubbleClass}>
-                {typing ? <TypingDots /> : hasText && <MarkdownContent text={text} />}
+            const baseBubbleClass = messageBubbleClass(message.role);
+            const bubbleClass = isImageOnly
+              ? baseBubbleClass.replace('px-3 py-2', 'p-0 overflow-hidden')
+              : isAudioOnly
+                ? baseBubbleClass.replace('px-3 py-2', 'px-2.5 py-2')
+                : baseBubbleClass;
 
-                {/* Images */}
-                {imageItems.length > 0 && (
-                  isImageOnly ? (
-                    imageItems.length === 1 ? (
-                      <button
-                        type="button"
-                        className="block w-full"
-                        aria-label={`Open image ${imageItems[0].filename || imageItems[0].id}`}
-                        onClick={() => setViewerMediaId(imageItems[0].id)}
-                      >
-                        <img
-                          src={buildFileUrl(imageItems[0].id, 'thumbnail')}
-                          alt={imageItems[0].filename || 'Image attachment'}
-                          className="h-auto max-h-52 w-full object-cover"
-                        />
-                      </button>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-px">
-                        {imageItems.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className="block overflow-hidden"
-                            aria-label={`Open image ${item.filename || item.id}`}
-                            onClick={() => setViewerMediaId(item.id)}
-                          >
-                            <img
-                              src={buildFileUrl(item.id, 'thumbnail')}
-                              alt={item.filename || 'Image attachment'}
-                              className="h-36 w-full object-cover"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    )
+            return (
+              <div key={message.id} className="mb-2 flex w-full">
+                <div className={bubbleClass}>
+                  {/* TODO: When trace.reasoning is available, render <Reasoning> + <ReasoningTrigger> + <ReasoningContent> above the agent message */}
+
+                  {typing ? (
+                    <TypingDots />
                   ) : (
-                    <div className="-mx-3 -mb-2 mt-2 overflow-hidden rounded-b-2xl">
-                      {imageItems.length === 1 ? (
+                    hasText && <MessageResponse>{text}</MessageResponse>
+                  )}
+
+                  {/* Images */}
+                  {imageItems.length > 0 && (
+                    isImageOnly ? (
+                      imageItems.length === 1 ? (
                         <button
                           type="button"
                           className="block w-full"
@@ -250,7 +271,7 @@ export function ChatMessages({
                           <img
                             src={buildFileUrl(imageItems[0].id, 'thumbnail')}
                             alt={imageItems[0].filename || 'Image attachment'}
-                            className="h-auto max-h-48 w-full object-cover"
+                            className="h-auto max-h-52 w-full object-cover"
                           />
                         </button>
                       ) : (
@@ -271,48 +292,85 @@ export function ChatMessages({
                             </button>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  )
-                )}
+                      )
+                    ) : (
+                      <div className="-mx-3 -mb-2 mt-2 overflow-hidden rounded-b-2xl">
+                        {imageItems.length === 1 ? (
+                          <button
+                            type="button"
+                            className="block w-full"
+                            aria-label={`Open image ${imageItems[0].filename || imageItems[0].id}`}
+                            onClick={() => setViewerMediaId(imageItems[0].id)}
+                          >
+                            <img
+                              src={buildFileUrl(imageItems[0].id, 'thumbnail')}
+                              alt={imageItems[0].filename || 'Image attachment'}
+                              className="h-auto max-h-48 w-full object-cover"
+                            />
+                          </button>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-px">
+                            {imageItems.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className="block overflow-hidden"
+                                aria-label={`Open image ${item.filename || item.id}`}
+                                onClick={() => setViewerMediaId(item.id)}
+                              >
+                                <img
+                                  src={buildFileUrl(item.id, 'thumbnail')}
+                                  alt={item.filename || 'Image attachment'}
+                                  className="h-36 w-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
 
-                {/* Audio — voice message player for audio-only, inline player otherwise */}
-                {audioItems.length > 0 && (
-                  isAudioOnly ? (
-                    <div className="space-y-2">
-                      {audioItems.map((item) => (
-                        <VoiceMessagePlayer key={item.id} item={item} role={message.role} />
-                      ))}
-                    </div>
-                  ) : (
+                  {/* Audio — voice message player for audio-only, AudioPlayer otherwise */}
+                  {audioItems.length > 0 && (
+                    isAudioOnly ? (
+                      <div className="space-y-2">
+                        {audioItems.map((item) => (
+                          <VoiceMessagePlayer key={item.id} item={item} role={message.role} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 pt-2">
+                        {audioItems.map((item) => (
+                          <InlineAudioItem key={item.id} item={item} />
+                        ))}
+                      </div>
+                    )
+                  )}
+
+                  {/* Files */}
+                  {fileItems.length > 0 && (
                     <div className="space-y-2 pt-2">
-                      {audioItems.map((item) => (
-                        <InlineAudioPlayer key={item.id} item={item} />
+                      {fileItems.map((item) => (
+                        <FileAttachmentCard key={item.id} item={item} role={message.role} setPreviewFileId={setPreviewFileId} />
                       ))}
                     </div>
-                  )
-                )}
-
-                {/* Files */}
-                {fileItems.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    {fileItems.map((item) => (
-                      <FileAttachmentCard key={item.id} item={item} role={message.role} setPreviewFileId={setPreviewFileId} />
-                    ))}
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-      {!loading && !error && pendingReply && !messages.some((m) => m.stream_state === 'streaming') && (
-        <div className="mb-2 flex w-full">
-          <div className={messageBubbleClass('agent')}>
-            <TypingDots />
+        {!loading && !error && pendingReply && !messages.some((m) => m.stream_state === 'streaming') && (
+          <div className="mb-2 flex w-full">
+            <div className={messageBubbleClass('agent')}>
+              <TypingDots />
+            </div>
           </div>
-        </div>
-      )}
-    </main>
+        )}
+      </ConversationContent>
+
+      <ConversationScrollButton />
+    </Conversation>
   );
 }
