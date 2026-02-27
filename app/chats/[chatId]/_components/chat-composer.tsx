@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useEffect, useRef } from 'react';
+import { type RefObject, useEffect, useLayoutEffect, useRef } from 'react';
 import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
 
 import { isTouchDevice } from '@/src/lib/utils';
@@ -71,6 +71,14 @@ export function ChatComposer({
   keyboardOffset,
 }: ChatComposerProps) {
   const footerRef = useRef<HTMLElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [composerText]);
 
   /*
    * iOS Form Navigation Bar suppression.
@@ -242,6 +250,7 @@ export function ChatComposer({
             </Button>
 
             <Textarea
+              ref={textareaRef}
               rows={1}
               value={composerText}
               onChange={(event) => setComposerText(event.target.value)}
@@ -250,6 +259,7 @@ export function ChatComposer({
               inputMode="text"
               enterKeyHint="send"
               className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border-0 bg-transparent px-3 py-2.5 text-sm shadow-none focus-visible:ring-0"
+              style={{ fieldSizing: 'fixed' } as React.CSSProperties}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !isTouchDevice() && (composerText.trim() || pendingAttachments.length > 0)) {
                   event.preventDefault();
