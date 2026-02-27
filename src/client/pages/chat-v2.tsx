@@ -2,7 +2,7 @@ import { useLocation, useParams } from 'react-router';
 
 import { ChatV2PageProvider } from '@/app/chats-v2/[chatId]/_components/chat-v2-provider';
 import { ChatV2PageSections } from '@/app/chats-v2/[chatId]/_components/chat-v2-sections';
-import type { Chat } from '@/app/chats/[chatId]/_lib/types';
+import type { Chat } from '@/app/chats-v2/[chatId]/_lib/types';
 
 type ChatLocationState = {
   chat?: Partial<Chat> & { id: string };

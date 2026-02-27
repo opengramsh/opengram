@@ -1,9 +1,19 @@
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { createContext, useContext, type ReactNode } from 'react';
 
-import { useChatPageData, type ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
-import { useChatPageEffects } from '@/app/chats/[chatId]/_hooks/use-chat-page-effects';
-import type { Chat } from '@/app/chats/[chatId]/_lib/types';
+import { useChatV2Data, type ChatV2DataReturn } from '../_hooks/use-chat-v2-data';
+import { useChatV2Send, type ChatV2SendReturn } from '../_hooks/use-chat-v2-send';
+import { useChatV2Attachments, type ChatV2AttachmentsReturn } from '../_hooks/use-chat-v2-attachments';
+import { useChatV2Requests, type ChatV2RequestsReturn } from '../_hooks/use-chat-v2-requests';
+import type { Chat } from '../_lib/types';
+
+export type ChatV2ContextValue = {
+  data: ChatV2DataReturn;
+  send: ChatV2SendReturn;
+  attachments: ChatV2AttachmentsReturn;
+  requests: ChatV2RequestsReturn;
+};
+
+const ChatV2Context = createContext<ChatV2ContextValue | null>(null);
 
 type ChatV2PageProviderProps = {
   chatId?: string;
@@ -11,32 +21,33 @@ type ChatV2PageProviderProps = {
   children: ReactNode;
 };
 
-const ChatV2PageContext = createContext<ChatPageData | null>(null);
-
 export function ChatV2PageProvider({ chatId, initialChat, children }: ChatV2PageProviderProps) {
-  const navigate = useNavigate();
-  const data = useChatPageData({ chatId, initialChat });
+  const data = useChatV2Data({ chatId, initialChat });
+  const attachments = useChatV2Attachments(chatId!);
+  const send = useChatV2Send({
+    chatId: chatId!,
+    pendingAttachmentIds: attachments.readyIds,
+    onSendStart: () => data.setPendingReply(true),
+    onSendComplete: () => data.scrollToBottom(true),
+    clearAttachments: attachments.clearAll,
+  });
+  const requests = useChatV2Requests({
+    pendingRequests: data.pendingRequests,
+    setPendingRequests: data.setPendingRequests,
+    setChat: data.setChat,
+    setError: data.setError,
+    refreshPendingRequests: data.refreshPendingRequests,
+  });
 
-  // Override goBack to navigate to /v2 instead of /
-  const goBackV2 = useCallback(() => {
-    navigate('/v2');
-  }, [navigate]);
-
-  // Create a merged data object with overridden goBack
-  const v2Data = useMemo(
-    () => ({ ...data, goBack: goBackV2 }),
-    [data, goBackV2],
+  return (
+    <ChatV2Context.Provider value={{ data, send, attachments, requests }}>
+      {children}
+    </ChatV2Context.Provider>
   );
-
-  useChatPageEffects(v2Data);
-
-  return <ChatV2PageContext.Provider value={v2Data}>{children}</ChatV2PageContext.Provider>;
 }
 
-export function useChatV2PageContext() {
-  const context = useContext(ChatV2PageContext);
-  if (!context) {
-    throw new Error('useChatV2PageContext must be used within ChatV2PageProvider');
-  }
-  return context;
+export function useChatV2Context() {
+  const ctx = useContext(ChatV2Context);
+  if (!ctx) throw new Error('useChatV2Context must be inside ChatV2PageProvider');
+  return ctx;
 }
