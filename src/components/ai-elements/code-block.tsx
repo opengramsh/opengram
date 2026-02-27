@@ -6,7 +6,7 @@ import type {
   BundledTheme,
   HighlighterGeneric,
   ThemedToken,
-} from "shiki";
+} from "shiki/bundle/web";
 
 import { Button } from "@/src/components/ui/button";
 import {
@@ -28,7 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { createHighlighter } from "shiki";
+import { createHighlighter } from "shiki/bundle/web";
 
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 // biome-ignore lint/suspicious/noBitwiseOperators: shiki bitflag check

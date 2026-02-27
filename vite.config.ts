@@ -6,9 +6,10 @@ export default defineConfig({
   plugins: [react()],
   base: "/",
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname),
-    },
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname) },
+      { find: /^shiki$/, replacement: "shiki/bundle/web" },
+    ],
   },
   build: {
     outDir: "dist/client",
@@ -24,7 +25,7 @@ export default defineConfig({
           ],
           "vendor-katex": ["@streamdown/math"],
           "vendor-mermaid": ["@streamdown/mermaid"],
-          "vendor-shiki": ["shiki"],
+          "vendor-shiki": ["shiki/bundle/web"],
         },
       },
     },
