@@ -261,6 +261,7 @@ export function ChatComposer({
             <Button
               size="icon-lg"
               aria-label="Send message"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => void sendMessage()}
               disabled={isSending || !allAttachmentsReady || (!composerText.trim() && pendingAttachments.length === 0)}
             >
