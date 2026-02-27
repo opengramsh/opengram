@@ -159,7 +159,7 @@ export function ChatComposer({
       <footer
         ref={footerRef}
         data-chat-composer-root="true"
-        className="fixed inset-x-0 z-40 w-full border-t border-border/50 bg-background/95 backdrop-blur-md"
+        className="kbd-safe-pb fixed inset-x-0 z-40 w-full border-t border-border/50 bg-background/95 backdrop-blur-md"
         style={{
           bottom: `${keyboardOffset}px`,
         }}
