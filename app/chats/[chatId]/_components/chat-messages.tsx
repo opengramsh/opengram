@@ -154,17 +154,16 @@ function InlineAudioItem({ item }: { item: MediaItem }) {
   );
 }
 
-function ToolMessage({ text }: { text: string }) {
+function ToolMessage({ text, trace }: { text: string; trace?: Record<string, unknown> | null }) {
+  const title = typeof trace?.toolName === 'string' ? trace.toolName : 'Tool';
   return (
-    <div className="mb-2 flex w-full">
-      <div className="mx-auto w-full max-w-[92%]">
-        <Tool>
-          <ToolHeader title="Tool" type="tool-invocation" state="output-available" />
-          <ToolContent>
-            <MessageResponse className="text-xs">{text}</MessageResponse>
-          </ToolContent>
-        </Tool>
-      </div>
+    <div className="mx-auto w-full max-w-[92%]">
+      <Tool>
+        <ToolHeader title={title} type="tool-invocation" state="output-available" />
+        <ToolContent>
+          <MessageResponse className="text-xs">{text}</MessageResponse>
+        </ToolContent>
+      </Tool>
     </div>
   );
 }
@@ -209,7 +208,7 @@ export function ChatMessages({
       className="flex-1"
       style={{ paddingBottom: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
     >
-      <ConversationContent className="px-3 pt-3 gap-0 p-0">
+      <ConversationContent className="p-0 px-3 pt-3 gap-0">
         {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
         {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}
 
@@ -236,8 +235,45 @@ export function ChatMessages({
               audioItems.length > 0 && !hasText && imageItems.length === 0 && fileItems.length === 0;
 
             // Tool messages use a dedicated collapsible component
-            if (message.role === 'tool' && hasText) {
-              return <ToolMessage key={message.id} text={text} />;
+            if (message.role === 'tool') {
+              return (
+                <div key={message.id} className="mb-2 flex w-full flex-col gap-2">
+                  {hasText && <ToolMessage text={text} trace={message.trace} />}
+                  {audioItems.length > 0 && (
+                    <div className="mx-auto w-full max-w-[92%] space-y-2">
+                      {audioItems.map((item) => (
+                        <InlineAudioItem key={item.id} item={item} />
+                      ))}
+                    </div>
+                  )}
+                  {imageItems.length > 0 && (
+                    <div className="mx-auto grid w-full max-w-[92%] grid-cols-2 gap-1">
+                      {imageItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className="block overflow-hidden rounded-lg"
+                          aria-label={`Open image ${item.filename || item.id}`}
+                          onClick={() => setViewerMediaId(item.id)}
+                        >
+                          <img
+                            src={buildFileUrl(item.id, 'thumbnail')}
+                            alt={item.filename || 'Image attachment'}
+                            className="h-36 w-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {fileItems.length > 0 && (
+                    <div className="mx-auto w-full max-w-[92%] space-y-2">
+                      {fileItems.map((item) => (
+                        <FileAttachmentCard key={item.id} item={item} role={message.role} setPreviewFileId={setPreviewFileId} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
             }
 
             const baseBubbleClass = messageBubbleClass(message.role);
