@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
+import type { MathPlugin, DiagramPlugin } from "streamdown";
 
 type StreamdownPlugins = {
   cjk: typeof cjk;
   code: typeof code;
-  math?: unknown;
-  mermaid?: unknown;
+  math?: MathPlugin;
+  mermaid?: DiagramPlugin;
 };
 
 let plugins: StreamdownPlugins = { cjk, code };
