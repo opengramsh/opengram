@@ -8,6 +8,7 @@ import { Facehash } from 'facehash';
 
 import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
 import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
+import type { PendingAttachment, MediaKind } from '@/app/chats/[chatId]/_lib/types';
 import { apiFetch } from '@/src/lib/api-fetch';
 import { Button } from '@/src/components/ui/button';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
@@ -41,7 +42,7 @@ export default function NewChatPage() {
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
-  const [pendingAttachments, setPendingAttachments] = useState<{ id: string; kind: string; filename: string }[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
 
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const photosInputRef = useRef<HTMLInputElement | null>(null);
@@ -147,7 +148,7 @@ export default function NewChatPage() {
         })();
 
         // Single message with all attachments + optional text
-        const body: Record<string, unknown> = { role: 'user', senderId: 'user:primary', trace: { mediaIds: pendingAttachments.map((a) => a.id) } };
+        const body: Record<string, unknown> = { role: 'user', senderId: 'user:primary', trace: { mediaIds: pendingAttachments.map((a) => a.mediaItem?.id ?? a.localId) } };
         if (content) body.content = content;
         const res = await apiFetch(`/api/v1/chats/${chatId}/messages`, {
           method: 'POST',
@@ -202,7 +203,7 @@ export default function NewChatPage() {
         return;
       }
 
-      const newItems: { id: string; kind: string; filename: string }[] = [];
+      const newEntries: PendingAttachment[] = [];
       for (const file of Array.from(fileList)) {
         const formData = new FormData();
         formData.append('file', file, file.name);
@@ -211,10 +212,20 @@ export default function NewChatPage() {
         const uploadResponse = await apiFetch(`/api/v1/chats/${chatId}/media`, { method: 'POST', body: formData });
         if (!uploadResponse.ok) throw new Error('Failed to upload media');
 
-        newItems.push((await uploadResponse.json()) as { id: string; kind: string; filename: string });
+        const media = (await uploadResponse.json()) as { id: string; kind: string; filename: string };
+        newEntries.push({
+          localId: media.id,
+          localPreviewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+          file,
+          filename: media.filename,
+          kind: media.kind as MediaKind,
+          contentType: file.type,
+          status: 'ready',
+          mediaItem: null,
+        });
       }
 
-      setPendingAttachments((prev) => [...prev, ...newItems]);
+      setPendingAttachments((prev) => [...prev, ...newEntries]);
       setIsComposerMenuOpen(false);
     } catch {
       toast.error('Failed to upload attachment.');
@@ -223,8 +234,8 @@ export default function NewChatPage() {
     }
   }, [ensureChatId, isUploadingAttachment]);
 
-  const removePendingAttachment = useCallback((mediaId: string) => {
-    setPendingAttachments((prev) => prev.filter((m) => m.id !== mediaId));
+  const removePendingAttachment = useCallback((localId: string) => {
+    setPendingAttachments((prev) => prev.filter((m) => m.localId !== localId));
   }, []);
 
   const recorder = useChatRecorder({

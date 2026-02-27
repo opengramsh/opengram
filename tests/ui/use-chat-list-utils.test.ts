@@ -19,6 +19,7 @@ const baseChat: Chat = {
   created_at: '2026-02-18T10:00:00.000Z',
   updated_at: '2026-02-18T10:00:00.000Z',
   last_message_at: '2026-02-18T10:00:00.000Z',
+  title_source: 'default',
 };
 
 describe('chatMatchesListFilters', () => {

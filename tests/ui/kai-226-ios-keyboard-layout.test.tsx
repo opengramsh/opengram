@@ -193,7 +193,7 @@ describe('KAI-237: composer height CSS variable integration', () => {
 
   it('7) updates message padding variable when composer height changes', () => {
     let measuredHeight = 80;
-    let observerCallback: ResizeObserverCallback | null = null;
+    let observerCallback: ((entries: ResizeObserverEntry[], observer: ResizeObserver) => void) | null = null;
 
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
       x: 0,
@@ -253,7 +253,7 @@ describe('KAI-237: composer height CSS variable integration', () => {
     expect(document.documentElement.style.getPropertyValue('--composer-height')).toBe('80px');
 
     measuredHeight = 132;
-    observerCallback?.([], {} as ResizeObserver);
+    observerCallback!([] as ResizeObserverEntry[], {} as ResizeObserver);
 
     expect(document.documentElement.style.getPropertyValue('--composer-height')).toBe('132px');
 

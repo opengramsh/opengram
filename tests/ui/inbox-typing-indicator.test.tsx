@@ -50,6 +50,7 @@ function renderChatList(streamingChatIds?: Set<string>) {
       onMarkUnread={vi.fn(async () => {})}
       onTogglePin={vi.fn(async () => {})}
       onToggleArchive={vi.fn(async () => {})}
+      onRenameChat={vi.fn(async () => {})}
       rowActionLabel="Archive"
       streamingChatIds={streamingChatIds}
     />,

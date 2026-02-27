@@ -204,6 +204,7 @@ export function ChatMessages({
 
   return (
     <Conversation
+      // @ts-expect-error ref forwarded through spread props at runtime
       ref={feedRef}
       className="flex-1"
       style={{ paddingBottom: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}

@@ -16,7 +16,7 @@ import {
   updateChat,
 } from '@/src/services/chats-service';
 import { emitEvent } from '@/src/services/events-service';
-import { createRequest, listChatRequests } from '@/src/services/requests-service';
+import { createRequest, listChatRequests, type CreateRequestInput } from '@/src/services/requests-service';
 
 type CreateChatRequest = {
   agentIds: string[];
@@ -182,7 +182,7 @@ chats.post('/:chatId/requests', async (c) => {
   try {
     applyWriteMiddlewares(c.req.raw);
     const chatId = c.req.param('chatId');
-    const body = await parseJsonBody<Record<string, unknown>>(c.req.raw);
+    const body = await parseJsonBody<CreateRequestInput>(c.req.raw);
     const idempotencyKey = getIdempotencyKey(c.req.raw);
     return await executeWithIdempotency(idempotencyKey, { chatId, body }, 201, () => createRequest(chatId, body));
   } catch (error) {

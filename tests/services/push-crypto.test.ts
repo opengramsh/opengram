@@ -68,8 +68,8 @@ function hkdfExtract(salt: Buffer, ikm: Buffer): Buffer {
 }
 
 function hkdfExpand(prk: Buffer, info: Buffer, length: number): Buffer {
-  let output = Buffer.alloc(0);
-  let previous = Buffer.alloc(0);
+  let output: Buffer = Buffer.alloc(0);
+  let previous: Buffer = Buffer.alloc(0);
   let counter = 1;
 
   while (output.length < length) {
@@ -171,8 +171,7 @@ describe('push crypto', () => {
     expect(decodedPayload.exp).toBeGreaterThan(now + 11 * 60 * 60);
     expect(decodedPayload.exp).toBeLessThanOrEqual(now + 13 * 60 * 60);
 
-    const body = init.body as Buffer;
-    expect(Buffer.isBuffer(body)).toBe(true);
+    const body = Buffer.from(init.body as Uint8Array);
     expect(body.length).toBeGreaterThan(Buffer.byteLength(payload, 'utf8'));
     expect(headers['Content-Length']).toBe(String(body.length));
   });
@@ -187,7 +186,7 @@ describe('push crypto', () => {
     await sendWebPushNotification(fixture.subscription, payload, createVapidDetails());
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const ciphertext = Buffer.from(init.body as Buffer);
+    const ciphertext = Buffer.from(init.body as Uint8Array);
     const decryptedPayload = decryptWebPushCiphertext(ciphertext, fixture.privateKey, fixture.publicKey, fixture.authSecret);
 
     expect(decryptedPayload).toBe(payload);

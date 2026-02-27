@@ -250,7 +250,7 @@ describe('chat screen event subscriptions', () => {
 
     const messagesFetches = fetchMock.mock.calls
       .slice(fetchCountBefore)
-      .filter(([url]: [string]) => url.includes('/messages'));
+      .filter((call: any[]) => call[0].includes('/messages'));
     expect(messagesFetches).toHaveLength(0);
   });
 
@@ -291,7 +291,7 @@ describe('chat screen event subscriptions', () => {
     await screen.findByText('Chat 1');
 
     await waitFor(() => {
-      const markReadCalls = fetchMock.mock.calls.filter(([url]: [string]) => url === '/api/v1/chats/chat-1/mark-read');
+      const markReadCalls = fetchMock.mock.calls.filter((call: any[]) => call[0] === '/api/v1/chats/chat-1/mark-read');
       expect(markReadCalls).toHaveLength(1);
     });
   });

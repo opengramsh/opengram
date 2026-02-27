@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import Home from '@/src/client/pages/home';
+import Home from '@/src/client/pages/inbox-layout';
 import type { Chat } from '@/src/components/chats/types';
 import type { FrontendStreamEvent } from '@/src/lib/events-stream';
 
@@ -63,6 +63,7 @@ const baseChat: Chat = {
   created_at: '2026-02-18T10:00:00.000Z',
   updated_at: '2026-02-18T10:00:00.000Z',
   last_message_at: '2026-02-18T10:00:00.000Z',
+  title_source: 'default',
 };
 
 describe('inbox event subscriptions', () => {

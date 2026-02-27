@@ -45,8 +45,8 @@ function hkdfExtract(salt: Buffer, ikm: Buffer): Buffer {
 }
 
 function hkdfExpand(prk: Buffer, info: Buffer, length: number): Buffer {
-  let output = Buffer.alloc(0);
-  let previous = Buffer.alloc(0);
+  let output: Buffer = Buffer.alloc(0);
+  let previous: Buffer = Buffer.alloc(0);
   let counter = 1;
 
   while (output.length < length) {
@@ -169,7 +169,7 @@ export async function sendWebPushNotification(
       TTL: String(PUSH_TTL_SECONDS),
       Urgency: 'normal',
     },
-    body: ciphertext,
+    body: new Uint8Array(ciphertext),
   });
 
   if (!response.ok) {

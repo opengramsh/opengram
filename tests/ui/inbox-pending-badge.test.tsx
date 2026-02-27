@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
-import Home from '@/src/client/pages/home';
+import Home from '@/src/client/pages/inbox-layout';
 
 vi.mock('facehash', () => ({
   Facehash: ({ name }: { name: string }) => <div data-testid={`facehash-${name}`} />,
@@ -58,6 +58,7 @@ describe('inbox pending badge', () => {
               created_at: '2026-02-18T10:00:00.000Z',
               updated_at: '2026-02-18T10:00:00.000Z',
               last_message_at: '2026-02-18T10:00:00.000Z',
+              title_source: 'default',
             },
           ],
           cursor: { next: null, hasMore: false },

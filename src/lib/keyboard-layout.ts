@@ -6,7 +6,7 @@ type VisualViewportLike = {
 
 type KeyboardWindowLike = {
   innerHeight: number;
-  visualViewport?: VisualViewportLike;
+  visualViewport?: VisualViewportLike | null;
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame: (handle: number) => void;
   setTimeout: (handler: () => void, timeout?: number) => number;

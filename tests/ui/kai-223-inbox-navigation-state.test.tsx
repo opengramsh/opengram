@@ -57,6 +57,7 @@ function makeChatList(chat: Chat): UseChatListReturn {
     isCreatingNewChat: false,
     canSendNewChat: false,
     createNewChat: vi.fn(async () => {}),
+    renameChat: vi.fn(async () => {}),
     matchesActiveFilters: vi.fn(() => true),
     searchQuery: '',
     searchResults: null,

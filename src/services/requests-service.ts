@@ -63,7 +63,7 @@ type RequestRecord = {
   trace: string | null;
 };
 
-type CreateRequestInput = {
+export type CreateRequestInput = {
   type: unknown;
   title: unknown;
   body?: unknown;

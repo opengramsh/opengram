@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 
-import Home from '@/src/client/pages/home';
+import Home from '@/src/client/pages/inbox-layout';
 import ArchivedPage from '@/src/client/pages/archived';
 
 vi.mock('facehash', () => ({
@@ -30,6 +30,7 @@ const archivedChat = {
   created_at: '2026-02-18T10:00:00.000Z',
   updated_at: '2026-02-18T10:00:00.000Z',
   last_message_at: '2026-02-18T10:00:00.000Z',
+  title_source: 'default',
 };
 
 function LocationProbe() {
@@ -37,7 +38,7 @@ function LocationProbe() {
   return <div data-testid="location">{location.pathname}</div>;
 }
 
-function renderRoute(page: JSX.Element, path: string) {
+function renderRoute(page: React.JSX.Element, path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       {page}

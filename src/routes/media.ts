@@ -24,7 +24,7 @@ const chatMedia = new Hono();
 chatMedia.get('/', (c) => {
   try {
     applyReadMiddlewares(c.req.raw);
-    const chatId = c.req.param('chatId');
+    const chatId = c.req.param('chatId')!;
     const url = new URL(c.req.url);
     const { limit, cursor } = parseMediaPagination(url.searchParams);
     const kindParam = url.searchParams.get('kind');
@@ -49,7 +49,7 @@ chatMedia.get('/', (c) => {
 chatMedia.post('/', async (c) => {
   try {
     applyWriteMiddlewares(c.req.raw);
-    const chatId = c.req.param('chatId');
+    const chatId = c.req.param('chatId')!;
     const config = loadOpengramConfig();
     const payload = await parseMediaUploadRequest(c.req.raw, config.maxUploadBytes);
 

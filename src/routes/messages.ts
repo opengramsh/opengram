@@ -35,7 +35,7 @@ const messages = new Hono();
 messages.post('/', async (c) => {
   try {
     applyWriteMiddlewares(c.req.raw);
-    const chatId = c.req.param('chatId');
+    const chatId = c.req.param('chatId')!;
     const body = await parseJsonBody<CreateMessageRequest>(c.req.raw);
     const message = createMessage(chatId, body);
     return c.json(message, 201);
@@ -47,7 +47,7 @@ messages.post('/', async (c) => {
 messages.get('/', (c) => {
   try {
     applyReadMiddlewares(c.req.raw);
-    const chatId = c.req.param('chatId');
+    const chatId = c.req.param('chatId')!;
     const result = listMessages(chatId, new URL(c.req.url));
     return successCollection(result.data, result.nextCursor, result.hasMore);
   } catch (error) {
@@ -115,7 +115,7 @@ messageActions.post('/:messageId/cancel', (c) => {
 messages.post('/cancel-streaming', (c) => {
   try {
     applyWriteMiddlewares(c.req.raw);
-    const chatId = c.req.param('chatId');
+    const chatId = c.req.param('chatId')!;
     const result = cancelStreamingMessagesForChat(chatId);
     return c.json(result);
   } catch (error) {
