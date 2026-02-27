@@ -557,7 +557,7 @@ async function dispatchViaSdk(opts: {
     cfg,
     dispatcherOptions: {
       ...prefixOptions,
-      deliver: async (payload, info) => {
+      deliver: async (payload: { text?: string; mediaUrl?: string }, info: { kind: DeliverKind }) => {
         log?.info(
           `[opengram] deliver called: kind=${info.kind} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
         );
@@ -566,13 +566,13 @@ async function dispatchViaSdk(opts: {
           { kind: info.kind },
         );
       },
-      onSkip: (payload, info) => {
+      onSkip: (payload: { text?: string; mediaUrl?: string }, info: { kind: string; reason: string }) => {
         log?.warn(
           `[opengram] deliver skipped: kind=${info.kind} reason=${info.reason} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
         );
         opts.onSkip?.();
       },
-      onError: (err, info) => {
+      onError: (err: unknown, info: { kind: string }) => {
         log?.error(`[opengram] ${info.kind} reply failed: ${String(err)}`);
         onError(err);
       },

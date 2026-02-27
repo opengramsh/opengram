@@ -119,7 +119,7 @@ async function promptBaseUrl(
     message: "OpenGram instance URL",
     initialValue: suggestion,
     placeholder: "http://localhost:3000",
-    validate(value) {
+    validate(value: string) {
       if (!value.trim()) return "URL is required";
       try {
         new URL(value);
@@ -183,7 +183,7 @@ async function promptInstanceSecret(
     message: "Instance secret",
     initialValue: existingSecret,
     placeholder: "your-secret-here",
-    validate(value) {
+    validate(value: string) {
       if (!value.trim()) return "Secret cannot be empty";
       return undefined;
     },
@@ -310,7 +310,7 @@ async function promptAgents(
     initialValues: defaultSelection,
   });
 
-  const agentConfigs: ImportedAgent[] = selected.flatMap((id) => {
+  const agentConfigs: ImportedAgent[] = selected.flatMap((id: string) => {
     const a = agentList.find((item) => item.id === id);
     if (!a) return [];
     return [{
@@ -381,7 +381,7 @@ async function promptAutoRename(
       apiKey = await prompter.text({
         message: `Enter your ${provider.name} API key`,
         placeholder: "sk-...",
-        validate(value) {
+        validate(value: string) {
           if (!value.trim()) return "API key cannot be empty";
           return undefined;
         },
@@ -399,7 +399,7 @@ async function promptAutoRename(
     apiKey = await prompter.text({
       message: `Enter your ${provider.name} API key`,
       placeholder: "sk-...",
-      validate(value) {
+      validate(value: string) {
         if (!value.trim()) return "API key cannot be empty";
         return undefined;
       },
@@ -431,7 +431,7 @@ async function promptAutoRename(
     modelId = await prompter.text({
       message: `Enter the exact model ID for ${provider.name}`,
       placeholder: provider.cheapModels[0]?.id ?? "",
-      validate(value) {
+      validate(value: string) {
         if (!value.trim()) return "Model ID cannot be empty";
         return undefined;
       },
