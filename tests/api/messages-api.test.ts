@@ -44,15 +44,21 @@ beforeEach(() => {
   resetEventSubscribersForTests();
   resetStreamingTimeoutSweeperForTests();
 
-  // Disable auth for tests — create a temp config with instanceSecretEnabled=false
-  const baseConfig = JSON.parse(readFileSync(join(repoRoot, 'config', 'opengram.config.json'), 'utf8'));
-  baseConfig.security = {
-    ...baseConfig.security,
-    instanceSecretEnabled: false,
-    readEndpointsRequireInstanceSecret: false,
+  // Self-contained config so tests never depend on the local config file
+  const testConfig = {
+    appName: 'OpenGram',
+    maxUploadBytes: 50_000_000,
+    allowedMimeTypes: ['*/*'],
+    titleMaxChars: 48,
+    agents: [{ id: 'agent-default', name: 'Test Agent', description: 'test', defaultModelId: 'model-default' }],
+    models: [{ id: 'model-default', name: 'Test Model', description: 'test' }],
+    push: { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: '' },
+    security: { instanceSecretEnabled: false, instanceSecret: '', readEndpointsRequireInstanceSecret: false },
+    server: { publicBaseUrl: 'http://localhost:3333', port: 3333, streamTimeoutSeconds: 60, corsOrigins: [] },
+    hooks: [],
   };
   const configPath = join(tempDir, 'opengram.config.json');
-  writeFileSync(configPath, JSON.stringify(baseConfig), 'utf8');
+  writeFileSync(configPath, JSON.stringify(testConfig), 'utf8');
   process.env.OPENGRAM_CONFIG_PATH = configPath;
   resetConfigCacheForTests();
 });

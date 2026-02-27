@@ -8,9 +8,24 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '@/src/server';
 import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
+import { resetConfigCacheForTests } from '@/src/config/opengram-config';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
 const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
+
+/** Self-contained config so tests never depend on the local config file. */
+const TEST_BASE_CONFIG = {
+  appName: 'OpenGram',
+  maxUploadBytes: 50_000_000,
+  allowedMimeTypes: ['*/*'],
+  titleMaxChars: 48,
+  agents: [{ id: 'agent-default', name: 'Test Agent', description: 'test', defaultModelId: 'model-default' }],
+  models: [{ id: 'model-default', name: 'Test Model', description: 'test' }],
+  push: { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: '' },
+  security: { instanceSecretEnabled: false, instanceSecret: '', readEndpointsRequireInstanceSecret: false },
+  server: { publicBaseUrl: 'http://localhost:3333', port: 3333, streamTimeoutSeconds: 60, corsOrigins: [] },
+  hooks: [],
+};
 
 const jsonHeaders = { 'content-type': 'application/json' };
 
@@ -33,26 +48,18 @@ function setInstanceSecretConfig(secret: string) {
 }
 
 function setConfigOverrides(overrides: { security?: Record<string, unknown>; server?: Record<string, unknown> }) {
-  const baseConfig = JSON.parse(readFileSync(join(repoRoot, 'config', 'opengram.config.json'), 'utf8'));
+  const config = structuredClone(TEST_BASE_CONFIG) as Record<string, unknown>;
+  if (overrides.security) {
+    config.security = { ...TEST_BASE_CONFIG.security, ...overrides.security };
+  }
+  if (overrides.server) {
+    config.server = { ...TEST_BASE_CONFIG.server, ...overrides.server };
+  }
   const tempDir = mkdtempSync(join(tmpdir(), 'opengram-config-'));
   const configPath = join(tempDir, 'opengram.config.json');
-
-  if (overrides.security) {
-    baseConfig.security = {
-      ...baseConfig.security,
-      ...overrides.security,
-    };
-  }
-
-  if (overrides.server) {
-    baseConfig.server = {
-      ...baseConfig.server,
-      ...overrides.server,
-    };
-  }
-
-  writeFileSync(configPath, JSON.stringify(baseConfig), 'utf8');
+  writeFileSync(configPath, JSON.stringify(config), 'utf8');
   process.env.OPENGRAM_CONFIG_PATH = configPath;
+  resetConfigCacheForTests();
 }
 
 async function createChat(body: Record<string, unknown> = {}) {
@@ -80,6 +87,12 @@ beforeEach(() => {
   db.exec(migrationSql);
   resetDbForTests();
   resetWriteRateLimitForTests();
+
+  // Write a self-contained config so tests never read the local config file
+  const configPath = join(tempDir, 'opengram.config.json');
+  writeFileSync(configPath, JSON.stringify(TEST_BASE_CONFIG), 'utf8');
+  process.env.OPENGRAM_CONFIG_PATH = configPath;
+  resetConfigCacheForTests();
 });
 
 afterEach(() => {
@@ -95,6 +108,7 @@ afterEach(() => {
     process.env.OPENGRAM_CONFIG_PATH = previousConfigPath;
   }
   resetWriteRateLimitForTests();
+  resetConfigCacheForTests();
 });
 
 describe('chats API', () => {
@@ -339,8 +353,6 @@ describe('chats API', () => {
   it('keeps unread count at zero when mark-read is called repeatedly', async () => {
     const created = await createChat({
       title: 'read-idempotent',
-      agentIds: ['main'],
-      modelId: 'claude-sonnet-4-6',
     });
     expect(created.response.status).toBe(201);
     const chatId = created.json.id as string;
