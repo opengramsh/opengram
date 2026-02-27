@@ -22,6 +22,7 @@ import push from "@/src/routes/push";
 import requests from "@/src/routes/requests";
 import searchRouter from "@/src/routes/search";
 import tags from "@/src/routes/tags";
+import chatV2 from "@/src/routes/chat-v2";
 
 let cachedCorsOriginsRaw: string | undefined;
 let cachedCorsOrigins: string[] = [];
@@ -50,7 +51,7 @@ const compressionMiddleware = compress();
 
 // Global middleware
 app.use(async (c, next) => {
-  if (c.req.path === "/api/v1/events/stream") {
+  if (c.req.path === "/api/v1/events/stream" || (c.req.path.startsWith("/api/v2/chats/") && c.req.path.endsWith("/stream"))) {
     await next();
     return;
   }
@@ -89,6 +90,9 @@ app.route("/api/v1/search", searchRouter);
 app.route("/api/v1/tags", tags);
 app.route("/api/v1/events", events);
 app.route("/api/v1/push", push);
+
+// V2 API routes
+app.route("/api/v2/chats", chatV2);
 
 // Static file serving (production): hashed assets with immutable cache
 app.use(
