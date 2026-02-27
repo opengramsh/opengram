@@ -137,3 +137,8 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+@keyframes shimmer {
+  from { background-position: 100% center; }
+  to { background-position: 0% center; }
+}
