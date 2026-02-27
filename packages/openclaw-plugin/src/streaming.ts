@@ -13,6 +13,8 @@ type StreamState = {
   messageId: string;
   /** How much accumulated text we've already sent as chunks. */
   lastSentLength: number;
+  /** Full accumulated text from block replies — used as fallback when final text is empty. */
+  accumulatedText: string;
 };
 
 /**
@@ -40,9 +42,11 @@ export async function handleBlockReply(
       senderId: agentId,
       streaming: true,
     });
-    stream = { chatId, agentId, messageId: message.id, lastSentLength: 0 };
+    stream = { chatId, agentId, messageId: message.id, lastSentLength: 0, accumulatedText: "" };
     activeStreams.set(dispatchId, stream);
   }
+
+  stream.accumulatedText = text;
 
   // Extract delta: accumulated text minus what we already sent.
   // Update lastSentLength BEFORE await to prevent race condition:
@@ -73,7 +77,7 @@ export async function finalizeStream(
   try {
     if (finalText === undefined) {
       if (stream.lastSentLength > 0) {
-        await client.completeMessage(stream.messageId);
+        await client.completeMessage(stream.messageId, stream.accumulatedText || undefined);
       } else {
         await client.cancelMessage(stream.messageId);
       }
@@ -116,7 +120,7 @@ export function cancelStream(client: OpenGramClient, dispatchId: string): void {
  * stream_state:'streaming' immediately (typing indicator).
  */
 export function initStream(dispatchId: string, chatId: string, messageId: string, agentId: string): void {
-  activeStreams.set(dispatchId, { chatId, agentId, messageId, lastSentLength: 0 });
+  activeStreams.set(dispatchId, { chatId, agentId, messageId, lastSentLength: 0, accumulatedText: "" });
 }
 
 /**

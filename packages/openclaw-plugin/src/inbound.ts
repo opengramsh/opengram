@@ -259,6 +259,8 @@ async function handleMessageCreated(
 
   log?.info(`[opengram] inbound trace: mediaIds=[${rawMediaIds.join(", ")}]`);
 
+  const traceKind = typeof trace?.kind === "string" ? trace.kind : undefined;
+
   const collectedImages: ImageContent[] = [];
   const tempFilePaths: string[] = [];
   const tempFileMimes: string[] = [];
@@ -266,6 +268,21 @@ async function handleMessageCreated(
 
   for (const mediaId of rawMediaIds) {
     try {
+      // Skip image fetch for explicitly non-image media (e.g. kind: "file")
+      if (traceKind && traceKind !== "image") {
+        const media = await client.fetchMediaAsBuffer(mediaId);
+        if (media) {
+          const ext = path.extname(media.fileName) || "";
+          const filePath = path.join(os.tmpdir(), `opengram-${mediaId}${ext}`);
+          await fs.writeFile(filePath, media.buffer);
+          log?.info(`[opengram] wrote temp file: ${filePath} (${media.mimeType}, ${media.buffer.length} bytes)`);
+          tempFilePaths.push(filePath);
+          tempFileMimes.push(media.mimeType);
+          tempFileUrls.push(client.getMediaUrl(mediaId));
+        }
+        continue;
+      }
+
       const img = await client.fetchMediaAsImage(mediaId);
       if (img) {
         log?.info(`[opengram] fetchMediaAsImage: got ${img.mimeType} (${img.data.length} chars) for ${mediaId}`);

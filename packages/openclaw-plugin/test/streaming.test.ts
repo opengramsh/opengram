@@ -268,7 +268,7 @@ describe("streaming", () => {
       const result = await finalizeStream(client, "dispatch-partial");
 
       expect(result).toBe(true);
-      expect(client.completeMessage).toHaveBeenCalledWith("msg-eager-partial");
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-eager-partial", "Partial");
       expect(client.cancelMessage).not.toHaveBeenCalledWith("msg-eager-partial");
       expect(hasActiveStream("dispatch-partial")).toBe(false);
     });

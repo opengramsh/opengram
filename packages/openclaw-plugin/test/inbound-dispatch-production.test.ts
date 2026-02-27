@@ -495,7 +495,7 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
       id: "evt-content-snake-1",
       type: "message.created",
       payload: {
-        chatId: "chat-1",
+        chatId: "chat-snake",
         messageId: "user-msg-content-snake-1",
         role: "user",
         content_final: "snake final",
@@ -507,7 +507,7 @@ describe("GRAM-058: production inbound dispatch session routing", () => {
       id: "evt-content-legacy-1",
       type: "message.created",
       payload: {
-        chatId: "chat-1",
+        chatId: "chat-legacy",
         messageId: "user-msg-content-legacy-1",
         role: "user",
         content: "legacy only",

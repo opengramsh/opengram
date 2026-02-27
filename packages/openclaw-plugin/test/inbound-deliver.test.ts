@@ -259,7 +259,7 @@ describe("inbound deliver integration", () => {
       await capturedDeliver({ text: "" }, { kind: "final" });
 
       // Empty final text should finalize from accumulated partial content.
-      expect(client.completeMessage).toHaveBeenCalledWith("msg-1");
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-1", "Partial answer from blocks");
       expect(client.cancelMessage).not.toHaveBeenCalledWith("msg-1");
 
       abortController.abort();
