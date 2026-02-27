@@ -16,10 +16,6 @@ import { isSoundEnabled } from "@/src/lib/notification-preferences";
 import { playNotificationSound } from "@/src/lib/notification-sound";
 import { applyKeyboardCssVars, subscribeToKeyboardLayout } from "@/src/lib/keyboard-layout";
 
-function pendingLabel(total: number) {
-  return total === 1 ? "1 pending request" : `${total} pending requests`;
-}
-
 type UnreadSummaryPayload = {
   total_unread?: number;
   unread_by_agent?: Record<string, number>;
@@ -46,7 +42,7 @@ export default function InboxLayout() {
     import("@/src/client/pages/chat");
   }, []);
 
-  const [pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
+  const [_pendingRequestsTotal, setPendingRequestsTotal] = useState(0);
   const [totalUnread, setTotalUnread] = useState(0);
   const [unreadByAgent, setUnreadByAgent] = useState<Record<string, number>>(
     {},
@@ -117,9 +113,7 @@ export default function InboxLayout() {
   const { setChats, loadChats, refreshChats, matchesActiveFilters } = chatList;
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPendingSummary().catch(() => setPendingRequestsTotal(0));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadUnreadSummary().catch(() => {
       setTotalUnread(0);
       setUnreadByAgent({});
@@ -150,6 +144,7 @@ export default function InboxLayout() {
   );
 
   useEffect(() => {
+    const typingTimers = typingTimersRef.current;
     const unsubscribe = subscribeToEventsStream(
       (event: FrontendStreamEvent) => {
         const chatIdFromEvent =
@@ -167,12 +162,12 @@ export default function InboxLayout() {
             next.add(chatIdFromEvent);
             return next;
           });
-          const existing = typingTimersRef.current.get(chatIdFromEvent);
+          const existing = typingTimers.get(chatIdFromEvent);
           if (existing) clearTimeout(existing);
-          typingTimersRef.current.set(
+          typingTimers.set(
             chatIdFromEvent,
             setTimeout(() => {
-              typingTimersRef.current.delete(chatIdFromEvent);
+              typingTimers.delete(chatIdFromEvent);
               setStreamingChatIds((prev) => {
                 if (!prev.has(chatIdFromEvent)) return prev;
                 const next = new Set(prev);
@@ -188,10 +183,10 @@ export default function InboxLayout() {
             event.payload.streamState !== "streaming"
           ) {
             // Non-streaming agent/system message arrived → no pending reply for this chat.
-            const timer = typingTimersRef.current.get(chatIdFromEvent);
+            const timer = typingTimers.get(chatIdFromEvent);
             if (timer) {
               clearTimeout(timer);
-              typingTimersRef.current.delete(chatIdFromEvent);
+              typingTimers.delete(chatIdFromEvent);
             }
             setStreamingChatIds((prev) => {
               if (!prev.has(chatIdFromEvent)) return prev;
@@ -202,10 +197,10 @@ export default function InboxLayout() {
           }
         }
         if (event.type === "message.streaming.complete" && chatIdFromEvent) {
-          const timer = typingTimersRef.current.get(chatIdFromEvent);
+          const timer = typingTimers.get(chatIdFromEvent);
           if (timer) {
             clearTimeout(timer);
-            typingTimersRef.current.delete(chatIdFromEvent);
+            typingTimers.delete(chatIdFromEvent);
           }
           setStreamingChatIds((prev) => {
             if (!prev.has(chatIdFromEvent)) return prev;
@@ -338,10 +333,10 @@ export default function InboxLayout() {
 
     return () => {
       unsubscribe();
-      for (const timer of typingTimersRef.current.values()) {
+      for (const timer of typingTimers.values()) {
         clearTimeout(timer);
       }
-      typingTimersRef.current.clear();
+      typingTimers.clear();
     };
   }, [
     loadChats,

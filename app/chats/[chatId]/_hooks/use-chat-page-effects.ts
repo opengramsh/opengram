@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { setActiveChatId } from '@/app/chats/[chatId]/_lib/active-chat-idb';
 import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';

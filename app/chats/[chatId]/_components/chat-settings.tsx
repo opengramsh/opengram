@@ -41,8 +41,8 @@ type ChatSettingsProps = {
 export function ChatSettings({
   isChatSettingsOpen,
   chat,
-  models,
-  primaryAgent,
+  models: _models,
+  primaryAgent: _primaryAgent,
   isUpdatingChatSettings,
   tagInput,
   tagSuggestions,

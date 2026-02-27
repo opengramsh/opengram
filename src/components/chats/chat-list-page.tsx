@@ -67,7 +67,6 @@ export function ChatListPage({
     toggleArchive,
     renameChat,
     isNewChatOpen,
-    openNewChatSheet,
     closeNewChatSheet,
     newChatAgentId,
     setNewChatAgentId,

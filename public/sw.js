@@ -30,14 +30,14 @@ function getActiveChatId() {
             db.close();
             resolve(null);
           };
-        } catch (e) {
+        } catch {
           resolve(null);
         }
       };
       request.onerror = function () {
         resolve(null);
       };
-    } catch (e) {
+    } catch {
       resolve(null);
     }
   });

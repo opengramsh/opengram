@@ -32,10 +32,8 @@ import { createHighlighter } from "shiki";
 
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 // biome-ignore lint/suspicious/noBitwiseOperators: shiki bitflag check
-// eslint-disable-next-line no-bitwise -- shiki bitflag check
 const isItalic = (fontStyle: number | undefined) => fontStyle && fontStyle & 1;
 // biome-ignore lint/suspicious/noBitwiseOperators: shiki bitflag check
-// eslint-disable-next-line no-bitwise -- shiki bitflag check
 // oxlint-disable-next-line eslint(no-bitwise)
 const isBold = (fontStyle: number | undefined) => fontStyle && fontStyle & 2;
 const isUnderline = (fontStyle: number | undefined) =>
@@ -388,28 +386,39 @@ export const CodeBlockContent = ({
   // Memoized raw tokens for immediate display
   const rawTokens = useMemo(() => createRawTokens(code), [code]);
 
-  // Try to get cached result synchronously, otherwise use raw tokens
-  const [tokenized, setTokenized] = useState<TokenizedCode>(
-    () => highlightCode(code, language) ?? rawTokens
+  // Synchronous cached result (or raw fallback) — recomputed when inputs change
+  const syncResult = useMemo(
+    () => highlightCode(code, language) ?? rawTokens,
+    [code, language, rawTokens]
   );
+
+  // Async highlighting result, tagged with its inputs so stale results are ignored
+  const [asyncResult, setAsyncResult] = useState<{
+    code: string;
+    language: string;
+    result: TokenizedCode;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    // Reset to raw tokens when code changes (shows current code, not stale tokens)
-    setTokenized(highlightCode(code, language) ?? rawTokens);
-
     // Subscribe to async highlighting result
     highlightCode(code, language, (result) => {
       if (!cancelled) {
-        setTokenized(result);
+        setAsyncResult({ code, language, result });
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [code, language, rawTokens]);
+  }, [code, language]);
+
+  // Use async result only if it matches the current inputs
+  const tokenized =
+    asyncResult && asyncResult.code === code && asyncResult.language === language
+      ? asyncResult.result
+      : syncResult;
 
   return (
     <div className="relative overflow-auto">

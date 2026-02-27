@@ -39,8 +39,9 @@ const ShimmerComponent = ({
   duration = 2,
   spread = 2,
 }: TextShimmerProps) => {
-  const MotionComponent = getMotionComponent(
-    Component as keyof JSX.IntrinsicElements
+  const MotionComponent = useMemo(
+    () => getMotionComponent(Component as keyof JSX.IntrinsicElements),
+    [Component]
   );
 
   const dynamicSpread = useMemo(
@@ -49,6 +50,7 @@ const ShimmerComponent = ({
   );
 
   return (
+    // eslint-disable-next-line react-hooks/static-components -- component is cached at module level via motionComponentCache
     <MotionComponent
       animate={{ backgroundPosition: "0% center" }}
       className={cn(

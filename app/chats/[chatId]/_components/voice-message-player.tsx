@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 
 import { buildFileUrl } from '@/src/lib/api-fetch';
@@ -39,7 +39,7 @@ export function VoiceMessagePlayer({ item, role }: VoiceMessagePlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const barHeights = useRef(generateBarHeights(item.id)).current;
+  const barHeights = useMemo(() => generateBarHeights(item.id), [item.id]);
   const isUser = role === 'user';
 
   useEffect(() => {

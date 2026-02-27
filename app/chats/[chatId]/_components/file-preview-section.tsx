@@ -110,9 +110,15 @@ type FetchState =
 
 function useTextContent(itemId: string): FetchState {
   const [state, setState] = useState<FetchState>({ status: 'loading' });
+  const [prevItemId, setPrevItemId] = useState(itemId);
+
+  // Reset to loading when itemId changes (React-approved derived state pattern)
+  if (prevItemId !== itemId) {
+    setPrevItemId(itemId);
+    setState({ status: 'loading' });
+  }
 
   useEffect(() => {
-    setState({ status: 'loading' });
     let cancelled = false;
 
     apiFetch(`/api/v1/files/${itemId}`)

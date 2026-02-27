@@ -464,6 +464,8 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
     });
   }, []);
 
+  const { patchChatSettings } = settings;
+
   const addTagToChat = useCallback(async (rawTag: string) => {
     const normalized = normalizeTagInput(rawTag);
     if (!chat || !normalized || chat.tags.includes(normalized)) {
@@ -472,16 +474,16 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
 
     setTagInput('');
     setTagSuggestions([]);
-    await settings.patchChatSettings({ tags: [...chat.tags, normalized] });
-  }, [chat, settings.patchChatSettings]);
+    await patchChatSettings({ tags: [...chat.tags, normalized] });
+  }, [chat, patchChatSettings]);
 
   const removeTagFromChat = useCallback(async (tag: string) => {
     if (!chat) {
       return;
     }
 
-    await settings.patchChatSettings({ tags: chat.tags.filter((item) => item !== tag) });
-  }, [chat, settings.patchChatSettings]);
+    await patchChatSettings({ tags: chat.tags.filter((item) => item !== tag) });
+  }, [chat, patchChatSettings]);
 
   const getChatId = useCallback(async () => chat?.id ?? null, [chat]);
   const recorder = useChatRecorder({ getChatId, setError, setMessages, setMedia });

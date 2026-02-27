@@ -16,6 +16,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["dist/**", "build/**", "packages/**", ".next/**", "landing/.next/**"],
+    ignores: ["dist/**", "build/**", "packages/**", ".next/**", "landing/.next/**", "landing/out/**"],
   },
 );
