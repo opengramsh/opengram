@@ -16,6 +16,23 @@ vi.mock('facehash', () => ({
   Facehash: ({ name }: { name: string }) => <div data-testid={`facehash-${name}`} />,
 }));
 
+// media-chrome web components don't work in JSDOM; stub with plain elements
+vi.mock('media-chrome/react', () => {
+  const passthrough = ({ children, ...props }: Record<string, unknown>) => <div {...props}>{children as React.ReactNode}</div>;
+  return {
+    MediaControlBar: passthrough,
+    MediaController: passthrough,
+    MediaDurationDisplay: passthrough,
+    MediaMuteButton: passthrough,
+    MediaPlayButton: passthrough,
+    MediaSeekBackwardButton: passthrough,
+    MediaSeekForwardButton: passthrough,
+    MediaTimeDisplay: passthrough,
+    MediaTimeRange: passthrough,
+    MediaVolumeRange: passthrough,
+  };
+});
+
 vi.mock('@/src/lib/events-stream', () => ({
   subscribeToEventsStream: (listener: (event: FrontendStreamEvent) => void) => {
     streamMock.listener = listener;

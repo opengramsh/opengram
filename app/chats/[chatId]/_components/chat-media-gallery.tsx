@@ -1,7 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
-import { InlineAudioPlayer } from '@/app/chats/[chatId]/_components/inline-audio-player';
+import {
+  AudioPlayer,
+  AudioPlayerElement,
+  AudioPlayerControlBar,
+  AudioPlayerPlayButton,
+  AudioPlayerTimeRange,
+  AudioPlayerTimeDisplay,
+  AudioPlayerDurationDisplay,
+} from '@/src/components/ai-elements/audio-player';
 import { buildFileUrl } from '@/src/lib/api-fetch';
 import { formatBytes } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
@@ -132,7 +140,15 @@ export function ChatMediaGallery({
                   </div>
                   {item.kind === 'audio' && (
                     <div className="mt-2">
-                      <InlineAudioPlayer item={item} />
+                      <AudioPlayer className="rounded-xl border border-border/70 bg-card/40">
+                        <AudioPlayerElement src={buildFileUrl(item.id)} />
+                        <AudioPlayerControlBar>
+                          <AudioPlayerPlayButton />
+                          <AudioPlayerTimeDisplay />
+                          <AudioPlayerTimeRange />
+                          <AudioPlayerDurationDisplay />
+                        </AudioPlayerControlBar>
+                      </AudioPlayer>
                     </div>
                   )}
                 </div>
