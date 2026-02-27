@@ -325,7 +325,7 @@ export const MessageResponse = memo(
     return (
       <Streamdown
         className={cn(
-          "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+          "w-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           "[&_ul]:list-disc [&_ul]:pl-5",
           "[&_ol]:list-decimal [&_ol]:pl-5",
           className
