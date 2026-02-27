@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { StickToBottomContext } from 'use-stick-to-bottom';
 
@@ -49,7 +49,22 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(initialChat?.title ?? '');
   const [titleError, setTitleError] = useState<string | null>(null);
-  const [composerText, setComposerText] = useState('');
+  const [composerText, setComposerText] = useState(() => {
+    if (!chatId) return '';
+    try { return localStorage.getItem(`opengram.draft.${chatId}`) ?? ''; }
+    catch { return ''; }
+  });
+  useEffect(() => {
+    if (!chatId) return;
+    const timer = setTimeout(() => {
+      try {
+        if (composerText) localStorage.setItem(`opengram.draft.${chatId}`, composerText);
+        else localStorage.removeItem(`opengram.draft.${chatId}`);
+      } catch { /* localStorage blocked */ }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [chatId, composerText]);
+
   const [isSending, setIsSending] = useState(false);
   const [pendingReply, setPendingReply] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
