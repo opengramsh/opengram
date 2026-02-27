@@ -54,7 +54,7 @@ export async function runSetupWizard(
   if (agentConfigs.length > 0) {
     const spin = prompter.progress("Pushing config to OpenGram…");
     try {
-      await pushToOpenGram(baseUrl, instanceSecret, agentConfigs, []);
+      await pushToOpenGram(baseUrl, instanceSecret, agentConfigs);
       spin.stop("Config pushed to OpenGram successfully.");
     } catch (error) {
       spin.stop(`Failed to push config: ${error}`);
@@ -268,7 +268,7 @@ async function promptInstanceSecret(
 //   });
 // }
 
-type ImportedModel = { id: string; name: string; description: string };
+// type ImportedModel = { id: string; name: string; description: string };
 
 type ImportedAgent = { id: string; name: string; description: string; defaultModelId?: string };
 
@@ -452,7 +452,7 @@ async function pushToOpenGram(
   baseUrl: string,
   instanceSecret: string | undefined,
   agents: ImportedAgent[],
-  models: ImportedModel[],
+  // models: ImportedModel[],
 ): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (instanceSecret) {
@@ -461,7 +461,7 @@ async function pushToOpenGram(
 
   const body: Record<string, unknown> = {};
   if (agents.length > 0) body.agents = agents;
-  if (models.length > 0) body.models = models;
+  // if (models.length > 0) body.models = models;
 
   const res = await fetch(`${baseUrl}/api/v1/config/admin`, {
     method: "PATCH",
