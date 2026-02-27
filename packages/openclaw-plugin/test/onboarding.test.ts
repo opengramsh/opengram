@@ -7,7 +7,7 @@ vi.mock("openclaw/plugin-sdk", () => ({
 
 // Mock the tailscale module
 vi.mock("../src/cli/tailscale.js", () => ({
-  detectTailscaleUrl: vi.fn(() => undefined),
+  detectOpengramUrl: vi.fn(() => Promise.resolve("http://localhost:3000")),
 }));
 
 // Mock the api-client

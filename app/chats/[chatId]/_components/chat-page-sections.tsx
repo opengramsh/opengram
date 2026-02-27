@@ -112,7 +112,6 @@ function ChatComposerSection() {
       pendingAttachments={chat.pendingAttachments}
       removePendingAttachment={chat.removePendingAttachment}
       onModelChange={async () => {}}
-      onCameraCapture={() => chat.setIsCameraOpen(true)}
       keyboardOffset={chat.keyboardOffset}
     />
   );

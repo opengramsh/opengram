@@ -245,7 +245,6 @@ describe('KAI-237: composer height CSS variable integration', () => {
         cameraInputRef={{ current: null }}
         photosInputRef={{ current: null }}
         filesInputRef={{ current: null }}
-        onCameraCapture={() => {}}
         keyboardOffset={0}
       />,
     );

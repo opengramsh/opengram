@@ -120,57 +120,6 @@ export function subscribeToEvents(
   };
 }
 
-export function listEventsAfterCursor(cursor: string | null, limit: number) {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
-    throw validationError('limit must be an integer between 1 and 200.', { field: 'limit' });
-  }
-
-  const db = getDb();
-  if (!cursor) {
-    const rows = db
-      .prepare('SELECT rowid, id, type, payload, created_at FROM events ORDER BY rowid ASC LIMIT ?')
-      .all(limit) as EventRecord[];
-    return rows.map((row) => {
-      const event = serializeEvent(row);
-      return {
-        id: event.id,
-        type: event.type,
-        timestamp: event.timestamp,
-        payload: event.payload,
-      };
-    });
-  }
-
-  const cursorRow = db
-    .prepare('SELECT rowid FROM events WHERE id = ?')
-    .get(cursor) as { rowid: number } | undefined;
-
-  if (!cursorRow) {
-    throw validationError('cursor event id was not found.', { field: 'cursor' });
-  }
-
-  const rows = db
-    .prepare(
-      [
-        'SELECT rowid, id, type, payload, created_at FROM events',
-        'WHERE rowid > ?',
-        'ORDER BY rowid ASC',
-        'LIMIT ?',
-      ].join(' '),
-    )
-    .all(cursorRow.rowid, limit) as EventRecord[];
-
-  return rows.map((row) => {
-    const event = serializeEvent(row);
-    return {
-      id: event.id,
-      type: event.type,
-      timestamp: event.timestamp,
-      payload: event.payload,
-    };
-  });
-}
-
 export function getEventRowidById(eventId: string) {
   const db = getDb();
   const row = db
@@ -208,14 +157,6 @@ export function getLatestEventRowid() {
     .prepare('SELECT rowid FROM events ORDER BY rowid DESC LIMIT 1')
     .get() as { rowid: number } | undefined;
   return row?.rowid ?? 0;
-}
-
-export function getLatestEventCursor() {
-  const db = getDb();
-  const row = db
-    .prepare('SELECT id FROM events ORDER BY rowid DESC LIMIT 1')
-    .get() as { id: string } | undefined;
-  return row?.id ?? null;
 }
 
 export function resetEventSubscribersForTests() {

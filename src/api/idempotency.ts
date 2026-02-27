@@ -123,13 +123,6 @@ function assertCompatibleIdempotencyPayload(
   return parsedStoredResponse.payload.responseBody;
 }
 
-function loadIdempotencyRow(key: string): IdempotencyRow | undefined {
-  const db = getDb();
-  return db
-    .prepare('SELECT response, status_code FROM idempotency_keys WHERE key = ?')
-    .get(key) as IdempotencyRow | undefined;
-}
-
 function isUniqueConstraintError(error: unknown) {
   return error instanceof Error && error.message.includes('UNIQUE constraint failed: idempotency_keys.key');
 }
@@ -146,79 +139,6 @@ export function getIdempotencyKey(request: Request): string | null {
   }
 
   return key;
-}
-
-export function replayIdempotentResponse(
-  key: string | null,
-  requestBody: unknown,
-): Response | null {
-  if (!key) {
-    return null;
-  }
-
-  const requestHash = requestHashFromBody(requestBody);
-  const row = loadIdempotencyRow(key);
-  if (!row) {
-    return null;
-  }
-
-  const parsedStoredResponse = parseStoredResponse(row.response);
-  const replayBody = assertCompatibleIdempotencyPayload(key, requestHash, parsedStoredResponse);
-  if (parsedStoredResponse.state === 'in_progress') {
-    return null;
-  }
-
-  return Response.json(replayBody, { status: row.status_code });
-}
-
-export function storeIdempotentResponse(
-  key: string | null,
-  requestBody: unknown,
-  statusCode: number,
-  responseBody: unknown,
-): Response | null {
-  if (!key) {
-    return null;
-  }
-
-  const ttlMs = getIdempotencyTtlMs();
-  const requestHash = requestHashFromBody(requestBody);
-  const db = getDb();
-
-  db.prepare('DELETE FROM idempotency_keys WHERE created_at < ?').run(Date.now() - ttlMs);
-
-  const serialized = JSON.stringify({
-    state: 'completed',
-    requestHash,
-    responseBody,
-  });
-
-  try {
-    db.prepare(
-      'INSERT INTO idempotency_keys (key, response, status_code, created_at) VALUES (?, ?, ?, ?)',
-    ).run(key, serialized, statusCode, Date.now());
-    return null;
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) {
-      throw error;
-    }
-
-    const row = db
-      .prepare('SELECT response, status_code FROM idempotency_keys WHERE key = ?')
-      .get(key) as IdempotencyRow | undefined;
-
-    if (!row) {
-      throw error;
-    }
-
-    const parsedStoredResponse = parseStoredResponse(row.response);
-    const replayBody = assertCompatibleIdempotencyPayload(key, requestHash, parsedStoredResponse);
-    if (parsedStoredResponse.state === 'in_progress') {
-      return null;
-    }
-
-    return Response.json(replayBody, { status: row.status_code });
-  }
 }
 
 function reserveIdempotencyKey(

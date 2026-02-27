@@ -159,11 +159,6 @@ export function getActiveDispatchId(chatId: string): string | undefined {
   return activeCleanups.get(chatId)?.dispatchId;
 }
 
-/** Get the latest dispatch ID for a chat (for testing). */
-export function getLatestDispatchId(chatId: string): string | undefined {
-  return latestDispatches.get(chatId);
-}
-
 /** Clear all queues and state. Only for testing. */
 export function clearChatQueuesForTests(): void {
   latestDispatches.clear();

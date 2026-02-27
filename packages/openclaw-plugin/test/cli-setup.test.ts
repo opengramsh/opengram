@@ -3,7 +3,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // Mock the tailscale module to avoid running actual tailscale commands
 vi.mock("../src/cli/tailscale.js", () => ({
   detectOpengramUrl: vi.fn(() => Promise.resolve("http://localhost:3000")),
-  detectTailscaleUrl: vi.fn(() => undefined),
 }));
 
 // Mock the api-client to avoid real network calls

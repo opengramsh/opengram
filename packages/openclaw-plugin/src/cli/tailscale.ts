@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 
 /** Raw info extracted from `tailscale status --json`. */
-export type TailscaleInfo = {
+type TailscaleInfo = {
   dnsName: string | undefined;
   tailscaleIPs: string[];
 };
@@ -10,7 +10,7 @@ export type TailscaleInfo = {
  * Extract Tailscale network info (MagicDNS hostname + IPs).
  * Returns `undefined` if Tailscale is unavailable.
  */
-export function getTailscaleInfo(): TailscaleInfo | undefined {
+function getTailscaleInfo(): TailscaleInfo | undefined {
   try {
     const raw = execSync("tailscale status --json", {
       timeout: 5000,
@@ -47,7 +47,7 @@ type CandidateUrl = {
  * Build candidate URLs from Tailscale info + localhost,
  * ordered by preference (lowest priority number = most preferred).
  */
-export function buildCandidateUrls(
+function buildCandidateUrls(
   info: TailscaleInfo | undefined,
 ): CandidateUrl[] {
   const candidates: CandidateUrl[] = [];
@@ -148,11 +148,3 @@ export async function detectOpengramUrl(): Promise<string> {
   return "http://localhost:3000";
 }
 
-/**
- * @deprecated Use {@link detectOpengramUrl} instead.
- */
-export function detectTailscaleUrl(): string | undefined {
-  const info = getTailscaleInfo();
-  if (!info?.dnsName) return undefined;
-  return `https://${info.dnsName}`;
-}

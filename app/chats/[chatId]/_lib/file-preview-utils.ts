@@ -1,4 +1,4 @@
-export const TEXT_PREVIEW_MAX_BYTES = 20 * 1024 * 1024; // 20 MB
+const TEXT_PREVIEW_MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
 export function isPreviewable(contentType: string, byteSize: number): boolean {
   const ct = contentType.split(';')[0]?.trim().toLowerCase() ?? '';

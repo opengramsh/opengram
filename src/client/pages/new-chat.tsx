@@ -328,7 +328,6 @@ export default function NewChatPage() {
         cameraInputRef={cameraInputRef}
         photosInputRef={photosInputRef}
         filesInputRef={filesInputRef}
-        onCameraCapture={() => cameraInputRef.current?.click()}
       />
 
       {/* Agent Picker */}

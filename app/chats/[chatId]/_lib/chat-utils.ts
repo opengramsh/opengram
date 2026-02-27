@@ -36,10 +36,6 @@ export function messageBubbleClass(role: Message['role']) {
   return 'mx-auto max-w-[92%] rounded-xl border border-border/70 bg-muted px-3 py-2 text-xs text-muted-foreground';
 }
 
-export function mediaIdFromTrace(message: Message) {
-  return message.trace && typeof message.trace.mediaId === 'string' ? message.trace.mediaId : null;
-}
-
 export function mediaIdsFromTrace(message: Message): string[] {
   if (!message.trace) return [];
 

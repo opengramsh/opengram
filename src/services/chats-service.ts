@@ -770,13 +770,6 @@ export function markChatUnread(chatId: string) {
   });
 }
 
-export function recalculateChatDenormalized(chatId: string) {
-  const db = getDb();
-  getChatRecord(db, chatId);
-  updateDenormalizedFields(db, chatId);
-  return serializeChat(getChatRecord(db, chatId));
-}
-
 export function listTagSuggestions(query: string, limit = 10) {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {

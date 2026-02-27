@@ -40,7 +40,6 @@ type ChatComposerProps = {
   cameraInputRef: RefObject<HTMLInputElement | null>;
   photosInputRef: RefObject<HTMLInputElement | null>;
   filesInputRef: RefObject<HTMLInputElement | null>;
-  onCameraCapture: () => void;
   keyboardOffset: number;
 };
 
@@ -69,7 +68,6 @@ export function ChatComposer({
   cameraInputRef,
   photosInputRef,
   filesInputRef,
-  onCameraCapture: _onCameraCapture,
   keyboardOffset,
 }: ChatComposerProps) {
   const footerRef = useRef<HTMLElement | null>(null);
