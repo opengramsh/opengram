@@ -9,7 +9,7 @@ type SearchResultsListProps = {
   loading: boolean;
   query: string;
   agentsById: Map<string, Agent>;
-  onOpenChat: (chatId: string, chatSeed?: { id: string; title: string; agent_ids: string[] }) => void;
+  onOpenChat: (chatId: string, chatSeed?: { id: string; title: string; agent_ids: string[] }, messageId?: string) => void;
 };
 
 function AgentAvatar({ agentIds, agentsById }: { agentIds: string[]; agentsById: Map<string, Agent> }) {
@@ -40,8 +40,8 @@ export function SearchResultsList({ searchResults, loading, query, agentsById, o
     );
   }
 
-  const hasChats = searchResults.chats.length > 0;
-  const hasMessages = searchResults.messages.length > 0;
+  const hasChats = (searchResults.chats?.length ?? 0) > 0;
+  const hasMessages = (searchResults.messages?.length ?? 0) > 0;
   const isEmpty = !hasChats && !hasMessages;
 
   return (
@@ -99,7 +99,7 @@ export function SearchResultsList({ searchResults, loading, query, agentsById, o
                   id: msg.chat_id,
                   title: msg.chat_title,
                   agent_ids: msg.agent_ids,
-                })}
+                }, msg.id)}
               >
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5">

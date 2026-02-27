@@ -60,6 +60,7 @@ function ChatMessagesSection() {
       pendingReply={chat.pendingReply}
       setViewerMediaId={(id) => chat.setViewerMediaId(id)}
       setPreviewFileId={chat.setPreviewFileId}
+      scrollToMessageId={chat.scrollToMessageIdRef.current}
     />
   );
 }

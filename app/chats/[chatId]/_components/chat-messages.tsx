@@ -33,6 +33,7 @@ type ChatMessagesProps = {
   pendingReply: boolean;
   setViewerMediaId: (id: string) => void;
   setPreviewFileId: (id: string | null) => void;
+  scrollToMessageId?: string | null;
 };
 
 type FileTypeInfo = {
@@ -190,6 +191,7 @@ export function ChatMessages({
   pendingReply,
   setViewerMediaId,
   setPreviewFileId,
+  scrollToMessageId,
 }: ChatMessagesProps) {
   const visibleMessages = messages.filter((message) => {
     const attachments = inlineMessageMedia.get(message.id) ?? [];
@@ -208,6 +210,7 @@ export function ChatMessages({
       ref={feedRef}
       className="flex-1"
       style={{ paddingBottom: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
+      initial={scrollToMessageId ? false : 'smooth'}
     >
       <ConversationContent>
         {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
@@ -238,7 +241,7 @@ export function ChatMessages({
             // Tool messages use a dedicated collapsible component
             if (message.role === 'tool') {
               return (
-                <div key={message.id} className="mb-2 flex w-full flex-col gap-2">
+                <div key={message.id} id={`msg-${message.id}`} className="mb-2 flex w-full flex-col gap-2">
                   {hasText && <ToolMessage text={text} trace={message.trace} />}
                   {audioItems.length > 0 && (
                     <div className="mx-auto w-full max-w-[92%] space-y-2">
@@ -285,7 +288,7 @@ export function ChatMessages({
                 : baseBubbleClass;
 
             return (
-              <div key={message.id} className="mb-2 flex w-full">
+              <div key={message.id} id={`msg-${message.id}`} className="mb-2 flex w-full">
                 <div className={bubbleClass}>
                   {/* TODO: When trace.reasoning is available, render <Reasoning> + <ReasoningTrigger> + <ReasoningContent> above the agent message */}
 

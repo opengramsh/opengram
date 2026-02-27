@@ -382,15 +382,34 @@ export function useChatPageEffects(data: ChatPageData) {
     titleInputRef.current?.select();
   }, [isEditingTitle, titleInputRef]);
 
+  // Scroll to bottom on new messages — but skip when a scroll-to-message target is pending
   useEffect(() => {
+    if (data.scrollToMessageIdRef.current) return;
     const frame = window.requestAnimationFrame(() => {
       scrollToBottom();
     });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages.length, scrollToBottom, data]);
 
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [messages.length, scrollToBottom]);
+  // Scroll to a specific message after messages finish loading
+  useEffect(() => {
+    const targetId = data.scrollToMessageIdRef.current;
+    if (!targetId || data.messagesLoading) return;
+
+    // Double rAF: first gets us to the next frame, second ensures React commit + paint
+    let frameRef: number;
+    const outer = requestAnimationFrame(() => {
+      frameRef = requestAnimationFrame(() => {
+        const el = document.getElementById(`msg-${targetId}`);
+        if (el) {
+          el.scrollIntoView({ block: 'center' });
+        }
+        data.clearScrollToMessageId();
+      });
+    });
+    frameRef = outer;
+    return () => cancelAnimationFrame(frameRef);
+  }, [data.messagesLoading, data]);
 
   useEffect(() => {
     const unsubscribe = subscribeToKeyboardLayout(window, document, ({ keyboardOffset }) => {

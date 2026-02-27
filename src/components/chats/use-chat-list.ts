@@ -117,7 +117,10 @@ export function useChatList(options: UseChatListOptions) {
       cache: 'no-store',
       signal: controller.signal,
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('search failed');
+        return res.json();
+      })
       .then((data: SearchResponse) => setSearchResults(data))
       .catch(() => {/* aborted or failed — leave existing results */})
       .finally(() => setIsSearchResultsLoading(false));

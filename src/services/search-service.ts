@@ -94,6 +94,18 @@ function normalizeQuery(value: string | null): string {
   return query;
 }
 
+function escapeFtsQuery(query: string): string {
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return '""';
+
+  return tokens
+    .map((token, i) => {
+      const quoted = `"${token.replace(/"/g, '""')}"`;
+      return i === tokens.length - 1 ? `${quoted}*` : quoted;
+    })
+    .join(' ');
+}
+
 function escapeLikeQuery(value: string) {
   return value.replace(/[\\%_]/g, '\\$&');
 }
@@ -247,7 +259,7 @@ function queryMessageMatches(
       .all(
         SEARCH_HIGHLIGHT_OPEN,
         SEARCH_HIGHLIGHT_CLOSE,
-        query,
+        escapeFtsQuery(query),
         ...cursorClause.values,
         limit + 1,
       ) as MessageSearchRow[];

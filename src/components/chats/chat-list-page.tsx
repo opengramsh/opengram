@@ -176,11 +176,11 @@ export function ChatListPage({
           loading={isSearchResultsLoading}
           query={searchQuery}
           agentsById={agentsById}
-          onOpenChat={(chatId, chatSeed) =>
+          onOpenChat={(chatId, chatSeed, messageId) =>
             navigate(`/chats/${chatId}`, {
-              state: chatSeed
-                ? {
-                  chat: {
+              state: {
+                chat: chatSeed
+                  ? {
                     id: chatSeed.id,
                     title: chatSeed.title,
                     title_source: 'default',
@@ -191,9 +191,10 @@ export function ChatListPage({
                     notifications_muted: false,
                     agent_ids: chatSeed.agent_ids,
                     pending_requests_count: 0,
-                  },
-                }
-                : undefined,
+                  }
+                  : undefined,
+                scrollToMessageId: messageId,
+              },
             })}
         />
       ) : (

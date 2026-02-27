@@ -29,9 +29,10 @@ import { sortMessagesForFeed, upsertFeedMessage } from '@/src/lib/chat';
 type UseChatPageDataArgs = {
   chatId?: string;
   initialChat?: Chat | null;
+  scrollToMessageId?: string;
 };
 
-export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataArgs) {
+export function useChatPageData({ chatId, initialChat = null, scrollToMessageId }: UseChatPageDataArgs) {
   const navigate = useNavigate();
   const cachedConfig = getFrontendConfigCache();
 
@@ -65,6 +66,7 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [typingTitle, setTypingTitle] = useState<string | null>(null);
 
+  const scrollToMessageIdRef = useRef<string | null>(scrollToMessageId ?? null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const photosInputRef = useRef<HTMLInputElement | null>(null);
@@ -149,6 +151,10 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
     () => (previewFileId ? mediaById.get(previewFileId) : undefined),
     [mediaById, previewFileId],
   );
+
+  const clearScrollToMessageId = useCallback(() => {
+    scrollToMessageIdRef.current = null;
+  }, []);
 
   const scrollToBottom = useCallback((smooth = false) => {
     const feed = feedRef.current;
@@ -574,6 +580,8 @@ export function useChatPageData({ chatId, initialChat = null }: UseChatPageDataA
     refreshMedia,
     updateRequestDraft: requests.updateRequestDraft,
     resolvePendingRequest: requests.resolvePendingRequest,
+    scrollToMessageIdRef,
+    clearScrollToMessageId,
     scrollToBottom,
     saveTitle,
     goBack,

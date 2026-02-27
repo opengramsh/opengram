@@ -9,13 +9,14 @@ import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-dat
 type ChatPageProviderProps = {
   chatId?: string;
   initialChat?: Chat | null;
+  scrollToMessageId?: string;
   children: ReactNode;
 };
 
 const ChatPageContext = createContext<ChatPageData | null>(null);
 
-export function ChatPageProvider({ chatId, initialChat, children }: ChatPageProviderProps) {
-  const controller = useChatPageController(chatId, initialChat);
+export function ChatPageProvider({ chatId, initialChat, scrollToMessageId, children }: ChatPageProviderProps) {
+  const controller = useChatPageController(chatId, initialChat, scrollToMessageId);
 
   return <ChatPageContext.Provider value={controller}>{children}</ChatPageContext.Provider>;
 }
