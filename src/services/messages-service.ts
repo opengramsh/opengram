@@ -5,6 +5,7 @@ import { conflictError, notFoundError, validationError } from '@/src/api/http';
 import { encodeMessageCursor, parseMessagePagination } from '@/src/api/pagination';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { getDb } from '@/src/db/client';
+import { enqueueDispatchInputForUserMessage } from '@/src/services/dispatch-service';
 import { emitEvent } from '@/src/services/events-service';
 import { notifyAgentMessageCreated } from '@/src/services/push-service';
 
@@ -438,6 +439,16 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
     createdAt: serialized.created_at,
     trace: serialized.trace,
   });
+
+  if (serialized.role === 'user' && serialized.stream_state === 'complete') {
+    enqueueDispatchInputForUserMessage({
+      chatId: serialized.chat_id,
+      messageId: serialized.id,
+      senderId: serialized.sender_id,
+      content: serialized.content_final,
+      trace: serialized.trace as Record<string, unknown> | null,
+    });
+  }
 
   if (serialized.role === 'agent' && serialized.stream_state !== 'streaming') {
     void notifyAgentMessageCreated({

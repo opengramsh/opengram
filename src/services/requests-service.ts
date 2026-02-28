@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 
 import { notFoundError, validationError } from '@/src/api/http';
 import { getDb } from '@/src/db/client';
+import { enqueueDispatchInputForRequestResolved } from '@/src/services/dispatch-service';
 import { emitEvent } from '@/src/services/events-service';
 import { notifyRequestCreated } from '@/src/services/push-service';
 
@@ -796,6 +797,18 @@ export function resolveRequest(requestId: string, payload: unknown) {
     status: serialized.status,
     resolution_payload: serialized.resolution_payload,
     trace: serialized.trace,
+  });
+
+  enqueueDispatchInputForRequestResolved({
+    chatId: serialized.chat_id,
+    requestId: serialized.id,
+    senderId: serialized.resolved_by === 'backend' ? 'backend' : 'user:primary',
+    type: serialized.type,
+    title: serialized.title,
+    resolutionPayload:
+      serialized.resolution_payload && typeof serialized.resolution_payload === 'object' && !Array.isArray(serialized.resolution_payload)
+        ? serialized.resolution_payload as Record<string, unknown>
+        : null,
   });
 
   return serialized;

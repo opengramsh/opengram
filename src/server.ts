@@ -8,6 +8,11 @@ import { cors } from "hono/cors";
 
 import { ensurePushProvisioned, loadOpengramConfig } from "@/src/config/opengram-config";
 import { getDb } from "@/src/db/client";
+import dispatch from "@/src/routes/dispatch";
+import {
+  startDispatchBatchScheduler,
+  startDispatchLeaseSweeper,
+} from "@/src/services/dispatch-service";
 import {
   startHooksSubscriber,
   startRetentionCleanupJob,
@@ -91,6 +96,7 @@ app.route("/api/v1/search", searchRouter);
 app.route("/api/v1/tags", tags);
 app.route("/api/v1/events", events);
 app.route("/api/v1/push", push);
+app.route("/api/v1/dispatch", dispatch);
 
 // Static file serving (production): hashed assets with immutable cache
 app.use(
@@ -145,6 +151,8 @@ function startBackgroundJobs() {
   ensureStreamingTimeoutSweeperStarted();
   startHooksSubscriber();
   startRetentionCleanupJob();
+  startDispatchBatchScheduler();
+  startDispatchLeaseSweeper();
 }
 
 // Server startup

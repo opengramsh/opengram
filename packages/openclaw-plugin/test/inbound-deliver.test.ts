@@ -488,7 +488,7 @@ describe("inbound deliver integration", () => {
       mockEs.triggerMessage(event);
       mockEs.triggerMessage(event); // Same messageId
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 550));
       expect(dispatch).toHaveBeenCalledTimes(1);
 
       abortController.abort();
@@ -817,8 +817,8 @@ describe("inbound deliver integration", () => {
     });
   });
 
-  describe("rapid sequential messages (KAI-230 — supersede)", () => {
-    it("supersedes first dispatch when second message arrives mid-stream", async () => {
+  describe("rapid sequential messages (batch queue)", () => {
+    it("batches two rapid messages into a single dispatch", async () => {
       let msgCounter = 0;
       const client = createMockClient({
         createMessage: vi.fn().mockImplementation(() =>
@@ -828,6 +828,7 @@ describe("inbound deliver integration", () => {
       await initializeChatManager(client, baseCfg);
 
       const dispatches: Array<{
+        content: string;
         deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
         onCleanup: () => void;
         dispatchId?: string;
@@ -835,8 +836,8 @@ describe("inbound deliver integration", () => {
 
       // Capture all dispatches — the dispatch function is synchronous, storing
       // the deliver/cleanup handles for later manual invocation.
-      const dispatch: DispatchFn = ({ deliver, onCleanup }) => {
-        dispatches.push({ deliver, onCleanup });
+      const dispatch: DispatchFn = ({ content, deliver, onCleanup }) => {
+        dispatches.push({ content, deliver, onCleanup });
       };
 
       const mockEs = createMockEventSource();
@@ -864,11 +865,6 @@ describe("inbound deliver integration", () => {
         },
       });
 
-      await vi.waitFor(() => expect(dispatches.length).toBe(1));
-
-      // First dispatch is active — send a block
-      await dispatches[0].deliver({ text: "Working on first..." }, { kind: "block" });
-
       // Second message arrives while first is still processing
       mockEs.triggerMessage({
         id: "evt-rapid-2",
@@ -882,27 +878,16 @@ describe("inbound deliver integration", () => {
         },
       });
 
-      await vi.waitFor(() => expect(dispatches.length).toBe(2));
-
-      // First dispatch's stream should have been cancelled (superseded)
-      // msg-1 is the eager streaming message for the first dispatch
-      expect(client.cancelMessage).toHaveBeenCalledWith("msg-1");
-
-      // Late deliver from the first dispatch should be a no-op
-      await dispatches[0].deliver({ text: "Late reply from first" }, { kind: "final" });
-
-      // msg-2 is the eager streaming message for the second dispatch
-      // completeMessage should NOT have been called with msg-1 (it was cancelled)
-      expect(client.completeMessage).not.toHaveBeenCalled();
-
-      // Second dispatch can deliver normally
-      await dispatches[1].deliver({ text: "Reply to second" }, { kind: "final" });
-      expect(client.completeMessage).toHaveBeenCalledWith("msg-2", "Reply to second");
+      await vi.waitFor(() => expect(dispatches.length).toBe(1));
+      expect(dispatches[0].content).toContain("First message");
+      expect(dispatches[0].content).toContain("Second message");
+      await dispatches[0].deliver({ text: "Reply to batch" }, { kind: "final" });
+      expect(client.completeMessage).toHaveBeenCalledWith("msg-1", "Reply to batch");
 
       abortController.abort();
     });
 
-    it("three rapid messages: only the last dispatch produces output", async () => {
+    it("queues later batches until current batch finishes", async () => {
       let msgCounter = 0;
       const client = createMockClient({
         createMessage: vi.fn().mockImplementation(() =>
@@ -911,12 +896,18 @@ describe("inbound deliver integration", () => {
       });
       await initializeChatManager(client, baseCfg);
 
+      let releaseFirst!: () => void;
+      const firstDone = new Promise<void>((resolve) => { releaseFirst = resolve; });
       const dispatches: Array<{
+        content: string;
         deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
       }> = [];
 
-      const dispatch: DispatchFn = ({ deliver }) => {
-        dispatches.push({ deliver });
+      const dispatch: DispatchFn = async ({ content, deliver }) => {
+        dispatches.push({ content, deliver });
+        if (dispatches.length === 1) {
+          await firstDone;
+        }
       };
 
       const mockEs = createMockEventSource();
@@ -931,36 +922,51 @@ describe("inbound deliver integration", () => {
         dispatch,
       });
 
-      // Fire three messages in quick succession
-      for (let i = 1; i <= 3; i++) {
-        mockEs.triggerMessage({
-          id: `evt-triple-${i}`,
-          type: "message.created",
-          payload: {
-            chatId: "chat-1",
-            messageId: `user-msg-triple-${i}`,
-            role: "user",
-            content: `Message ${i}`,
-            senderId: "user:primary",
-          },
-        });
-        // Small delay to let the async handler kick in
-        await new Promise((r) => setTimeout(r, 20));
-      }
+      mockEs.triggerMessage({
+        id: "evt-queue-1",
+        type: "message.created",
+        payload: {
+          chatId: "chat-1",
+          messageId: "user-msg-queue-1",
+          role: "user",
+          content: "Message 1",
+          senderId: "user:primary",
+        },
+      });
+      mockEs.triggerMessage({
+        id: "evt-queue-2",
+        type: "message.created",
+        payload: {
+          chatId: "chat-1",
+          messageId: "user-msg-queue-2",
+          role: "user",
+          content: "Message 2",
+          senderId: "user:primary",
+        },
+      });
 
-      await vi.waitFor(() => expect(dispatches.length).toBe(3));
+      await vi.waitFor(() => expect(dispatches.length).toBe(1));
+      expect(dispatches[0].content).toContain("Message 1");
+      expect(dispatches[0].content).toContain("Message 2");
 
-      // Late delivers from first two should be no-ops
-      await dispatches[0].deliver({ text: "Ghost 1" }, { kind: "final" });
-      await dispatches[1].deliver({ text: "Ghost 2" }, { kind: "final" });
+      // While first dispatch is still active, enqueue another message.
+      mockEs.triggerMessage({
+        id: "evt-queue-3",
+        type: "message.created",
+        payload: {
+          chatId: "chat-1",
+          messageId: "user-msg-queue-3",
+          role: "user",
+          content: "Message 3",
+          senderId: "user:primary",
+        },
+      });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(dispatches.length).toBe(1);
 
-      // Neither should have called completeMessage
-      expect(client.completeMessage).not.toHaveBeenCalled();
-
-      // Only the third dispatch should produce output
-      await dispatches[2].deliver({ text: "The real reply" }, { kind: "final" });
-      expect(client.completeMessage).toHaveBeenCalledTimes(1);
-      expect(client.completeMessage).toHaveBeenCalledWith("msg-3", "The real reply");
+      releaseFirst();
+      await vi.waitFor(() => expect(dispatches.length).toBe(2));
+      expect(dispatches[1].content).toContain("Message 3");
 
       abortController.abort();
     });

@@ -4,7 +4,7 @@ import { buildChannelConfigSchema } from "openclaw/plugin-sdk";
 import { OpenGramClient } from "./api-client.js";
 import { getActiveChatIds, initializeChatManager } from "./chat-manager.js";
 import { OpenGramConfigSchema, resolveOpenGramAccount, type ResolvedOpenGramAccount } from "./config.js";
-import { startInboundListener } from "./inbound.js";
+import { startDispatchWorker } from "./dispatch-worker.js";
 import { opengramOnboardingAdapter } from "./onboarding.js";
 import { sendMedia, sendText } from "./outbound.js";
 import { opengramChatTool } from "./tools/opengram-chat.js";
@@ -177,15 +177,67 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
 
       await initializeChatManager(client, cfg);
 
-      const lifecycle = startInboundListener({
+      let dispatchMode: "immediate" | "sequential" | "batched_sequential" = "batched_sequential";
+      let leaseMs: number | undefined;
+      let heartbeatIntervalMs: number | undefined;
+      let claimWaitMs: number | undefined;
+      let autoscaleEnabled: boolean | undefined;
+      let minConcurrency: number | undefined;
+      let maxConcurrency: number | undefined;
+      let scaleCooldownMs: number | undefined;
+      let claimManyLimit: number | undefined;
+      try {
+        const serverCfg = await client.getConfig();
+        const mode = serverCfg.server?.dispatch?.mode;
+        if (mode === "immediate" || mode === "sequential" || mode === "batched_sequential") {
+          dispatchMode = mode;
+        }
+        if (typeof serverCfg.server?.dispatch?.leaseMs === "number") {
+          leaseMs = serverCfg.server.dispatch.leaseMs;
+        }
+        if (typeof serverCfg.server?.dispatch?.heartbeatIntervalMs === "number") {
+          heartbeatIntervalMs = serverCfg.server.dispatch.heartbeatIntervalMs;
+        }
+        if (typeof serverCfg.server?.dispatch?.claimWaitMs === "number") {
+          claimWaitMs = serverCfg.server.dispatch.claimWaitMs;
+        }
+        if (typeof serverCfg.server?.dispatch?.execution?.autoscaleEnabled === "boolean") {
+          autoscaleEnabled = serverCfg.server.dispatch.execution.autoscaleEnabled;
+        }
+        if (typeof serverCfg.server?.dispatch?.execution?.minConcurrency === "number") {
+          minConcurrency = serverCfg.server.dispatch.execution.minConcurrency;
+        }
+        if (typeof serverCfg.server?.dispatch?.execution?.maxConcurrency === "number") {
+          maxConcurrency = serverCfg.server.dispatch.execution.maxConcurrency;
+        }
+        if (typeof serverCfg.server?.dispatch?.execution?.scaleCooldownMs === "number") {
+          scaleCooldownMs = serverCfg.server.dispatch.execution.scaleCooldownMs;
+        }
+        if (typeof serverCfg.server?.dispatch?.claim?.claimManyLimit === "number") {
+          claimManyLimit = serverCfg.server.dispatch.claim.claimManyLimit;
+        }
+      } catch (err) {
+        logger.warn?.(`[opengram] Could not read server dispatch config, using defaults: ${String(err)}`);
+      }
+
+      const lifecycle = startDispatchWorker({
         client,
         cfg,
         abortSignal,
         log: logger,
-        reconnectDelayMs: config.reconnectDelayMs,
+        leaseMs,
+        heartbeatIntervalMs,
+        claimWaitMs,
+        autoscaleEnabled,
+        minConcurrency,
+        maxConcurrency,
+        scaleCooldownMs,
+        claimManyLimit,
       });
 
-      logger.info?.("[opengram] Inbound SSE listener started");
+      logger.info?.(
+        `[opengram] Dispatch worker started (mode=${dispatchMode}, autoscale=${autoscaleEnabled ?? "default"}, min=${minConcurrency ?? "default"}, max=${maxConcurrency ?? "default"}, claimManyLimit=${claimManyLimit ?? "default"})`,
+      );
 
       return lifecycle;
     },

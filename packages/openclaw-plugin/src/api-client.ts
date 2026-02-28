@@ -5,6 +5,57 @@ import type { Chat, ListChatsResponse, Media, Message, OGRequest, SearchResult }
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 500;
 
+export type DispatchBatchKind = "user_batch" | "request_batch";
+
+export type DispatchBatchItem = {
+  inputId: string;
+  sourceKind: "user_message" | "request_resolved";
+  sourceId: string;
+  senderId: string;
+  content: string;
+  traceKind?: string;
+  mediaIds: string[];
+  attachmentNames: string[];
+};
+
+export type DispatchBatchAttachment = {
+  mediaId: string;
+  fileName: string;
+  kind: "image" | "audio" | "file";
+  sourceInputId: string;
+  sourceIndex: number;
+};
+
+export type DispatchClaimResponse = {
+  batchId: string;
+  chatId: string;
+  kind: DispatchBatchKind;
+  agentIdHint: string | null;
+  compiledContent: string;
+  items: DispatchBatchItem[];
+  attachments: DispatchBatchAttachment[];
+};
+
+export type OpenGramServerRuntimeConfig = {
+  server?: {
+    dispatch?: {
+      mode?: "immediate" | "sequential" | "batched_sequential";
+      leaseMs?: number;
+      heartbeatIntervalMs?: number;
+      claimWaitMs?: number;
+      execution?: {
+        autoscaleEnabled?: boolean;
+        minConcurrency?: number;
+        maxConcurrency?: number;
+        scaleCooldownMs?: number;
+      };
+      claim?: {
+        claimManyLimit?: number;
+      };
+    };
+  };
+};
+
 export class OpenGramClient {
   constructor(
     private readonly baseUrl: string,
@@ -303,12 +354,105 @@ export class OpenGramClient {
     }).catch(() => {});
   }
 
+  async claimDispatch(params: {
+    workerId: string;
+    leaseMs?: number;
+    waitMs?: number;
+  }): Promise<DispatchClaimResponse | null> {
+    const batches = await this.claimDispatchMany({
+      workerId: params.workerId,
+      leaseMs: params.leaseMs,
+      waitMs: params.waitMs,
+      limit: 1,
+    });
+    return batches[0] ?? null;
+  }
+
+  async claimDispatchMany(params: {
+    workerId: string;
+    leaseMs?: number;
+    waitMs?: number;
+    limit?: number;
+  }): Promise<DispatchClaimResponse[]> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/dispatch/claim-many`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(params),
+    });
+    if (res.status === 204) {
+      return [];
+    }
+    if (!res.ok) {
+      throw new Error(`claimDispatchMany failed: ${res.status}`);
+    }
+    const body = (await res.json()) as { batches?: DispatchClaimResponse[] };
+    return Array.isArray(body.batches) ? body.batches : [];
+  }
+
+  async heartbeatDispatch(
+    batchId: string,
+    params: {
+      workerId: string;
+      extendMs?: number;
+    },
+  ): Promise<void> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/dispatch/${encodeURIComponent(batchId)}/heartbeat`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      throw new Error(`heartbeatDispatch failed: ${res.status}`);
+    }
+  }
+
+  async completeDispatch(batchId: string, workerId: string): Promise<void> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/dispatch/${encodeURIComponent(batchId)}/complete`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ workerId }),
+    });
+    if (!res.ok) {
+      throw new Error(`completeDispatch failed: ${res.status}`);
+    }
+  }
+
+  async failDispatch(
+    batchId: string,
+    params: {
+      workerId: string;
+      reason: string;
+      retryable: boolean;
+      retryDelayMs?: number;
+    },
+  ): Promise<void> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/dispatch/${encodeURIComponent(batchId)}/fail`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      throw new Error(`failDispatch failed: ${res.status}`);
+    }
+  }
+
   async health(): Promise<{ status: string; version: string; uptime: number }> {
     const res = await fetch(`${this.baseUrl}/api/v1/health`, { method: "GET" });
     if (!res.ok) {
       throw new Error(`health check failed: ${res.status}`);
     }
     return (await res.json()) as { status: string; version: string; uptime: number };
+  }
+
+  async getConfig(): Promise<OpenGramServerRuntimeConfig> {
+    const res = await this.fetchWithRetry(`${this.baseUrl}/api/v1/config`, {
+      method: "GET",
+      headers: this.headers(),
+    });
+    if (!res.ok) {
+      throw new Error(`getConfig failed: ${res.status}`);
+    }
+    return (await res.json()) as OpenGramServerRuntimeConfig;
   }
 
   connectSSE(params?: { ephemeral?: boolean; cursor?: string }): EventSource {

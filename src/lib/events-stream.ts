@@ -8,6 +8,7 @@ export type FrontendStreamEventType =
   | 'chat.read'
   | 'chat.unread'
   | 'chat.typing'
+  | 'chat.user_typing'
   | 'message.created'
   | 'message.streaming.chunk'
   | 'message.streaming.complete'
@@ -47,6 +48,7 @@ const EVENT_TYPES: FrontendStreamEventType[] = [
   'chat.read',
   'chat.unread',
   'chat.typing',
+  'chat.user_typing',
   'message.created',
   'message.streaming.chunk',
   'message.streaming.complete',
@@ -57,7 +59,7 @@ const EVENT_TYPES: FrontendStreamEventType[] = [
 ];
 
 function isPersistedEvent(type: FrontendStreamEventType) {
-  return type !== 'message.streaming.chunk' && type !== 'chat.typing';
+  return type !== 'message.streaming.chunk' && type !== 'chat.typing' && type !== 'chat.user_typing';
 }
 
 function safeReadCursorFromStorage() {

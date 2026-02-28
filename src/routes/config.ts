@@ -32,6 +32,7 @@ config.get('/', (c) => {
         port: cfg.server.port,
         streamTimeoutSeconds: cfg.server.streamTimeoutSeconds,
         idempotencyTtlSeconds: cfg.server.idempotencyTtlSeconds,
+        dispatch: cfg.server.dispatch,
       },
       hooks: cfg.hooks.map((hook) => ({
         url: hook.url,

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -6,23 +6,16 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..", "..");
-const initialMigrationSql = readFileSync(join(repoRoot, "migrations", "0000_initial.sql"), "utf8");
-const ftsTriggerUpgradeSql = readFileSync(
-  join(repoRoot, "migrations", "0001_messages_fts_trigger_upgrade.sql"),
-  "utf8",
-);
-const streamSweepIndexSql = readFileSync(
-  join(repoRoot, "migrations", "0002_messages_stream_sweep_index.sql"),
-  "utf8",
-);
+const migrationDir = join(repoRoot, "migrations");
+const migrationFiles = readdirSync(migrationDir).filter((file) => file.endsWith(".sql")).sort();
 
 function createDatabase() {
   const tempDir = mkdtempSync(join(tmpdir(), "opengram-db-"));
   const dbPath = join(tempDir, "test.db");
   const db = new Database(dbPath);
-  db.exec(initialMigrationSql);
-  db.exec(ftsTriggerUpgradeSql);
-  db.exec(streamSweepIndexSql);
+  for (const file of migrationFiles) {
+    db.exec(readFileSync(join(migrationDir, file), "utf8"));
+  }
   return db;
 }
 
@@ -49,6 +42,9 @@ describe("migration", () => {
       "requests",
       "tags_catalog",
       "webhook_deliveries",
+      "dispatch_inputs",
+      "dispatch_chat_state",
+      "dispatch_batches",
     ];
 
     for (const table of requiredTables) {
@@ -70,6 +66,10 @@ describe("migration", () => {
       "webhook_deliveries_event_id_idx",
       "idempotency_keys_created_at_idx",
       "push_subscriptions_endpoint_idx",
+      "dispatch_inputs_chat_state_created_idx",
+      "dispatch_batches_status_available_created_idx",
+      "dispatch_batches_chat_status_created_idx",
+      "dispatch_batches_lease_expires_idx",
     ];
 
     for (const idx of requiredIndexes) {
@@ -161,7 +161,7 @@ describe("migration", () => {
     const legacyMessageId = "123456789012345678904";
     const upgradedMessageId = "123456789012345678905";
 
-    db.exec(initialMigrationSql);
+    db.exec(readFileSync(join(migrationDir, "0000_initial.sql"), "utf8"));
 
     db.exec(`
       DROP TRIGGER IF EXISTS \`messages_ai\`;
@@ -198,7 +198,7 @@ describe("migration", () => {
       .get(legacyMessageId) as { message_id: string } | undefined;
     expect(beforeUpgrade?.message_id).toBe(legacyMessageId);
 
-    db.exec(ftsTriggerUpgradeSql);
+    db.exec(readFileSync(join(migrationDir, "0001_messages_fts_trigger_upgrade.sql"), "utf8"));
 
     db.prepare(
       [

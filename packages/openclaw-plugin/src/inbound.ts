@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenGramClient } from "./api-client.js";
+import type { DispatchClaimResponse, OpenGramClient } from "./api-client.js";
 import { maybeAutoRename } from "./auto-rename.js";
-import { enqueueOrSupersede, isSuperseded, setDispatchCleanup } from "./chat-queue.js";
+import { ChatBatchCoordinator, type InboundBatchMessage } from "./chat-batch-coordinator.js";
 import { resolveAgentForChat, trackActiveChat } from "./chat-manager.js";
 import { resolveOpenGramAccount, type OpenGramChannelConfig } from "./config.js";
 import { downloadMedia } from "./media.js";
@@ -34,6 +34,16 @@ export type ReplyPayload = {
 
 type ImageContent = { type: "image"; data: string; mimeType: string };
 
+type BatchDispatchInput = {
+  chatId: string;
+  messageId: string;
+  content: string;
+  images?: ImageContent[];
+  tempFilePaths?: string[];
+  tempFileMimes?: string[];
+  tempFileUrls?: string[];
+};
+
 export type DispatchFn = (opts: {
   chatId: string;
   agentId: string;
@@ -45,11 +55,18 @@ export type DispatchFn = (opts: {
   deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
   onCleanup: () => void;
   onError: (err: unknown) => void;
-}) => void;
+}) => void | Promise<void>;
+
+type ProcessClaimedBatchResult = {
+  skipped: boolean;
+};
 
 let dispatchSeq = 0;
 
 const TYPING_HEARTBEAT_INTERVAL_MS = 5_000;
+const SDK_SKIP_TIMEOUT_MS = 90_000;
+const SDK_SKIP_BACKOFF_INITIAL_MS = 250;
+const SDK_SKIP_BACKOFF_MAX_MS = 4_000;
 
 function startTypingHeartbeat(client: OpenGramClient, chatId: string, agentId: string): () => void {
   void client.sendTyping(chatId, agentId);
@@ -64,6 +81,55 @@ let lastEventCursor: string | undefined;
 const processedMessageIds = new Set<string>();
 const MAX_DEDUP_SIZE = 10000;
 
+let batchCoordinator: ChatBatchCoordinator | null = null;
+
+class DispatchSkippedError extends Error {
+  constructor(readonly reason: string) {
+    super(`dispatch skipped: ${reason}`);
+    this.name = "DispatchSkippedError";
+  }
+}
+
+function isEphemeralEventType(eventType: string): boolean {
+  return eventType === "chat.typing" || eventType === "chat.user_typing" || eventType === "message.streaming.chunk";
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildBatchedContent(
+  messages: InboundBatchMessage[],
+  attachmentNamesByMessageId: Map<string, string[]>,
+): string {
+  if (messages.length <= 1) {
+    return messages[0]?.content ?? "";
+  }
+
+  return messages
+    .map((message, idx) => {
+      const body = message.content.trim() ? message.content : "(no text)";
+      const names = attachmentNamesByMessageId.get(message.messageId) ?? [];
+      const attachmentLine = names.length > 0
+        ? `\n[attachments: ${JSON.stringify(names)}]`
+        : "";
+      return `[Message ${idx + 1}]${attachmentLine}\n${body}`;
+    })
+    .join("\n\n");
+}
+
+function sanitizeFileNameForTempPath(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return "attachment";
+  }
+  const sanitized = trimmed
+    .replace(/[\/\\:*?"<>|]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 80);
+  return sanitized || "attachment";
+}
+
 /**
  * Start the SSE listener for inbound messages from OpenGram.
  * Returns a Promise that resolves when abortSignal fires (lifecycle handle).
@@ -72,6 +138,13 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
   const { client, cfg, log, abortSignal, reconnectDelayMs, dispatch } = params;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+  batchCoordinator = new ChatBatchCoordinator(
+    async (chatId, messages) => {
+      await processMessageBatch({ chatId, messages, cfg, client, log, dispatch });
+    },
+    log,
+  );
+
   return new Promise<void>((resolve) => {
     abortSignal.addEventListener("abort", () => resolve(), { once: true });
 
@@ -79,7 +152,7 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
       if (abortSignal.aborted) return;
 
       const es = client.connectSSE({
-        ephemeral: false,
+        ephemeral: true,
         cursor: lastEventCursor,
       });
 
@@ -91,12 +164,14 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
       // they require explicit addEventListener calls per event type.
       const handleSSEEvent = (event: MessageEvent) => {
         try {
-          const data = JSON.parse(event.data);
-          lastEventCursor = data.id;
+          const data = JSON.parse(event.data) as { id: string; type: string; payload: Record<string, unknown>; timestamp?: string };
+          if (!isEphemeralEventType(data.type)) {
+            lastEventCursor = data.id;
+          }
 
           switch (data.type) {
             case "message.created":
-              void handleMessageCreated(data, cfg, client, log, dispatch).catch((err) => {
+              void handleMessageCreated(data, cfg, client, log).catch((err) => {
                 log?.warn(`[opengram] Failed to process message.created event: ${String(err)}`);
               });
               break;
@@ -106,6 +181,14 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
                 log?.warn(`[opengram] Failed to process request.resolved event: ${String(err)}`);
               });
               break;
+
+            case "chat.user_typing": {
+              const chatId = parseChatId(data.payload.chatId, "message.created", log);
+              if (chatId) {
+                batchCoordinator?.onUserTyping(chatId);
+              }
+              break;
+            }
           }
         } catch (err) {
           log?.warn(`[opengram] Failed to parse SSE event: ${err}`);
@@ -115,6 +198,7 @@ export function startInboundListener(params: InboundListenerParams): Promise<voi
       // Attach to named event types the server actually sends.
       es.addEventListener("message.created", handleSSEEvent);
       es.addEventListener("request.resolved", handleSSEEvent);
+      es.addEventListener("chat.user_typing", handleSSEEvent);
       // Fallback for any unnamed events (future-proofing).
       es.onmessage = handleSSEEvent;
 
@@ -212,7 +296,6 @@ async function handleMessageCreated(
   cfg: OpenClawConfig,
   client: OpenGramClient,
   log?: InboundListenerParams["log"],
-  dispatch?: DispatchFn,
 ) {
   const payload = data.payload;
 
@@ -235,7 +318,6 @@ async function handleMessageCreated(
   const allowed = await checkDmPolicy(senderId, chatId, cfg, client, log);
   if (!allowed) return;
 
-  const agentId = await resolveAgentForChat(chatId, cfg, log);
   const content = typeof payload.contentFinal === "string"
     ? payload.contentFinal
     : typeof payload.content_final === "string"
@@ -257,119 +339,333 @@ async function handleMessageCreated(
     return [];
   })();
 
-  log?.info(`[opengram] inbound trace: mediaIds=[${rawMediaIds.join(", ")}]`);
+  batchCoordinator?.enqueueMessage({
+    chatId,
+    messageId,
+    content,
+    traceKind: typeof trace?.kind === "string" ? trace.kind : undefined,
+    mediaIds: rawMediaIds,
+    receivedAtMs: Date.now(),
+  });
+}
 
-  const traceKind = typeof trace?.kind === "string" ? trace.kind : undefined;
+async function processMessageBatch(args: {
+  chatId: string;
+  messages: InboundBatchMessage[];
+  cfg: OpenClawConfig;
+  client: OpenGramClient;
+  log?: InboundListenerParams["log"];
+  dispatch?: DispatchFn;
+}) {
+  const { chatId, messages, cfg, client, log, dispatch } = args;
+  if (messages.length === 0) {
+    return;
+  }
+
+  const agentId = await resolveAgentForChat(chatId, cfg, log);
 
   const collectedImages: ImageContent[] = [];
   const tempFilePaths: string[] = [];
   const tempFileMimes: string[] = [];
   const tempFileUrls: string[] = [];
+  const attachmentNamesByMessageId = new Map<string, string[]>();
+  const canFetchBuffer = typeof client.fetchMediaAsBuffer === "function";
 
-  for (const mediaId of rawMediaIds) {
-    try {
-      // Skip image fetch for explicitly non-image media (e.g. kind: "file")
-      if (traceKind && traceKind !== "image") {
+  for (const message of messages) {
+    const namesForMessage: string[] = [];
+    for (const mediaId of message.mediaIds) {
+      try {
+        const mediaWithName = canFetchBuffer ? await client.fetchMediaAsBuffer(mediaId) : null;
+        if (mediaWithName) {
+          namesForMessage.push(mediaWithName.fileName);
+        }
+
+        // Skip image fetch for explicitly non-image media (e.g. kind: "file")
+        if (message.traceKind && message.traceKind !== "image") {
+          if (!canFetchBuffer) {
+            log?.warn(`[opengram] fetchMediaAsBuffer unavailable, skipping non-image media ${mediaId}`);
+            continue;
+          }
+          const media = mediaWithName ?? await client.fetchMediaAsBuffer(mediaId);
+          if (media) {
+            const base = sanitizeFileNameForTempPath(media.fileName);
+            const filePath = path.join(os.tmpdir(), `opengram-${mediaId}-${base}`);
+            await fs.writeFile(filePath, media.buffer);
+            log?.info(`[opengram] wrote temp file: ${filePath} (${media.mimeType}, ${media.buffer.length} bytes)`);
+            tempFilePaths.push(filePath);
+            tempFileMimes.push(media.mimeType);
+            tempFileUrls.push(client.getMediaUrl(mediaId));
+          }
+          continue;
+        }
+
+        const img = await client.fetchMediaAsImage(mediaId);
+        if (img) {
+          collectedImages.push(img);
+          continue;
+        }
+
+        if (!canFetchBuffer) {
+          continue;
+        }
         const media = await client.fetchMediaAsBuffer(mediaId);
         if (media) {
-          const ext = path.extname(media.fileName) || "";
-          const filePath = path.join(os.tmpdir(), `opengram-${mediaId}${ext}`);
+          const base = sanitizeFileNameForTempPath(media.fileName);
+          const filePath = path.join(os.tmpdir(), `opengram-${mediaId}-${base}`);
           await fs.writeFile(filePath, media.buffer);
           log?.info(`[opengram] wrote temp file: ${filePath} (${media.mimeType}, ${media.buffer.length} bytes)`);
           tempFilePaths.push(filePath);
           tempFileMimes.push(media.mimeType);
           tempFileUrls.push(client.getMediaUrl(mediaId));
         }
-        continue;
+      } catch (err) {
+        log?.warn(`[opengram] Failed to fetch inbound media ${mediaId}: ${err}`);
       }
-
-      const img = await client.fetchMediaAsImage(mediaId);
-      if (img) {
-        log?.info(`[opengram] fetchMediaAsImage: got ${img.mimeType} (${img.data.length} chars) for ${mediaId}`);
-        collectedImages.push(img);
-        continue;
-      }
-      // Not an image — download to temp file
-      const media = await client.fetchMediaAsBuffer(mediaId);
-      if (media) {
-        const ext = path.extname(media.fileName) || "";
-        const filePath = path.join(os.tmpdir(), `opengram-${mediaId}${ext}`);
-        await fs.writeFile(filePath, media.buffer);
-        log?.info(`[opengram] wrote temp file: ${filePath} (${media.mimeType}, ${media.buffer.length} bytes)`);
-        tempFilePaths.push(filePath);
-        tempFileMimes.push(media.mimeType);
-        tempFileUrls.push(client.getMediaUrl(mediaId));
-      }
-    } catch (err) {
-      log?.warn(`[opengram] Failed to fetch inbound media ${mediaId}: ${err}`);
+    }
+    if (namesForMessage.length > 0) {
+      attachmentNamesByMessageId.set(message.messageId, namesForMessage);
     }
   }
 
-  const mediaUrl = tempFileUrls[0];
+  const content = buildBatchedContent(messages, attachmentNamesByMessageId);
   const images: ImageContent[] | undefined = collectedImages.length > 0 ? collectedImages : undefined;
+  const messageId = messages.length === 1
+    ? messages[0].messageId
+    : `batch:${messages[0].messageId}:${messages.length}`;
 
-  // Unique per dispatch to isolate concurrent stream state.
-  // Monotonic counter avoids collision if two messages arrive in the same ms.
+  log?.info(`[opengram] dispatching batch: chat=${chatId} size=${messages.length} textLen=${content.length} images=${images?.length ?? 0}`);
+
+  try {
+    await runInboundDispatch({
+      cfg,
+      client,
+      agentId,
+      dispatch,
+      log,
+      chatId,
+      messageId,
+      content,
+      images,
+      tempFilePaths,
+      tempFileMimes,
+      tempFileUrls,
+    });
+  } finally {
+    for (const p of tempFilePaths) {
+      fs.unlink(p).catch(() => {});
+    }
+  }
+}
+
+function buildCompiledContentFromClaimedBatch(batch: DispatchClaimResponse): string {
+  if (batch.compiledContent && batch.compiledContent.trim()) {
+    return batch.compiledContent;
+  }
+
+  if (batch.items.length === 1) {
+    const item = batch.items[0];
+    return item?.content?.trim() ? item.content : "(no text)";
+  }
+
+  return batch.items
+    .map((item, index) => {
+      const body = item.content?.trim() ? item.content : "(no text)";
+      const attachmentLine = item.attachmentNames.length > 0
+        ? `\n[attachments: ${JSON.stringify(item.attachmentNames)}]`
+        : "";
+      return `[Message ${index + 1}]${attachmentLine}\n${body}`;
+    })
+    .join("\n\n");
+}
+
+export async function processClaimedDispatchBatch(args: {
+  batch: DispatchClaimResponse;
+  cfg: OpenClawConfig;
+  client: OpenGramClient;
+  log?: InboundListenerParams["log"];
+  dispatch?: DispatchFn;
+}): Promise<ProcessClaimedBatchResult> {
+  const { batch, cfg, client, log, dispatch } = args;
+
+  const senderIds = new Set(
+    batch.items
+      .map((item) => item.senderId)
+      .filter((senderId): senderId is string => typeof senderId === "string" && senderId.trim().length > 0),
+  );
+
+  for (const senderId of senderIds) {
+    if (senderId === "backend") {
+      continue;
+    }
+
+    const allowed = await checkDmPolicy(senderId, batch.chatId, cfg, client, log);
+    if (!allowed) {
+      return { skipped: true };
+    }
+  }
+
+  trackActiveChat(batch.chatId);
+  const agentId = batch.agentIdHint ?? await resolveAgentForChat(batch.chatId, cfg, log);
+  const content = buildCompiledContentFromClaimedBatch(batch);
+
+  const collectedImages: ImageContent[] = [];
+  const tempFilePaths: string[] = [];
+  const tempFileMimes: string[] = [];
+  const tempFileUrls: string[] = [];
+  const canFetchBuffer = typeof client.fetchMediaAsBuffer === "function";
+
+  for (const attachment of batch.attachments) {
+    try {
+      if (attachment.kind === "image") {
+        const image = await client.fetchMediaAsImage(attachment.mediaId);
+        if (image) {
+          collectedImages.push(image);
+          continue;
+        }
+      }
+
+      if (!canFetchBuffer) {
+        log?.warn(`[opengram] fetchMediaAsBuffer unavailable, skipping attachment ${attachment.mediaId}`);
+        continue;
+      }
+
+      const media = await client.fetchMediaAsBuffer(attachment.mediaId);
+      if (!media) {
+        continue;
+      }
+
+      const base = sanitizeFileNameForTempPath(media.fileName || attachment.fileName);
+      const filePath = path.join(os.tmpdir(), `opengram-${attachment.mediaId}-${base}`);
+      await fs.writeFile(filePath, media.buffer);
+      tempFilePaths.push(filePath);
+      tempFileMimes.push(media.mimeType);
+      tempFileUrls.push(client.getMediaUrl(attachment.mediaId));
+      log?.info(`[opengram] wrote temp file: ${filePath} (${media.mimeType}, ${media.buffer.length} bytes)`);
+    } catch (err) {
+      log?.warn(`[opengram] Failed to fetch claimed attachment ${attachment.mediaId}: ${String(err)}`);
+    }
+  }
+
+  try {
+    await runInboundDispatch({
+      cfg,
+      client,
+      agentId,
+      dispatch,
+      log,
+      chatId: batch.chatId,
+      messageId: `dispatch:${batch.batchId}`,
+      content,
+      images: collectedImages.length > 0 ? collectedImages : undefined,
+      tempFilePaths,
+      tempFileMimes,
+      tempFileUrls,
+    });
+  } finally {
+    for (const p of tempFilePaths) {
+      fs.unlink(p).catch(() => {});
+    }
+  }
+
+  return { skipped: false };
+}
+
+async function runInboundDispatch(args: {
+  cfg: OpenClawConfig;
+  client: OpenGramClient;
+  agentId: string;
+  dispatch?: DispatchFn;
+  log?: InboundListenerParams["log"];
+} & BatchDispatchInput): Promise<void> {
+  const { cfg, client, agentId, dispatch, log, chatId, messageId, content, images, tempFilePaths = [], tempFileMimes = [], tempFileUrls = [] } = args;
+
   const dispatchId = `${chatId}:${++dispatchSeq}`;
 
-  log?.info(`[opengram] dispatching: content="${content.slice(0, 40)}" images=${images?.length ?? 0}`);
+  // Eagerly create a streaming message so the frontend shows typing
+  // indicator immediately, before the SDK starts producing content.
+  const streamingMsg = await client.createMessage(chatId, {
+    role: "agent",
+    senderId: agentId,
+    streaming: true,
+  });
 
-  // Enqueue through the per-chat queue. If another dispatch is active for
-  // this chat, it gets superseded (typing bubble + stream cancelled).
-  enqueueOrSupersede(
-    chatId,
-    dispatchId,
-    async () => {
-      // Eagerly create a streaming message so the frontend shows typing
-      // indicator immediately, before the SDK starts producing content.
-      const streamingMsg = await client.createMessage(chatId, {
-        role: "agent",
-        senderId: agentId,
-        streaming: true,
-      });
+  initStream(dispatchId, chatId, streamingMsg.id, agentId);
 
-      // KAI-234: If this dispatch was superseded while createMessage was
-      // in-flight, cancel the orphaned streaming message and bail out.
-      if (isSuperseded(dispatchId)) {
-        await client.cancelMessage(streamingMsg.id).catch(() => {});
-        return;
-      }
+  const account = resolveOpenGramAccount(cfg);
+  const stopTyping = startTypingHeartbeat(client, chatId, agentId);
+  const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
+  const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
+  const onError = (err: unknown) => {
+    stopTyping();
+    log?.error(`[opengram] Reply dispatch error: ${err}`);
+    cancelStream(client, dispatchId);
+  };
 
-      initStream(dispatchId, chatId, streamingMsg.id, agentId);
+  try {
+    if (dispatch) {
+      await dispatch({ chatId, agentId, messageId, content, mediaUrl: tempFileUrls[0], images, cfg, deliver, onCleanup, onError });
+      return;
+    }
 
-      const account = resolveOpenGramAccount(cfg);
-      const stopTyping = startTypingHeartbeat(client, chatId, agentId);
-      const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
-      const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
-      const onError = (err: unknown) => {
-        stopTyping();
-        log?.error(`[opengram] Reply dispatch error: ${err}`);
-        cancelStream(client, dispatchId);
-      };
+    await dispatchViaSdkWithRetry({
+      chatId,
+      agentId,
+      messageId,
+      content,
+      images,
+      tempFilePaths,
+      tempFileMimes,
+      tempFileUrls,
+      cfg,
+      deliver,
+      onError,
+      log,
+    });
+  } catch (err) {
+    stopTyping();
+    cancelStream(client, dispatchId);
+    throw err;
+  } finally {
+    stopTyping();
+  }
+}
 
-      // Register cleanup so the queue can cancel this dispatch if superseded.
-      setDispatchCleanup(chatId, dispatchId, onCleanup);
+async function dispatchViaSdkWithRetry(opts: {
+  chatId: string;
+  agentId: string;
+  messageId: string;
+  content: string;
+  images?: ImageContent[];
+  tempFilePaths?: string[];
+  tempFileMimes?: string[];
+  tempFileUrls?: string[];
+  cfg: OpenClawConfig;
+  deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
+  onError: (err: unknown) => void;
+  log?: InboundListenerParams["log"];
+}) {
+  const startedAt = Date.now();
+  let backoffMs = SDK_SKIP_BACKOFF_INITIAL_MS;
 
-      try {
-        if (dispatch) {
-          dispatch({ chatId, agentId, messageId, content, mediaUrl, images, cfg, deliver, onCleanup, onError });
-        } else {
-          await dispatchViaSdk({ chatId, agentId, messageId, content, images, tempFilePaths, tempFileMimes, tempFileUrls, cfg, deliver, onError, onSkip: () => { stopTyping(); cancelStream(client, dispatchId); }, log });
-        }
-      } catch (err) {
-        stopTyping();
-        cancelStream(client, dispatchId);
+  for (;;) {
+    try {
+      await dispatchViaSdk(opts);
+      return;
+    } catch (err) {
+      if (!(err instanceof DispatchSkippedError)) {
         throw err;
-      } finally {
-        stopTyping();
-        for (const p of tempFilePaths) {
-          fs.unlink(p).catch(() => {});
-        }
       }
-    },
-    client,
-    log,
-  );
+
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs >= SDK_SKIP_TIMEOUT_MS) {
+        throw new Error(`dispatch skipped for too long (${elapsedMs}ms): ${err.reason}`);
+      }
+
+      opts.log?.warn(`[opengram] dispatch skipped (${err.reason}), retrying in ${backoffMs}ms`);
+      await wait(backoffMs);
+      backoffMs = Math.min(SDK_SKIP_BACKOFF_MAX_MS, backoffMs * 2);
+    }
+  }
 }
 
 async function handleRequestResolved(
@@ -389,80 +685,18 @@ async function handleRequestResolved(
 
   const requestId = payload.requestId as string;
   const body = formatRequestResolution(payload);
-
   const agentId = await resolveAgentForChat(chatId, cfg, log);
-  const dispatchId = `req:${requestId}`;
 
-  enqueueOrSupersede(
-    chatId,
-    dispatchId,
-    async () => {
-      // Eagerly create a streaming message so the frontend shows typing
-      // indicator immediately, before the SDK starts producing content.
-      const streamingMsg = await client.createMessage(chatId, {
-        role: "agent",
-        senderId: agentId,
-        streaming: true,
-      });
-
-      // KAI-234: If this dispatch was superseded while createMessage was
-      // in-flight, cancel the orphaned streaming message and bail out.
-      if (isSuperseded(dispatchId)) {
-        await client.cancelMessage(streamingMsg.id).catch(() => {});
-        return;
-      }
-
-      initStream(dispatchId, chatId, streamingMsg.id, agentId);
-
-      const account = resolveOpenGramAccount(cfg);
-      const stopTyping = startTypingHeartbeat(client, chatId, agentId);
-      const deliver = buildDeliver(client, chatId, agentId, dispatchId, account.config, log);
-      const onCleanup = () => { stopTyping(); cancelStream(client, dispatchId); };
-      const onError = (err: unknown) => {
-        stopTyping();
-        log?.error(`[opengram] Reply dispatch error: ${err}`);
-        cancelStream(client, dispatchId);
-      };
-
-      // Register cleanup so the queue can cancel this dispatch if superseded.
-      setDispatchCleanup(chatId, dispatchId, onCleanup);
-
-      try {
-        if (dispatch) {
-          dispatch({
-            chatId,
-            agentId,
-            messageId: `req:${requestId}:resolved`,
-            content: body,
-            cfg,
-            deliver,
-            onCleanup,
-            onError,
-          });
-        } else {
-          await dispatchViaSdk({
-            chatId,
-            agentId,
-            messageId: `req:${requestId}:resolved`,
-            content: body,
-            cfg,
-            deliver,
-            onError: (err) => { stopTyping(); log?.error(`[opengram] Reply dispatch error: ${err}`); },
-            onSkip: () => { stopTyping(); cancelStream(client, dispatchId); },
-            log,
-          });
-        }
-      } catch (err) {
-        stopTyping();
-        cancelStream(client, dispatchId);
-        throw err;
-      } finally {
-        stopTyping();
-      }
-    },
+  await runInboundDispatch({
+    cfg,
     client,
+    agentId,
+    dispatch,
     log,
-  );
+    chatId,
+    messageId: `req:${requestId}:resolved`,
+    content: body,
+  });
 }
 
 const CHANNEL_ID = "opengram";
@@ -507,7 +741,6 @@ async function dispatchViaSdk(opts: {
   cfg: OpenClawConfig;
   deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
   onError: (err: unknown) => void;
-  onSkip?: () => void;
   log?: InboundListenerParams["log"];
 }): Promise<void> {
   const { chatId, agentId, messageId, content, images, tempFilePaths = [], tempFileMimes = [], tempFileUrls = [], cfg, deliver, onError, log } = opts;
@@ -552,6 +785,8 @@ async function dispatchViaSdk(opts: {
     channel: CHANNEL_ID,
   });
 
+  let skippedReason: string | null = null;
+
   await core.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
     ctx,
     cfg,
@@ -567,10 +802,10 @@ async function dispatchViaSdk(opts: {
         );
       },
       onSkip: (payload: { text?: string; mediaUrl?: string }, info: { kind: string; reason: string }) => {
+        skippedReason = info.reason;
         log?.warn(
           `[opengram] deliver skipped: kind=${info.kind} reason=${info.reason} textLen=${payload.text?.length ?? 0} hasMedia=${Boolean(payload.mediaUrl)}`,
         );
-        opts.onSkip?.();
       },
       onError: (err: unknown, info: { kind: string }) => {
         log?.error(`[opengram] ${info.kind} reply failed: ${String(err)}`);
@@ -582,6 +817,10 @@ async function dispatchViaSdk(opts: {
       ...(images ? { images } : {}),
     },
   });
+
+  if (skippedReason) {
+    throw new DispatchSkippedError(skippedReason);
+  }
 }
 
 /**
@@ -597,13 +836,6 @@ function buildDeliver(
   log?: InboundListenerParams["log"],
 ): (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void> {
   return async (replyPayload, { kind }) => {
-    // Supersede guard: if this dispatch was superseded by a newer message,
-    // silently drop late deliver callbacks to prevent ghost messages.
-    if (isSuperseded(dispatchId)) {
-      log?.info(`[opengram] deliver no-op: dispatch ${dispatchId} was superseded (kind=${kind})`);
-      return;
-    }
-
     log?.info(
       `[opengram] buildDeliver called: kind=${kind} textLen=${replyPayload.text?.length ?? 0} hasMedia=${Boolean(replyPayload.mediaUrl)}`,
     );
@@ -709,4 +941,5 @@ function formatRequestResolution(payload: Record<string, unknown>): string {
 export function clearProcessedIdsForTests(): void {
   processedMessageIds.clear();
   lastEventCursor = undefined;
+  batchCoordinator?.resetForTests();
 }

@@ -15,6 +15,7 @@ import {
   unarchiveChat,
   updateChat,
 } from '@/src/services/chats-service';
+import { recordDispatchUserTyping } from '@/src/services/dispatch-service';
 import { emitEvent } from '@/src/services/events-service';
 import { createRequest, listChatRequests, type CreateRequestInput } from '@/src/services/requests-service';
 
@@ -172,6 +173,19 @@ chats.post('/:chatId/typing', async (c) => {
     const body = await parseJsonBody<{ agentId: string }>(c.req.raw);
     getChat(chatId); // validate chat exists
     emitEvent('chat.typing', { chatId, agentId: body.agentId }, { ephemeral: true });
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+});
+
+chats.post('/:chatId/user-typing', (c) => {
+  try {
+    applyWriteMiddlewares(c.req.raw);
+    const chatId = c.req.param('chatId');
+    getChat(chatId); // validate chat exists
+    recordDispatchUserTyping(chatId);
+    emitEvent('chat.user_typing', { chatId, senderId: 'user:primary' }, { ephemeral: true });
     return new Response(null, { status: 204 });
   } catch (error) {
     return toErrorResponse(error);

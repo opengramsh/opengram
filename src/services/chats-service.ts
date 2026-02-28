@@ -6,6 +6,7 @@ import { getDb } from '@/src/db/client';
 
 import { encodeCursor, parsePagination } from '@/src/api/pagination';
 import { notFoundError, validationError } from '@/src/api/http';
+import { enqueueDispatchInputForUserMessage } from '@/src/services/dispatch-service';
 import { emitEvent } from '@/src/services/events-service';
 
 const TITLE_FALLBACK = 'New Chat';
@@ -472,6 +473,14 @@ export function createChat(input: CreateChatInput) {
       streamState: 'complete',
       contentFinal: firstMessageContent,
       createdAt: new Date(now).toISOString(),
+    });
+
+    enqueueDispatchInputForUserMessage({
+      chatId: result.chat.id,
+      messageId: result.firstMessageId,
+      senderId: USER_SENDER_ID,
+      content: firstMessageContent,
+      trace: null,
     });
   }
 

@@ -17,6 +17,7 @@ import {
 import { subscribeToEventsStream, type FrontendStreamEvent } from '@/src/lib/events-stream';
 
 const TYPING_EXPIRY_MS = 12_000;
+const USER_TYPING_SEND_INTERVAL_MS = 1_200;
 
 const TITLE_TYPING_SPEED_MS = 40;
 
@@ -25,13 +26,17 @@ export function useChatPageEffects(data: ChatPageData) {
   const typingExpiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTypingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshMediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastUserTypingSentAtRef = useRef(0);
   const keyboardOffsetRef = useRef(0);
   const {
     chat,
     chatId,
+    composerText,
     goBack,
     isChatSettingsOpen,
     isEditingTitle,
+    isSending,
     knownMessageIdsRef,
     loadData,
     messages,
@@ -57,6 +62,39 @@ export function useChatPageEffects(data: ChatPageData) {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!chatId || !composerText.trim() || isSending) {
+      return;
+    }
+
+    const now = Date.now();
+    const elapsedMs = now - lastUserTypingSentAtRef.current;
+    const sendTyping = () => {
+      lastUserTypingSentAtRef.current = Date.now();
+      void apiFetch(`/api/v1/chats/${chatId}/user-typing`, { method: 'POST' }).catch(() => {});
+    };
+
+    if (elapsedMs >= USER_TYPING_SEND_INTERVAL_MS) {
+      sendTyping();
+      return;
+    }
+
+    if (userTypingTimerRef.current) {
+      clearTimeout(userTypingTimerRef.current);
+    }
+    userTypingTimerRef.current = setTimeout(() => {
+      userTypingTimerRef.current = null;
+      sendTyping();
+    }, USER_TYPING_SEND_INTERVAL_MS - elapsedMs);
+
+    return () => {
+      if (userTypingTimerRef.current) {
+        clearTimeout(userTypingTimerRef.current);
+        userTypingTimerRef.current = null;
+      }
+    };
+  }, [chatId, composerText, isSending]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -369,6 +407,10 @@ export function useChatPageEffects(data: ChatPageData) {
       if (refreshMediaTimerRef.current) {
         clearTimeout(refreshMediaTimerRef.current);
         refreshMediaTimerRef.current = null;
+      }
+      if (userTypingTimerRef.current) {
+        clearTimeout(userTypingTimerRef.current);
+        userTypingTimerRef.current = null;
       }
     };
   }, [chat, chatId, knownMessageIdsRef, refreshMedia, refreshMessages, refreshPendingRequests, setChat, setMessages, setPendingReply, setTypingTitle]);

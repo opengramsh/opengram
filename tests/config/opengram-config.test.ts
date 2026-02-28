@@ -153,6 +153,53 @@ describe("loadOpengramConfig", () => {
     );
   });
 
+  it("rejects invalid server.dispatch.mode", () => {
+    const filePath = writeConfigFile({
+      server: {
+        dispatch: {
+          mode: "unsupported",
+        },
+      },
+    });
+
+    expect(() => loadOpengramConfig(filePath)).toThrow(
+      /server\.dispatch\.mode must be one of immediate, sequential, batched_sequential/,
+    );
+  });
+
+  it("rejects dispatch execution maxConcurrency below minConcurrency", () => {
+    const filePath = writeConfigFile({
+      server: {
+        dispatch: {
+          execution: {
+            minConcurrency: 5,
+            maxConcurrency: 2,
+          },
+        },
+      },
+    });
+
+    expect(() => loadOpengramConfig(filePath)).toThrow(
+      /server\.dispatch\.execution\.maxConcurrency must be greater than or equal to minConcurrency/,
+    );
+  });
+
+  it("rejects non-positive dispatch claimManyLimit", () => {
+    const filePath = writeConfigFile({
+      server: {
+        dispatch: {
+          claim: {
+            claimManyLimit: 0,
+          },
+        },
+      },
+    });
+
+    expect(() => loadOpengramConfig(filePath)).toThrow(
+      /server\.dispatch\.claim\.claimManyLimit must be at least 1/,
+    );
+  });
+
   it("returns cached config on repeated calls with same file", () => {
     const filePath = writeConfigFile({ appName: "Cached" });
 
