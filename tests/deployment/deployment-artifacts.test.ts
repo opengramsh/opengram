@@ -27,7 +27,7 @@ describe("deployment artifacts", () => {
     const unit = readFileSync("deploy/systemd/opengram-web.service", "utf8");
 
     expect(unit).toContain("WorkingDirectory=/opt/opengram/web");
-    expect(unit).toContain("ExecStart=/usr/bin/env node /opt/opengram/web/dist/server/server.mjs");
+    expect(unit).toContain("ExecStart=/usr/bin/env node /opt/opengram/web/dist/server/server.js");
     expect(unit).toContain("Environment=DATABASE_URL=/opt/opengram/data/opengram.db");
   });
 
@@ -44,14 +44,14 @@ describe("deployment artifacts", () => {
     expect(dockerfile).toContain("/api/v1/health");
   });
 
-  it("aligns startup commands on the server.mjs artifact", () => {
+  it("aligns startup commands on the server.js artifact", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts?: Record<string, string> };
     const unit = readFileSync("deploy/systemd/opengram-web.service", "utf8");
     const entrypoint = readFileSync("deploy/docker/entrypoint.sh", "utf8");
 
-    expect(pkg.scripts?.start).toBe("node dist/server/server.mjs");
-    expect(unit).toContain("/dist/server/server.mjs");
-    expect(entrypoint).toContain("dist/server/server.mjs");
+    expect(pkg.scripts?.start).toBe("node dist/server/server.js");
+    expect(unit).toContain("/dist/server/server.js");
+    expect(entrypoint).toContain("dist/server/server.js");
   });
 
   it("documents tailscale TLS and reverse proxy setup", () => {
