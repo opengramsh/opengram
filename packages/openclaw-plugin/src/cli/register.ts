@@ -3,6 +3,7 @@ import path from "node:path";
 import type { OpenClawPluginApi, WizardPrompter } from "openclaw/plugin-sdk";
 import { readJsonFileWithFallback, writeJsonFileAtomically } from "openclaw/plugin-sdk";
 
+import type { SetupWizardOptions } from "./setup.js";
 import { runSetupWizard } from "./setup.js";
 
 /**
@@ -21,15 +22,27 @@ export function registerOpengramCli(api: OpenClawPluginApi): void {
       opengram
         .command("setup")
         .description("Interactive setup wizard for the OpenGram channel")
-        .action(async () => {
+        .option("--base-url <url>", "Pre-fill the OpenGram instance URL (skips prompt)")
+        .option("--instance-secret <secret>", "Pre-fill the instance secret (skips prompt)")
+        .option("--no-instance-secret", "Specify that no instance secret is used (skips prompt)")
+        .action(async (opts: { baseUrl?: string; instanceSecret?: string | false }) => {
           // Dynamic import: @clack/prompts is an OpenClaw dependency,
           // available at runtime but not a direct dependency of this plugin.
           const clack = await import("@clack/prompts");
           const prompter = createClackPrompter(clack);
 
+          const wizardOpts: SetupWizardOptions = {};
+          if (opts.baseUrl) wizardOpts.baseUrl = opts.baseUrl;
+          if (typeof opts.instanceSecret === "string") {
+            wizardOpts.instanceSecret = opts.instanceSecret;
+          } else if (opts.instanceSecret === false) {
+            wizardOpts.noInstanceSecret = true;
+          }
+
           const { cfg: nextCfg, shouldRestart } = await runSetupWizard(
             prompter,
             ctx.config,
+            wizardOpts,
           );
 
           // Write config for the standalone CLI path

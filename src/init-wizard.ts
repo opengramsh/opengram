@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -128,11 +128,11 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
   // 4. OpenClaw detection
   if (isOpenClawInstalled()) {
     p.note('OpenClaw CLI detected on PATH', 'Integrations');
-    const installPlugin = await p.confirm({
-      message: 'Install the OpenGram plugin for OpenClaw?',
+    const connectOpenClaw = await p.confirm({
+      message: 'Connect OpenGram to OpenClaw?',
       initialValue: true,
     });
-    if (!p.isCancel(installPlugin) && installPlugin) {
+    if (!p.isCancel(connectOpenClaw) && connectOpenClaw) {
       const pluginSpinner = p.spinner();
       pluginSpinner.start('Installing openclaw-plugin-opengram...');
       try {
@@ -141,9 +141,24 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
           timeout: 120000,
         });
         pluginSpinner.stop('Plugin installed.');
-        p.note('Run `openclaw opengram setup` to configure the plugin.', 'Next step');
       } catch {
         pluginSpinner.stop('Plugin install failed — you can install it later with:\n  npm i -g openclaw-plugin-opengram');
+      }
+
+      // Chain into the OpenClaw setup wizard with pre-filled values
+      try {
+        const setupArgs = ['opengram', 'setup', '--base-url', publicUrl];
+        if (instanceSecretEnabled) {
+          setupArgs.push('--instance-secret', instanceSecret);
+        } else {
+          setupArgs.push('--no-instance-secret');
+        }
+        execFileSync('openclaw', setupArgs, { stdio: 'inherit' });
+      } catch {
+        p.note(
+          'OpenClaw setup did not complete.\nYou can run `openclaw opengram setup` later.',
+          'Note',
+        );
       }
     }
   }

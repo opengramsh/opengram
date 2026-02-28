@@ -5,6 +5,12 @@ import type { AutoRenameConfig } from "../config.js";
 import { RENAME_PROVIDERS, detectApiKey, getEnvVarName } from "../rename-providers.js";
 import { detectOpengramUrl } from "./tailscale.js";
 
+export type SetupWizardOptions = {
+  baseUrl?: string;
+  instanceSecret?: string;
+  noInstanceSecret?: boolean;
+};
+
 export type SetupWizardResult = {
   cfg: OpenClawConfig;
   shouldRestart: boolean;
@@ -19,6 +25,7 @@ export type SetupWizardResult = {
 export async function runSetupWizard(
   prompter: WizardPrompter,
   cfg: OpenClawConfig,
+  options?: SetupWizardOptions,
 ): Promise<SetupWizardResult> {
   await prompter.intro("OpenGram Setup");
 
@@ -32,13 +39,29 @@ export async function runSetupWizard(
     } | undefined) ?? {};
 
   // --- Step 1: OpenGram URL ---
-  const baseUrl = await promptBaseUrl(prompter, existing.baseUrl);
+  let baseUrl: string;
+  if (options?.baseUrl) {
+    baseUrl = options.baseUrl.replace(/\/+$/, "");
+    await prompter.note(`Using OpenGram URL: ${baseUrl}`, "Pre-filled");
+  } else {
+    baseUrl = await promptBaseUrl(prompter, existing.baseUrl);
+  }
 
-  // --- Step 2: Connection test ---
-  await testConnection(prompter, baseUrl);
+  // --- Step 2: Connection test (skip when URL is pre-filled — server may not be running yet) ---
+  if (!options?.baseUrl) {
+    await testConnection(prompter, baseUrl);
+  }
 
   // --- Step 3: Instance secret (optional) ---
-  const instanceSecret = await promptInstanceSecret(prompter, existing.instanceSecret);
+  let instanceSecret: string | undefined;
+  if (options?.instanceSecret) {
+    instanceSecret = options.instanceSecret;
+    await prompter.note("Instance secret pre-filled.", "Pre-filled");
+  } else if (options?.noInstanceSecret) {
+    instanceSecret = undefined;
+  } else {
+    instanceSecret = await promptInstanceSecret(prompter, existing.instanceSecret);
+  }
 
   // --- Step 4: Model selection — disabled (models managed elsewhere) ---
   // const existingModelIds = await fetchExistingModelIds(baseUrl, instanceSecret);
