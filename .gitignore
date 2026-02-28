@@ -40,7 +40,6 @@ packages/openclaw-plugin/node_modules
 .codecrew/*
 config/opengram.config.json
 
-migrations/*
 scripts/manage-opengram-service.local.sh
 
 docs/*
