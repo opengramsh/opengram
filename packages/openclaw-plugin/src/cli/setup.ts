@@ -1,7 +1,12 @@
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
 import type { OpenClawConfig, WizardPrompter } from "openclaw/plugin-sdk";
 
 import { OpenGramClient } from "../api-client.js";
 import { detectOpengramUrl } from "./tailscale.js";
+
+const PLUGIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 export type SetupWizardOptions = {
   baseUrl?: string;
@@ -88,6 +93,7 @@ export async function runSetupWizard(
     baseUrl,
     instanceSecret,
     agents: agentIds,
+    pluginDir: PLUGIN_DIR,
   });
 
   await prompter.note(
@@ -375,6 +381,7 @@ export type OpenGramSetupInput = {
   baseUrl: string;
   instanceSecret?: string;
   agents: string[];
+  pluginDir?: string;
 };
 
 /**
@@ -437,6 +444,19 @@ export function applyOpenGramConfig(
   const plugins = (cfg as any).plugins ?? {};
   const entries = plugins.entries ?? {};
 
+  // Ensure the plugin is in plugins.allow (deduplicated)
+  const existingAllow: string[] = Array.isArray(plugins.allow) ? plugins.allow : [];
+  const allow = existingAllow.includes("openclaw-plugin-opengram")
+    ? existingAllow
+    : [...existingAllow, "openclaw-plugin-opengram"];
+
+  // Ensure the plugin dir is in plugins.load.paths (deduplicated)
+  const existingLoad = plugins.load ?? {};
+  const existingPaths: string[] = Array.isArray(existingLoad.paths) ? existingLoad.paths : [];
+  const paths = input.pluginDir && !existingPaths.includes(input.pluginDir)
+    ? [...existingPaths, input.pluginDir]
+    : existingPaths;
+
   return {
     ...cfg,
     channels: {
@@ -445,6 +465,11 @@ export function applyOpenGramConfig(
     },
     plugins: {
       ...plugins,
+      allow,
+      load: {
+        ...existingLoad,
+        paths,
+      },
       entries: {
         ...entries,
         "openclaw-plugin-opengram": {

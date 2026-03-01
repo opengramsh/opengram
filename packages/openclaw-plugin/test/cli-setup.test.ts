@@ -228,6 +228,100 @@ describe("applyOpenGramConfig", () => {
     expect(plugins.entries["openclaw-plugin-opengram"].enabled).toBe(true);
   });
 
+  it("adds openclaw-plugin-opengram to plugins.allow", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    expect((result as any).plugins.allow).toContain("openclaw-plugin-opengram");
+  });
+
+  it("deduplicates plugins.allow if already present", () => {
+    const cfg = createMinimalConfig({
+      plugins: {
+        allow: ["openclaw-plugin-opengram", "other-plugin"],
+      },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    const allow = (result as any).plugins.allow;
+    expect(allow.filter((p: string) => p === "openclaw-plugin-opengram")).toHaveLength(1);
+    expect(allow).toContain("other-plugin");
+  });
+
+  it("preserves existing plugins.allow entries", () => {
+    const cfg = createMinimalConfig({
+      plugins: {
+        allow: ["other-plugin"],
+      },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    const allow = (result as any).plugins.allow;
+    expect(allow).toEqual(["other-plugin", "openclaw-plugin-opengram"]);
+  });
+
+  it("adds pluginDir to plugins.load.paths", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+      pluginDir: "/path/to/plugin",
+    });
+
+    expect((result as any).plugins.load.paths).toContain("/path/to/plugin");
+  });
+
+  it("deduplicates plugins.load.paths if already present", () => {
+    const cfg = createMinimalConfig({
+      plugins: {
+        load: { paths: ["/path/to/plugin"] },
+      },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+      pluginDir: "/path/to/plugin",
+    });
+
+    const paths = (result as any).plugins.load.paths;
+    expect(paths.filter((p: string) => p === "/path/to/plugin")).toHaveLength(1);
+  });
+
+  it("preserves existing plugins.load.paths entries", () => {
+    const cfg = createMinimalConfig({
+      plugins: {
+        load: { paths: ["/existing/path"] },
+      },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+      pluginDir: "/path/to/plugin",
+    });
+
+    const paths = (result as any).plugins.load.paths;
+    expect(paths).toEqual(["/existing/path", "/path/to/plugin"]);
+  });
+
+  it("keeps plugins.load.paths empty when no pluginDir provided", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    expect((result as any).plugins.load.paths).toEqual([]);
+  });
+
   it("preserves existing opengram fields not set by wizard", () => {
     const cfg = createMinimalConfig({
       channels: { opengram: { reconnectDelayMs: 5000, baseUrl: "old" } },
@@ -304,7 +398,6 @@ describe("runSetupWizard", () => {
         .mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn()
         .mockResolvedValueOnce(false)    // instance secret: no
-        .mockResolvedValueOnce(false)    // auto-rename: no
         .mockResolvedValueOnce(true),    // restart: yes
       multiselect: vi.fn()
         .mockResolvedValueOnce([]),      // agents
