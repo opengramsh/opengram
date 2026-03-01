@@ -73,6 +73,9 @@ describe("docker startup migrations", () => {
       "0001_messages_fts_trigger_upgrade.sql",
       "0002_messages_stream_sweep_index.sql",
       "0003_add_notifications_muted.sql",
+      "0004_drop_custom_state.sql",
+      "0005_add_title_source.sql",
+      "0006_dispatch_queue.sql",
     ]);
 
     const upgradedIndex = migratedDb
@@ -103,6 +106,9 @@ describe("docker startup migrations", () => {
       "0001_messages_fts_trigger_upgrade.sql",
       "0002_messages_stream_sweep_index.sql",
       "0003_add_notifications_muted.sql",
+      "0004_drop_custom_state.sql",
+      "0005_add_title_source.sql",
+      "0006_dispatch_queue.sql",
     ]);
 
     const upgradedIndex = migratedDb

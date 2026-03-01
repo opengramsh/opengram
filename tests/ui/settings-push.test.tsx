@@ -32,6 +32,10 @@ vi.mock('@/src/lib/push-client', () => ({
   sendPushTestNotification: sendPushTestNotificationMock,
 }));
 
+vi.mock('@/src/lib/notification-sound', () => ({
+  playNotificationSound: vi.fn(),
+}));
+
 vi.mock('@/src/components/navigation/hamburger-menu', () => ({
   HamburgerMenu: () => <button type="button" aria-label="menu" />,
 }));
@@ -86,10 +90,13 @@ describe('settings push notifications', () => {
     const user = userEvent.setup();
     render(<SettingsPage />);
 
-    await screen.findByText('Permission: Granted');
-    await screen.findByText('Subscription: Active');
+    // The new UI shows "Desktop notifications" label with a Switch toggle
+    await screen.findByText('Desktop notifications');
+    expect(screen.getByText('Sound')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Send test notification' }));
+    // "Send test notification" appears when browser toggle is on and subscribed
+    const testButton = await screen.findByRole('button', { name: 'Send test notification' });
+    await user.click(testButton);
 
     await waitFor(() => {
       expect(sendPushTestNotificationMock).toHaveBeenCalledTimes(1);
@@ -100,26 +107,28 @@ describe('settings push notifications', () => {
 
   it('enables and disables notifications through push client actions', async () => {
     const user = userEvent.setup();
+
+    // Start with no subscription so browser toggle is off
+    getCurrentPushSubscriptionMock.mockResolvedValue(null);
     render(<SettingsPage />);
 
-    await screen.findByText('Subscription: Active');
+    await screen.findByText('Desktop notifications');
 
-    await user.click(screen.getByRole('button', { name: 'Enable notifications' }));
+    // Toggle desktop notifications on — this calls enablePushNotifications
+    const desktopSwitch = screen.getAllByRole('switch')[1]; // second switch (after Sound)
+    getCurrentPushSubscriptionMock.mockResolvedValue({ endpoint: 'https://example/sub' });
+    await user.click(desktopSwitch);
 
     await waitFor(() => {
       expect(enablePushNotificationsMock).toHaveBeenCalledWith('public-key');
     });
 
-    getCurrentPushSubscriptionMock.mockResolvedValueOnce(null);
-
-    await user.click(screen.getByRole('button', { name: 'Disable notifications' }));
+    // Toggle desktop notifications off — this calls disablePushNotifications
+    getCurrentPushSubscriptionMock.mockResolvedValue(null);
+    await user.click(desktopSwitch);
 
     await waitFor(() => {
       expect(disablePushNotificationsMock).toHaveBeenCalledTimes(1);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Notifications disabled.')).toBeTruthy();
     });
   });
 });

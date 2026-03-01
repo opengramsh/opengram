@@ -23,7 +23,7 @@ describe("openclaw-plugin chat manager", () => {
 
     const mockClient = {
       listChats: vi.fn().mockResolvedValue({ data: [] }),
-      getChat: vi.fn().mockResolvedValue({ id: "chat-1", agentIds: ["agent-1"] }),
+      getChat: vi.fn().mockResolvedValue({ id: "chat-1", agent_ids: ["agent-1"] }),
     } as any;
 
     await chatManager.initializeChatManager(mockClient, {

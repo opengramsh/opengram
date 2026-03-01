@@ -8,9 +8,23 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '@/src/server';
 import { closeDb, resetDbForTests } from '@/src/db/client';
 import { emitEvent, getEventSubscriberCountForTests, resetEventSubscribersForTests } from '@/src/services/events-service';
+import { resetConfigCacheForTests } from '@/src/config/opengram-config';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
 const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
+
+const TEST_BASE_CONFIG = {
+  appName: 'OpenGram',
+  maxUploadBytes: 50_000_000,
+  allowedMimeTypes: ['*/*'],
+  titleMaxChars: 48,
+  agents: [{ id: 'agent-default', name: 'Test Agent', description: 'test', defaultModelId: 'model-default' }],
+  models: [{ id: 'model-default', name: 'Test Model', description: 'test' }],
+  push: { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: '' },
+  security: { instanceSecretEnabled: false, instanceSecret: '', readEndpointsRequireInstanceSecret: false },
+  server: { publicBaseUrl: 'http://localhost:3333', port: 3333, streamTimeoutSeconds: 60, corsOrigins: [] },
+  hooks: [],
+};
 
 let db: Database.Database;
 let previousConfigPath: string | undefined;
@@ -25,18 +39,17 @@ function insertPersistedEvent(id: string, type: string, createdAt: number) {
 }
 
 function setInstanceSecretConfig(secret: string) {
-  const baseConfig = JSON.parse(readFileSync(join(repoRoot, 'config', 'opengram.config.json'), 'utf8'));
-  const tempDir = mkdtempSync(join(tmpdir(), 'opengram-events-stream-config-'));
-  const configPath = join(tempDir, 'opengram.config.json');
-
-  baseConfig.security = {
-    ...baseConfig.security,
+  const config = structuredClone(TEST_BASE_CONFIG);
+  config.security = {
+    ...config.security,
     instanceSecretEnabled: true,
     instanceSecret: secret,
   };
-
-  writeFileSync(configPath, JSON.stringify(baseConfig), 'utf8');
+  const tempDir = mkdtempSync(join(tmpdir(), 'opengram-events-stream-config-'));
+  const configPath = join(tempDir, 'opengram.config.json');
+  writeFileSync(configPath, JSON.stringify(config), 'utf8');
   process.env.OPENGRAM_CONFIG_PATH = configPath;
+  resetConfigCacheForTests();
 }
 
 async function readSseOutput(
@@ -87,6 +100,11 @@ beforeEach(() => {
   db.exec(migrationSql);
   resetDbForTests();
   resetEventSubscribersForTests();
+
+  const configPath = join(tempDir, 'opengram.config.json');
+  writeFileSync(configPath, JSON.stringify(TEST_BASE_CONFIG), 'utf8');
+  process.env.OPENGRAM_CONFIG_PATH = configPath;
+  resetConfigCacheForTests();
 });
 
 afterEach(() => {
@@ -99,6 +117,7 @@ afterEach(() => {
   } else {
     process.env.OPENGRAM_CONFIG_PATH = previousConfigPath;
   }
+  resetConfigCacheForTests();
 });
 
 describe('events stream API', () => {

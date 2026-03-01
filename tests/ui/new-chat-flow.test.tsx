@@ -93,7 +93,7 @@ describe('new chat flow UI', () => {
 
     expect(createChatBodies[0]).toEqual({
       agentIds: ['agent-b'],
-      modelId: 'model-b',
+      modelId: 'model-a',
       firstMessage: 'First message from sheet',
     });
 

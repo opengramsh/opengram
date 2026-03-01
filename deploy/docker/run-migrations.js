@@ -1,7 +1,7 @@
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
 
-const Database = require("better-sqlite3");
+import Database from "better-sqlite3";
 
 const DEFAULT_DB_PATH = "/opt/opengram/data/opengram.db";
 const DEFAULT_MIGRATIONS_DIR = "/opt/opengram/web/migrations";

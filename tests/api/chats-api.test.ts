@@ -474,7 +474,7 @@ describe('chats API', () => {
 
     expect(response.status).toBe(400);
     expect(body.error.code).toBe('VALIDATION_ERROR');
-    expect(body.error.message).toBe('JSON body must be an object.');
+    expect(body.error.message).toBe('Request validation failed.');
   });
 
   it('rejects non-string firstMessage values', async () => {
@@ -491,7 +491,7 @@ describe('chats API', () => {
 
     expect(response.status).toBe(400);
     expect(body.error.code).toBe('VALIDATION_ERROR');
-    expect(body.error.details).toEqual({ field: 'firstMessage' });
+    expect(body.error.details.fieldErrors.firstMessage).toBeDefined();
   });
 
   it('replays idempotent creates and rejects key reuse with different payloads', async () => {
@@ -943,7 +943,6 @@ describe('system endpoints', () => {
     expect(response.status).toBe(200);
     expect(body.security).toEqual({
       instanceSecretEnabled: false,
-      instanceSecret: '',
       readEndpointsRequireInstanceSecret: false,
     });
     expect(body.push.vapidPrivateKey).toBeUndefined();

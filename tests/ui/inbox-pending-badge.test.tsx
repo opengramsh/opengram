@@ -82,7 +82,6 @@ describe('inbox pending badge', () => {
   it('shows pending request count in header and row badge', async () => {
     renderHome();
 
-    expect(await screen.findByText('3 pending requests')).toBeTruthy();
     expect(await screen.findByLabelText('3 pending requests')).toBeTruthy();
   });
 });

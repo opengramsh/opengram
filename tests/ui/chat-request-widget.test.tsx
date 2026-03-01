@@ -46,6 +46,7 @@ describe('chat request widget', () => {
     streamMock.listener = null;
     streamMock.unsubscribe.mockReset();
     Element.prototype.scrollTo = vi.fn();
+    Element.prototype.scrollIntoView = vi.fn();
     resolvePayloads = [];
     requestsPayload = [];
     resolveRequestResponse = async (requestId) =>
@@ -254,7 +255,11 @@ describe('chat request widget', () => {
 
     await user.type(screen.getByLabelText('Title *'), 'Fix bug');
     await user.type(screen.getByLabelText('Details'), 'More details');
-    await user.selectOptions(screen.getByLabelText('Priority *'), 'high');
+
+    // Priority uses Radix Select — click the trigger button (not the inner span)
+    const priorityTrigger = screen.getByText('Select an option').closest('button')!;
+    await user.click(priorityTrigger);
+    await user.click(await screen.findByRole('option', { name: 'high' }));
 
     await user.selectOptions(screen.getByLabelText('Tags'), ['bug', 'docs']);
     await user.click(screen.getByLabelText('Urgent'));

@@ -140,7 +140,7 @@ describe('chat screen event subscriptions', () => {
       streamState: 'streaming',
     });
 
-    await screen.findByText('Streaming...');
+    await screen.findByLabelText('Agent is typing');
 
     messagesPayload = [
       {
@@ -182,7 +182,7 @@ describe('chat screen event subscriptions', () => {
     });
 
     await screen.findByText('Hello final');
-    expect(screen.queryByText('Streaming...')).toBeNull();
+    expect(screen.queryByLabelText('Agent is typing')).toBeNull();
 
     await emitEvent('message.created', {
       chatId: 'chat-1',

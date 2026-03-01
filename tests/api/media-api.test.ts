@@ -8,9 +8,23 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '@/src/server';
 import { closeDb, resetDbForTests } from '@/src/db/client';
 import { resetWriteRateLimitForTests } from '@/src/api/write-controls';
+import { resetConfigCacheForTests } from '@/src/config/opengram-config';
 
 const repoRoot = join(import.meta.dirname, '..', '..');
 const migrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
+
+const TEST_BASE_CONFIG = {
+  appName: 'OpenGram',
+  maxUploadBytes: 50_000_000,
+  allowedMimeTypes: ['*/*'],
+  titleMaxChars: 48,
+  agents: [{ id: 'agent-default', name: 'Test Agent', description: 'test', defaultModelId: 'model-default' }],
+  models: [{ id: 'model-default', name: 'Test Model', description: 'test' }],
+  push: { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: '' },
+  security: { instanceSecretEnabled: false, instanceSecret: '', readEndpointsRequireInstanceSecret: false },
+  server: { publicBaseUrl: 'http://localhost:3333', port: 3333, streamTimeoutSeconds: 60, corsOrigins: [] },
+  hooks: [],
+};
 const ONE_PIXEL_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
 const FILE_RESPONSE_CSP = "default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
@@ -63,6 +77,11 @@ beforeEach(() => {
   db.exec(migrationSql);
   resetDbForTests();
   resetWriteRateLimitForTests();
+
+  const configPath = join(tempDir, 'opengram.config.json');
+  writeFileSync(configPath, JSON.stringify(TEST_BASE_CONFIG), 'utf8');
+  process.env.OPENGRAM_CONFIG_PATH = configPath;
+  resetConfigCacheForTests();
 });
 
 afterEach(() => {
@@ -78,6 +97,7 @@ afterEach(() => {
   }
 
   resetWriteRateLimitForTests();
+  resetConfigCacheForTests();
 });
 
 describe('media API', () => {

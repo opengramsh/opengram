@@ -164,7 +164,7 @@ describe('chat media previews', () => {
 
     expect(screen.getByRole('button', { name: 'Open image image-1.png' })).toBeTruthy();
     expect(screen.getByText('report.pdf')).toBeTruthy();
-    expect(screen.getByText('8 KB')).toBeTruthy();
+    expect(screen.getByText('8 KB', { exact: false })).toBeTruthy();
     expect(container.querySelectorAll('audio')).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Open image image-1.png' }));

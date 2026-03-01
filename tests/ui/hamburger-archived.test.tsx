@@ -117,7 +117,7 @@ describe('hamburger + archived chats UI', () => {
 
     await screen.findByLabelText('Open menu');
     await user.click(screen.getByLabelText('Open menu'));
-    await user.click(screen.getByRole('button', { name: 'Archived chats' }));
+    await user.click(screen.getByRole('button', { name: 'Archived' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('location').textContent).toBe('/archived');
@@ -143,8 +143,8 @@ describe('hamburger + archived chats UI', () => {
     const chatTitle = await screen.findByText('Archived chat');
     fireEvent.contextMenu(chatTitle, { clientX: 120, clientY: 80 });
 
-    const unarchiveButtons = screen.getAllByRole('button', { name: 'Unarchive' });
-    await user.click(unarchiveButtons[unarchiveButtons.length - 1]);
+    const unarchiveItems = screen.getAllByRole('menuitem', { name: 'Unarchive' });
+    await user.click(unarchiveItems[unarchiveItems.length - 1]);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/v1/chats/chat-archived/unarchive', { method: 'POST' });

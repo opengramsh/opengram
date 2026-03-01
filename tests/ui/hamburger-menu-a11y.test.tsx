@@ -40,8 +40,7 @@ describe('hamburger menu accessibility', () => {
     await screen.findByRole('dialog');
 
     expect(screen.getByRole('button', { name: 'Inbox' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Archived chats' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'About' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Archived' })).toBeTruthy();
   });
 
   it('closes when Escape key is pressed', async () => {

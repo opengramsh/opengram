@@ -7,7 +7,7 @@ describe("openclaw-plugin outbound", () => {
     const mockClient = {
       createMessage: vi.fn().mockResolvedValue({ id: "msg-1" }),
       listChats: vi.fn().mockResolvedValue({ data: [] }),
-      getChat: vi.fn().mockResolvedValue({ id: "chat-1", agentIds: ["agent-1"] }),
+      getChat: vi.fn().mockResolvedValue({ id: "chat-1", agent_ids: ["agent-1"] }),
     } as any;
 
     const chatManager = await import("../../packages/openclaw-plugin/src/chat-manager.ts");
@@ -33,7 +33,7 @@ describe("openclaw-plugin outbound", () => {
       createMessage: vi.fn().mockResolvedValue({ id: "msg-2" }),
       uploadMedia: vi.fn().mockResolvedValue({ id: "media-1" }),
       listChats: vi.fn().mockResolvedValue({ data: [] }),
-      getChat: vi.fn().mockResolvedValue({ id: "chat-1", agentIds: ["agent-1"] }),
+      getChat: vi.fn().mockResolvedValue({ id: "chat-1", agent_ids: ["agent-1"] }),
     } as any;
 
     const chatManager = await import("../../packages/openclaw-plugin/src/chat-manager.ts");
