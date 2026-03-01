@@ -36,7 +36,24 @@ export function AutoRenameCard({
   const [provider, setProvider] = useState(
     existing?.provider ?? providers[0]?.id ?? "",
   );
-  const [modelId, setModelId] = useState(existing?.modelId ?? "");
+  const [modelId, setModelId] = useState(() => {
+    const saved = existing?.modelId ?? "";
+    if (!saved) return "";
+    const providerObj = providers.find(
+      (p) => p.id === (existing?.provider ?? providers[0]?.id ?? ""),
+    );
+    const inList = providerObj?.cheapModels?.some((m) => m.id === saved);
+    return inList ? saved : "__custom__";
+  });
+  const [customModelId, setCustomModelId] = useState(() => {
+    const saved = existing?.modelId ?? "";
+    if (!saved) return "";
+    const providerObj = providers.find(
+      (p) => p.id === (existing?.provider ?? providers[0]?.id ?? ""),
+    );
+    const inList = providerObj?.cheapModels?.some((m) => m.id === saved);
+    return inList ? "" : saved;
+  });
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -48,26 +65,39 @@ export function AutoRenameCard({
   useEffect(() => {
     setEnabled(existing?.enabled ?? false);
     setProvider(existing?.provider ?? providers[0]?.id ?? "");
-    setModelId(existing?.modelId ?? "");
+    const saved = existing?.modelId ?? "";
+    const providerObj = providers.find(
+      (p) => p.id === (existing?.provider ?? providers[0]?.id ?? ""),
+    );
+    const inList = providerObj?.cheapModels?.some((m) => m.id === saved);
+    if (saved && !inList) {
+      setModelId("__custom__");
+      setCustomModelId(saved);
+    } else {
+      setModelId(saved);
+      setCustomModelId("");
+    }
     setApiKey("");
   }, [existing?.enabled, existing?.provider, existing?.modelId, providers]);
 
   const selectedProvider = providers.find((p) => p.id === provider);
   const models = selectedProvider?.cheapModels ?? [];
 
-  // When provider changes, auto-select first model if current model is not in the list
+  // When provider changes, auto-select first model if current isn't in new list (skip if custom)
   useEffect(() => {
-    if (models.length > 0 && !models.some((m) => m.id === modelId)) {
-      setModelId(models[0].id);
+    if (modelId !== "__custom__" && modelId && !models.some((m) => m.id === modelId)) {
+      setModelId(models[0]?.id ?? "");
     }
   }, [provider, models, modelId]);
+
+  const effectiveModelId = modelId === "__custom__" ? customModelId : modelId;
 
   async function handleSave() {
     if (enabled && !provider) {
       setError("Provider is required.");
       return;
     }
-    if (enabled && !modelId) {
+    if (enabled && !effectiveModelId) {
       setError("Model is required.");
       return;
     }
@@ -79,7 +109,7 @@ export function AutoRenameCard({
       // Validate key when enabling
       if (enabled) {
         setValidating(true);
-        const valBody: Record<string, string> = { provider, modelId };
+        const valBody: Record<string, string> = { provider, modelId: effectiveModelId };
         if (apiKey.trim()) valBody.apiKey = apiKey.trim();
         const valRes = await apiFetch("/api/v1/config/admin/validate-auto-rename", {
           method: "POST",
@@ -104,7 +134,7 @@ export function AutoRenameCard({
       const payload: Record<string, unknown> = {
         enabled,
         provider,
-        modelId,
+        modelId: effectiveModelId,
       };
       if (apiKey.trim()) {
         payload.apiKey = apiKey.trim();
@@ -224,8 +254,22 @@ export function AutoRenameCard({
                       {m.label}
                     </SelectItem>
                   ))}
+                  <SelectItem value="__custom__">Custom model…</SelectItem>
                 </SelectContent>
               </Select>
+              {modelId === "__custom__" && (
+                <Input
+                  value={customModelId}
+                  onChange={(e) => {
+                    setCustomModelId(e.target.value);
+                    setSaved(false);
+                    setError(null);
+                    setValidationError(null);
+                  }}
+                  placeholder="e.g. claude-haiku-4-5"
+                  className="font-mono text-xs"
+                />
+              )}
             </div>
 
             <div className="space-y-1.5">
