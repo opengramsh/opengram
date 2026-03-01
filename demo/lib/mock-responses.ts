@@ -175,37 +175,15 @@ These are rendered using KaTeX for fast, high-quality math typesetting.`,
   },
   {
     keywords: ['deploy', 'install', 'setup', 'self-host', 'docker'],
-    response: `Getting OpenGram running is simple! Here are your options:
+    response: `Getting OpenGram running is simple — just one command:
 
-### Option 1: Global npm install
 \`\`\`bash
-npm install -g opengram
-opengram setup    # interactive wizard
-opengram start    # starts the server
+curl -fsSL https://opengram.sh/install | sh
 \`\`\`
 
-### Option 2: Docker
-\`\`\`bash
-docker run -d \\
-  --name opengram \\
-  -p 3334:3334 \\
-  -v opengram-data:/data \\
-  opengram/opengram
-\`\`\`
+This will install OpenGram, run the interactive setup wizard, and start the server as a systemd service.
 
-### Option 3: Docker Compose
-\`\`\`yaml
-services:
-  opengram:
-    image: opengram/opengram
-    ports:
-      - "3334:3334"
-    volumes:
-      - ./data:/data
-    restart: unless-stopped
-\`\`\`
-
-After starting, open \`http://localhost:3334\` in your browser.
+Once running, open the URL shown in your terminal to access the chat interface.
 
 Check out [opengram.sh](https://opengram.sh) for the full documentation!`,
   },

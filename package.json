@@ -17,6 +17,7 @@
     "dev:server": "OPENGRAM_SERVER_PORT=3334 tsx --watch src/server.ts",
     "dev:client": "vite",
     "build": "vite build && tsup",
+    "build:demo": "vite build --config demo/vite.config.demo.ts && cp demo/vercel.json dist/demo/vercel.json",
     "start": "node dist/server/server.js",
     "db:migrate": "node deploy/docker/run-migrations.js",
     "lint": "eslint",

@@ -87,11 +87,23 @@ export type DemoConfig = {
   autoRenameProviders: never[];
 };
 
+export type MediaItem = {
+  id: string;
+  message_id: string | null;
+  filename: string;
+  created_at: string;
+  byte_size: number;
+  content_type: string;
+  kind: 'image' | 'audio' | 'file';
+  blobUrl?: string;
+};
+
 // ── State ──────────────────────────────────────────────────────────────
 
 const chats = new Map<string, Chat>();
 const messagesByChat = new Map<string, Message[]>();
 const requestsByChat = new Map<string, RequestItem[]>();
+const mediaByChat = new Map<string, MediaItem[]>();
 
 // ── Config ─────────────────────────────────────────────────────────────
 
@@ -163,34 +175,35 @@ function makeMessage(
 // ── Seed data ──────────────────────────────────────────────────────────
 
 function seed() {
-  const now = Date.now();
+  // Use yesterday as base so new chats always appear more recent
+  const yesterday = Date.now() - 86_400_000;
 
-  // Chat 1 — "Getting Started"
+  // Chat 1 — "Getting Started" (pinned — always first in the list)
   const chat1Id = 'demo-getting-started';
   const chat1Messages: Message[] = [
-    makeMessage(chat1Id, 'user', 'user:primary', 'Hello! What is OpenGram?', new Date(now - 300000).toISOString()),
+    makeMessage(chat1Id, 'user', 'user:primary', 'Hello! What is OpenGram?', new Date(yesterday - 300000).toISOString()),
     makeMessage(
       chat1Id,
       'agent',
       'assistant',
-      `**OpenGram** is an open-source, self-hosted chat platform that lets you connect AI agents to your conversations.\n\nHere are some highlights:\n\n- **Multi-agent support** — add multiple AI agents to a single chat\n- **Streaming responses** — see agent replies in real time\n- **Media sharing** — send images, audio, and files\n- **Pending requests** — agents can ask for user input with choice buttons, text fields, or forms\n- **Tags & pinning** — organize your conversations\n- **Full-text search** — find any message instantly`,
-      new Date(now - 295000).toISOString(),
+      `**OpenGram** is an open-source, self-hosted chat platform that lets you connect AI agents to your conversations.\n\nHere are some of the key features:\n\n- **Multiple chats per agent** — one agent, multiple separate conversations with no context bleed between your different tasks\n- **Structured requests** — your agents can send choice buttons, forms, text inputs and other customisable elements within the chat *(coming soon)*\n- **In-chat task management** — turn conversations into action: create, assign, and track tasks without leaving the chat *(coming soon)*\n- **Mobile PWA** — installs on iOS and Android home screen, no App Store or update approval cycle\n- **Runtime-agnostic API** — works with OpenClaw, custom orchestrators, or any backend that can make an HTTP request\n- **Self-hosted** — SQLite + a single systemd service, runs on a VPS, Raspberry Pi, or your computer`,
+      new Date(yesterday - 295000).toISOString(),
     ),
-    makeMessage(chat1Id, 'user', 'user:primary', 'Can you show me some markdown?', new Date(now - 200000).toISOString()),
+    makeMessage(chat1Id, 'user', 'user:primary', 'Can you show me some markdown?', new Date(yesterday - 200000).toISOString()),
     makeMessage(
       chat1Id,
       'agent',
       'assistant',
       `# Markdown Demo\n\nSure! Here's what OpenGram can render:\n\n## Text formatting\n**Bold**, *italic*, ~~strikethrough~~, and \`inline code\`.\n\n## Lists\n1. Ordered item one\n2. Ordered item two\n\n- Unordered bullet\n- Another bullet\n\n## Blockquote\n> "The best way to predict the future is to invent it." — Alan Kay\n\n## Code block\n\`\`\`python\ndef greet(name: str) -> str:\n    return f"Hello, {name}! Welcome to OpenGram."\n\nprint(greet("World"))\n\`\`\`\n\n## Table\n| Feature | Status |\n|---------|--------|\n| Markdown | Done |\n| LaTeX math | Done |\n| Mermaid diagrams | Done |`,
-      new Date(now - 195000).toISOString(),
+      new Date(yesterday - 195000).toISOString(),
     ),
-    makeMessage(chat1Id, 'user', 'user:primary', 'That looks great! How do I deploy it?', new Date(now - 100000).toISOString()),
+    makeMessage(chat1Id, 'user', 'user:primary', 'That looks great! How do I deploy it?', new Date(yesterday - 100000).toISOString()),
     makeMessage(
       chat1Id,
       'agent',
       'assistant',
-      `Deploying OpenGram is straightforward:\n\n\`\`\`bash\nnpm install -g opengram\nopengram setup\nopengram start\n\`\`\`\n\nYou can also use Docker:\n\n\`\`\`bash\ndocker run -d -p 3334:3334 opengram/opengram\n\`\`\`\n\nCheck out [opengram.sh](https://opengram.sh) for the full documentation.`,
-      new Date(now - 95000).toISOString(),
+      `Deploying OpenGram is straightforward — just one command:\n\n\`\`\`bash\ncurl -fsSL https://opengram.sh/install | sh\n\`\`\`\n\nThis will install OpenGram, run the interactive setup wizard, and start the server as a systemd service.\n\nCheck out [opengram.sh](https://opengram.sh) for the full documentation.`,
+      new Date(yesterday - 95000).toISOString(),
     ),
   ];
 
@@ -200,62 +213,43 @@ function seed() {
     title: 'Getting Started',
     title_source: 'manual',
     tags: ['demo', 'tutorial'],
-    pinned: false,
+    pinned: true,
     agent_ids: ['assistant'],
     model_id: 'gpt-4o',
     last_message_preview: 'Deploying OpenGram is straightforward...',
     last_message_role: 'agent',
     pending_requests_count: 0,
-    last_read_at: new Date(now).toISOString(),
+    last_read_at: new Date(yesterday).toISOString(),
     unread_count: 0,
     notifications_muted: false,
-    created_at: new Date(now - 300000).toISOString(),
-    updated_at: new Date(now - 95000).toISOString(),
-    last_message_at: new Date(now - 95000).toISOString(),
+    created_at: new Date(yesterday - 300000).toISOString(),
+    updated_at: new Date(yesterday - 95000).toISOString(),
+    last_message_at: new Date(yesterday - 95000).toISOString(),
   });
   messagesByChat.set(chat1Id, chat1Messages);
   requestsByChat.set(chat1Id, []);
+  mediaByChat.set(chat1Id, []);
 
-  // Chat 2 — "Project Planning" with a pending choice request
+  // Chat 2 — "Project Planning" (no pending request)
   const chat2Id = 'demo-project-planning';
   const chat2Messages: Message[] = [
-    makeMessage(chat2Id, 'user', 'user:primary', 'I need help planning our next sprint.', new Date(now - 500000).toISOString()),
+    makeMessage(chat2Id, 'user', 'user:primary', 'I need help planning our next sprint.', new Date(yesterday - 500000).toISOString()),
     makeMessage(
       chat2Id,
       'agent',
       'support',
-      `I'd be happy to help with sprint planning! Let me break this down:\n\n### Current backlog priorities\n1. **User authentication** — implement OAuth2 login\n2. **Dashboard redesign** — new analytics widgets\n3. **API rate limiting** — protect against abuse\n4. **Mobile responsive fixes** — address reported layout issues\n\nI've created a quick decision below to help prioritize. Which area should we focus on first?`,
-      new Date(now - 495000).toISOString(),
+      `I'd be happy to help with sprint planning! Let me break this down:\n\n### Current backlog priorities\n1. **User authentication** — implement OAuth2 login\n2. **Dashboard redesign** — new analytics widgets\n3. **API rate limiting** — protect against abuse\n4. **Mobile responsive fixes** — address reported layout issues\n\nWhich area should we focus on first?`,
+      new Date(yesterday - 495000).toISOString(),
     ),
-    makeMessage(chat2Id, 'user', 'user:primary', 'Good overview. Let me think about the priority.', new Date(now - 400000).toISOString()),
+    makeMessage(chat2Id, 'user', 'user:primary', 'Good overview. Let me think about the priority.', new Date(yesterday - 400000).toISOString()),
     makeMessage(
       chat2Id,
       'agent',
       'support',
-      `Take your time! I've sent you a quick-pick below so you can let me know when you're ready. \n\nIn the meantime, here's a rough effort estimate:\n\n| Task | Effort | Impact |\n|------|--------|--------|\n| OAuth2 | 5 days | High |\n| Dashboard | 3 days | Medium |\n| Rate limiting | 2 days | High |\n| Mobile fixes | 1 day | Medium |`,
-      new Date(now - 395000).toISOString(),
+      `Take your time! Here's a rough effort estimate to help you decide:\n\n| Task | Effort | Impact |\n|------|--------|--------|\n| OAuth2 | 5 days | High |\n| Dashboard | 3 days | Medium |\n| Rate limiting | 2 days | High |\n| Mobile fixes | 1 day | Medium |`,
+      new Date(yesterday - 395000).toISOString(),
     ),
   ];
-
-  const chat2Request: RequestItem = {
-    id: 'demo-request-1',
-    chat_id: chat2Id,
-    type: 'choice',
-    status: 'pending',
-    title: 'Sprint priority',
-    body: 'Which area should we focus on this sprint?',
-    config: {
-      options: [
-        { id: 'auth', label: 'User Authentication', variant: 'primary' },
-        { id: 'dashboard', label: 'Dashboard Redesign', variant: 'secondary' },
-        { id: 'rate-limit', label: 'API Rate Limiting', variant: 'secondary' },
-        { id: 'mobile', label: 'Mobile Fixes', variant: 'secondary' },
-      ],
-      minSelections: 1,
-      maxSelections: 2,
-    },
-    created_at: new Date(now - 395000).toISOString(),
-  };
 
   chats.set(chat2Id, {
     id: chat2Id,
@@ -266,37 +260,38 @@ function seed() {
     pinned: false,
     agent_ids: ['support'],
     model_id: 'gpt-4o',
-    last_message_preview: 'Take your time! I\'ve sent you a quick-pick...',
+    last_message_preview: 'Take your time! Here\'s a rough effort estimate...',
     last_message_role: 'agent',
-    pending_requests_count: 1,
-    last_read_at: new Date(now - 400000).toISOString(),
-    unread_count: 1,
+    pending_requests_count: 0,
+    last_read_at: new Date(yesterday).toISOString(),
+    unread_count: 0,
     notifications_muted: false,
-    created_at: new Date(now - 500000).toISOString(),
-    updated_at: new Date(now - 395000).toISOString(),
-    last_message_at: new Date(now - 395000).toISOString(),
+    created_at: new Date(yesterday - 500000).toISOString(),
+    updated_at: new Date(yesterday - 395000).toISOString(),
+    last_message_at: new Date(yesterday - 395000).toISOString(),
   });
   messagesByChat.set(chat2Id, chat2Messages);
-  requestsByChat.set(chat2Id, [chat2Request]);
+  requestsByChat.set(chat2Id, []);
+  mediaByChat.set(chat2Id, []);
 
-  // Chat 3 — "Creative Writing" (pinned, tagged)
+  // Chat 3 — "Creative Writing" (tagged, not pinned)
   const chat3Id = 'demo-creative-writing';
   const chat3Messages: Message[] = [
-    makeMessage(chat3Id, 'user', 'user:primary', 'Write me a short poem about open source software.', new Date(now - 600000).toISOString()),
+    makeMessage(chat3Id, 'user', 'user:primary', 'Write me a short poem about open source software.', new Date(yesterday - 600000).toISOString()),
     makeMessage(
       chat3Id,
       'agent',
       'creative',
-      `Here's a short poem for you:\n\n---\n\n### The Open Garden\n\n*Lines of code like seeds are sown,*\n*In repos where the wild thoughts have grown.*\n*No walls, no gates, the garden's free —*\n*A commons built for you and me.*\n\n*Pull requests bloom like springtime flowers,*n*Reviewed through late and moonlit hours.*\n*Each merge a stitch in fabric shared,*\n*A quilt of minds that showed they cared.*\n\n---\n\nWant me to try a different style? I can do haiku, limerick, or free verse.`,
-      new Date(now - 595000).toISOString(),
+      `Here's a short poem for you:\n\n---\n\n### The Open Garden\n\n*Lines of code like seeds are sown,*\n*In repos where the wild thoughts have grown.*\n*No walls, no gates, the garden's free —*\n*A commons built for you and me.*\n\n*Pull requests bloom like springtime flowers,*\n*Reviewed through late and moonlit hours.*\n*Each merge a stitch in fabric shared,*\n*A quilt of minds that showed they cared.*\n\n---\n\nWant me to try a different style? I can do haiku, limerick, or free verse.`,
+      new Date(yesterday - 595000).toISOString(),
     ),
-    makeMessage(chat3Id, 'user', 'user:primary', 'Love it! Try a haiku.', new Date(now - 550000).toISOString()),
+    makeMessage(chat3Id, 'user', 'user:primary', 'Love it! Try a haiku.', new Date(yesterday - 550000).toISOString()),
     makeMessage(
       chat3Id,
       'agent',
       'creative',
       `### Open Source Haiku\n\n*Forked beneath the stars,*\n*Branches merge in silent code —*\n*Freedom, line by line.*`,
-      new Date(now - 545000).toISOString(),
+      new Date(yesterday - 545000).toISOString(),
     ),
   ];
 
@@ -306,21 +301,22 @@ function seed() {
     title: 'Creative Writing',
     title_source: 'manual',
     tags: ['creative', 'fun'],
-    pinned: true,
+    pinned: false,
     agent_ids: ['creative'],
     model_id: 'claude-sonnet',
     last_message_preview: 'Open Source Haiku — Forked beneath the stars...',
     last_message_role: 'agent',
     pending_requests_count: 0,
-    last_read_at: new Date(now).toISOString(),
+    last_read_at: new Date(yesterday).toISOString(),
     unread_count: 0,
     notifications_muted: false,
-    created_at: new Date(now - 600000).toISOString(),
-    updated_at: new Date(now - 545000).toISOString(),
-    last_message_at: new Date(now - 545000).toISOString(),
+    created_at: new Date(yesterday - 600000).toISOString(),
+    updated_at: new Date(yesterday - 545000).toISOString(),
+    last_message_at: new Date(yesterday - 545000).toISOString(),
   });
   messagesByChat.set(chat3Id, chat3Messages);
   requestsByChat.set(chat3Id, []);
+  mediaByChat.set(chat3Id, []);
 }
 
 // Run seed on module load
@@ -374,6 +370,7 @@ export function createChat(params: {
   chats.set(id, chat);
   messagesByChat.set(id, []);
   requestsByChat.set(id, []);
+  mediaByChat.set(id, []);
   return chat;
 }
 
@@ -432,12 +429,25 @@ export function getMessages(chatId: string): Message[] {
   return messagesByChat.get(chatId) ?? [];
 }
 
+export function addMedia(chatId: string, item: MediaItem): void {
+  const items = mediaByChat.get(chatId);
+  if (items) {
+    items.push(item);
+  } else {
+    mediaByChat.set(chatId, [item]);
+  }
+}
+
+export function getMediaForChat(chatId: string): MediaItem[] {
+  return mediaByChat.get(chatId) ?? [];
+}
+
 export function addMessage(
   chatId: string,
   role: MessageRole,
   senderId: string,
   content: string,
-  options?: { streaming?: boolean; modelId?: string },
+  options?: { streaming?: boolean; modelId?: string; trace?: Record<string, unknown> },
 ): Message {
   const now = ts();
   const msg: Message = {
@@ -451,7 +461,7 @@ export function addMessage(
     content_partial: options?.streaming ? '' : null,
     stream_state: options?.streaming ? 'streaming' : 'none',
     model_id: options?.modelId ?? null,
-    trace: null,
+    trace: options?.trace ?? null,
   };
 
   const msgs = messagesByChat.get(chatId);

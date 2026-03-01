@@ -4,6 +4,7 @@
 import { emitMockEvent } from './mock-events-stream';
 import { pickResponse } from './mock-responses';
 import {
+  addMedia,
   addMessage,
   archiveChat,
   cancelRequest,
@@ -12,6 +13,7 @@ import {
   generateId,
   getChat,
   getChats,
+  getMediaForChat,
   getMessages,
   getPendingSummary,
   getRequests,
@@ -24,6 +26,10 @@ import {
   updateChat,
   updateMessage,
 } from './mock-store';
+import type { MediaItem } from './mock-store';
+
+// Map media id → blob URL for serving uploaded files in-browser
+const blobUrlMap = new Map<string, string>();
 
 // ── Exported interface (must match api-fetch.ts) ──────────────────────
 
@@ -35,9 +41,9 @@ export function setApiSecret(_secret: string | null) {
   // No-op in demo
 }
 
-export function buildFileUrl(mediaId: string, variant?: string): string {
-  // Return a placeholder; no real media in demo
-  return variant ? `/api/v1/files/${mediaId}/${variant}` : `/api/v1/files/${mediaId}`;
+export function buildFileUrl(mediaId: string, _variant?: string): string {
+  // Return the blob URL if we have one (uploaded in this session), otherwise a placeholder
+  return blobUrlMap.get(mediaId) ?? `/api/v1/files/${mediaId}`;
 }
 
 // ── Route matching ────────────────────────────────────────────────────
@@ -82,6 +88,18 @@ function noContent(): Response {
 }
 
 // ── Simulated streaming response ──────────────────────────────────────
+
+function autoRenameIfNeeded(chatId: string, firstUserText: string) {
+  const chat = getChat(chatId);
+  if (!chat || chat.title_source !== 'default') return;
+
+  const trimmed = firstUserText.trim();
+  if (!trimmed) return;
+
+  const newTitle = trimmed.length > 30 ? trimmed.slice(0, 30) + '...' : trimmed;
+  updateChat(chatId, { title: newTitle, titleAutoRenamed: true });
+  emitMockEvent('chat.updated', { chat: getChat(chatId) });
+}
 
 function simulateAgentResponse(chatId: string, userContent: string) {
   const chat = getChat(chatId);
@@ -171,7 +189,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   const pathname = url.pathname;
 
   let body: Record<string, unknown> | null = null;
-  if (init?.body) {
+  if (init?.body && !(init.body instanceof FormData)) {
     try {
       body = JSON.parse(typeof init.body === 'string' ? init.body : new TextDecoder().decode(init.body as ArrayBuffer));
     } catch {
@@ -208,6 +226,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     // If firstMessage is provided, auto-send it
     if (body?.firstMessage && typeof body.firstMessage === 'string') {
       const userMsg = addMessage(chat.id, 'user', 'user:primary', body.firstMessage);
+      autoRenameIfNeeded(chat.id, body.firstMessage);
       setTimeout(() => {
         emitMockEvent('message.created', { chatId: chat.id, message: userMsg });
         simulateAgentResponse(chat.id, body!.firstMessage as string);
@@ -250,14 +269,35 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const senderId = (body?.senderId as string) ?? 'user:primary';
     const content = (body?.content as string) ?? '';
     const streaming = (body?.streaming as boolean) ?? false;
+    const trace = body?.trace as Record<string, unknown> | undefined;
 
     const msg = addMessage(chatId, role as 'user' | 'agent' | 'system' | 'tool', senderId, content, {
       streaming,
       modelId: body?.modelId as string | undefined,
+      trace,
     });
+
+    // Link media items to this message
+    if (trace) {
+      const mediaIds: string[] = Array.isArray(trace.mediaIds)
+        ? (trace.mediaIds as string[])
+        : typeof trace.mediaId === 'string'
+          ? [trace.mediaId]
+          : [];
+      const chatMedia = getMediaForChat(chatId);
+      for (const mid of mediaIds) {
+        const item = chatMedia.find((m) => m.id === mid);
+        if (item) item.message_id = msg.id;
+      }
+    }
 
     emitMockEvent('message.created', { chatId, message: msg });
     emitMockEvent('chat.updated', { chat: getChat(chatId) });
+
+    // Auto-rename if this is the first user message in a default-titled chat
+    if (role === 'user' && content) {
+      autoRenameIfNeeded(chatId, content);
+    }
 
     // Auto-respond for user messages
     if (role === 'user' && !streaming) {
@@ -292,7 +332,8 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   // ── Media ─────────────────────────────────────────────────────────
   m = matchRoute('/api/v1/chats/:chatId/media', pathname);
   if (m && method === 'GET') {
-    return json({ data: [], cursor: { next: null, hasMore: false } });
+    const data = getMediaForChat(m.params.chatId);
+    return json({ data, cursor: { next: null, hasMore: false } });
   }
 
   // ── Requests ──────────────────────────────────────────────────────
@@ -385,19 +426,45 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     return json({ ok: true });
   }
 
-  // ── File upload (no-op, return fake media item) ───────────────────
+  // ── File upload ────────────────────────────────────────────────────
   m = matchRoute('/api/v1/chats/:chatId/media', pathname);
   if (m && method === 'POST') {
-    const fakeMedia = {
-      id: generateId(),
+    const chatId = m.params.chatId;
+    let file: File | null = null;
+    let kindHint: string | null = null;
+
+    // Extract file from FormData if available
+    if (init?.body instanceof FormData) {
+      file = init.body.get('file') as File | null;
+      kindHint = init.body.get('kind') as string | null;
+    }
+
+    const id = generateId();
+    const contentType = file?.type || 'application/octet-stream';
+    const kind: MediaItem['kind'] = kindHint === 'image' || contentType.startsWith('image/')
+      ? 'image'
+      : kindHint === 'audio' || contentType.startsWith('audio/')
+        ? 'audio'
+        : 'file';
+
+    // Create a blob URL so the file can be served back in-browser
+    if (file) {
+      const url = URL.createObjectURL(file);
+      blobUrlMap.set(id, url);
+    }
+
+    const mediaItem: MediaItem = {
+      id,
       message_id: null,
-      filename: 'upload.bin',
+      filename: file?.name || 'upload.bin',
       created_at: new Date().toISOString(),
-      byte_size: 0,
-      content_type: 'application/octet-stream',
-      kind: 'file',
+      byte_size: file?.size ?? 0,
+      content_type: contentType,
+      kind,
     };
-    return json(fakeMedia, 201);
+
+    addMedia(chatId, mediaItem);
+    return json(mediaItem, 201);
   }
 
   // ── Fallback ──────────────────────────────────────────────────────
