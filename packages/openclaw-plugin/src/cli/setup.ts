@@ -425,21 +425,23 @@ export function applyOpenGramConfig(
   // Auto-rename is now managed by Opengram itself — remove any legacy config
   delete opengramSection.autoRename;
 
-  // Disable the default daily 4 AM session reset so chat context persists
-  // indefinitely. Uses idle mode with a ~100-year timeout since "never" is
-  // not a valid mode. Only sets the default if the user hasn't already
-  // configured a custom session reset policy.
+  // Set a sensible global session reset default (daily at 4 AM) and override
+  // the opengram channel specifically to use a ~100-year idle timeout so chat
+  // context persists indefinitely. Only sets defaults if not already configured.
   const existingSession = (cfg as any).session ?? {};
   const existingReset = existingSession.reset;
+  const existingResetByChannel = existingSession.resetByChannel ?? {};
   const session = {
     ...existingSession,
     reset: existingReset ?? {
-      mode: "idle",
-      idleMinutes: 52560000,
+      mode: "daily",
+      atHour: 4,
+    },
+    resetByChannel: {
+      ...existingResetByChannel,
+      opengram: existingResetByChannel.opengram ?? { mode: "idle", idleMinutes: 52560000 },
     },
   };
-  // Clean up legacy invalid keys that older versions may have written.
-  delete (session as any).resetByChannel;
 
   const plugins = (cfg as any).plugins ?? {};
   const entries = plugins.entries ?? {};

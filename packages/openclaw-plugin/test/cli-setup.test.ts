@@ -322,6 +322,83 @@ describe("applyOpenGramConfig", () => {
     expect((result as any).plugins.load.paths).toEqual([]);
   });
 
+  it("sets session.reset to daily at 4 AM when no existing reset", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    expect((result as any).session.reset).toEqual({ mode: "daily", atHour: 4 });
+  });
+
+  it("preserves existing session.reset if already configured", () => {
+    const cfg = createMinimalConfig({
+      session: { reset: { mode: "idle", idleMinutes: 30 } },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    expect((result as any).session.reset).toEqual({ mode: "idle", idleMinutes: 30 });
+  });
+
+  it("sets session.resetByChannel.opengram to idle with ~100-year timeout when not set", () => {
+    const cfg = createMinimalConfig();
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    expect((result as any).session.resetByChannel.opengram).toEqual({
+      mode: "idle",
+      idleMinutes: 52560000,
+    });
+  });
+
+  it("preserves existing resetByChannel entries for other channels", () => {
+    const cfg = createMinimalConfig({
+      session: {
+        resetByChannel: {
+          discord: { mode: "daily", atHour: 6 },
+        },
+      },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    expect((result as any).session.resetByChannel.discord).toEqual({
+      mode: "daily",
+      atHour: 6,
+    });
+    expect((result as any).session.resetByChannel.opengram).toEqual({
+      mode: "idle",
+      idleMinutes: 52560000,
+    });
+  });
+
+  it("preserves existing resetByChannel.opengram if already configured", () => {
+    const cfg = createMinimalConfig({
+      session: {
+        resetByChannel: {
+          opengram: { mode: "daily", atHour: 2 },
+        },
+      },
+    });
+    const result = applyOpenGramConfig(cfg, {
+      baseUrl: "http://localhost:3000",
+      agents: [],
+    });
+
+    expect((result as any).session.resetByChannel.opengram).toEqual({
+      mode: "daily",
+      atHour: 2,
+    });
+  });
+
   it("preserves existing opengram fields not set by wizard", () => {
     const cfg = createMinimalConfig({
       channels: { opengram: { reconnectDelayMs: 5000, baseUrl: "old" } },
