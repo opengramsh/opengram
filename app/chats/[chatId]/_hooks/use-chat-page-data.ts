@@ -31,9 +31,10 @@ type UseChatPageDataArgs = {
   chatId?: string;
   initialChat?: Chat | null;
   scrollToMessageId?: string;
+  fromPath?: string;
 };
 
-export function useChatPageData({ chatId, initialChat = null, scrollToMessageId }: UseChatPageDataArgs) {
+export function useChatPageData({ chatId, initialChat = null, scrollToMessageId, fromPath }: UseChatPageDataArgs) {
   const navigate = useNavigate();
   const cachedConfig = getFrontendConfigCache();
 
@@ -323,8 +324,8 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId 
   }, [chatId]);
 
   const goBack = useCallback(() => {
-    navigate('/');
-  }, [navigate]);
+    navigate(fromPath || '/');
+  }, [navigate, fromPath]);
 
   const settings = useChatSettingsActions({ chat, setChat, setError, goBack });
 

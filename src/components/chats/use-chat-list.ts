@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { apiFetch } from '@/src/lib/api-fetch';
-import { setFrontendConfigCache } from '@/src/lib/frontend-config-cache';
+import { getFrontendConfigCache, setFrontendConfigCache } from '@/src/lib/frontend-config-cache';
 import { buildChatsQuery, sortInboxChats } from '@/src/lib/inbox';
 import {
   normalizeFirstMessageForNewChat,
@@ -29,6 +29,9 @@ function emptyAsync() {
   return Promise.resolve();
 }
 
+// Module-level cache so the archived chat list survives unmount/remount
+let archivedChatsSnapshot: Chat[] | null = null;
+
 export function chatMatchesListFilters(chat: Chat, filters: ChatListFilters, archived: boolean) {
   if (chat.is_archived !== archived) {
     return false;
@@ -47,11 +50,13 @@ export function chatMatchesListFilters(chat: Chat, filters: ChatListFilters, arc
 
 export function useChatList(options: UseChatListOptions) {
   const { archived, chatsErrorMessage, onRefreshExtras = emptyAsync, onMutationSuccess = emptyAsync } = options;
-  const [appName, setAppName] = useState('OpenGram');
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
-  const [defaultModelIdForNewChats, setDefaultModelIdForNewChats] = useState('');
-  const [chats, setChats] = useState<Chat[]>([]);
+  const cachedConfig = getFrontendConfigCache();
+  const cachedChats = archived ? archivedChatsSnapshot : null;
+  const [appName, setAppName] = useState(cachedConfig?.appName || 'OpenGram');
+  const [agents, setAgents] = useState<Agent[]>(cachedConfig?.agents ?? []);
+  const [models, setModels] = useState<Model[]>(cachedConfig?.models ?? []);
+  const [defaultModelIdForNewChats, setDefaultModelIdForNewChats] = useState(cachedConfig?.defaultModelIdForNewChats ?? '');
+  const [chats, setChats] = useState<Chat[]>(cachedChats ?? []);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState('');
@@ -61,9 +66,10 @@ export function useChatList(options: UseChatListOptions) {
   const [newChatFirstMessage, setNewChatFirstMessage] = useState('');
   const [newChatError, setNewChatError] = useState<string | null>(null);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
-  const [configLoaded, setConfigLoaded] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [configLoaded, setConfigLoaded] = useState(!!cachedConfig);
+  const [loading, setLoading] = useState(!cachedChats);
   const [error, setError] = useState<string | null>(null);
+  const silentRefreshRef = useRef(!!cachedChats);
   const [searchResults, setSearchResults] = useState<SearchResponse | null>(null);
   const [isSearchResultsLoading, setIsSearchResultsLoading] = useState(false);
   const fetchIdRef = useRef(0);
@@ -158,9 +164,21 @@ export function useChatList(options: UseChatListOptions) {
     setConfigLoaded(true);
   }, []);
 
+  // Update archived chats cache whenever chats change
+  useEffect(() => {
+    if (archived && chats.length > 0) {
+      archivedChatsSnapshot = chats;
+    }
+  }, [archived, chats]);
+
   const loadChats = useCallback(async () => {
     const currentFetchId = ++fetchIdRef.current;
-    setLoading(true);
+    // Skip loading flash when restoring from cache on first mount
+    if (silentRefreshRef.current) {
+      silentRefreshRef.current = false;
+    } else {
+      setLoading(true);
+    }
     setError(null);
 
     try {

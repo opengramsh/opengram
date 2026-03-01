@@ -7,6 +7,7 @@ import type { Chat } from '@/app/chats/[chatId]/_lib/types';
 type ChatLocationState = {
   chat?: Partial<Chat> & { id: string };
   scrollToMessageId?: string;
+  fromPath?: string;
 };
 
 function normalizeInitialChat(raw: ChatLocationState['chat'], expectedChatId?: string): Chat | null {
@@ -36,9 +37,10 @@ export default function ChatPage() {
   const locationState = location.state as ChatLocationState | null;
   const initialChat = normalizeInitialChat(locationState?.chat, chatId);
   const scrollToMessageId = locationState?.scrollToMessageId;
+  const fromPath = locationState?.fromPath;
 
   return (
-    <ChatPageProvider key={chatId} chatId={chatId} initialChat={initialChat} scrollToMessageId={scrollToMessageId}>
+    <ChatPageProvider key={chatId} chatId={chatId} initialChat={initialChat} scrollToMessageId={scrollToMessageId} fromPath={fromPath}>
       <div className="flex h-[100dvh] w-full flex-col bg-background">
         <ChatPageSections />
       </div>

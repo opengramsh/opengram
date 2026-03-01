@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { Facehash } from 'facehash';
 import { MessageCirclePlus, Search, X } from 'lucide-react';
 
@@ -41,6 +41,7 @@ export function ChatListPage({
   unreadByAgent,
 }: ChatListPageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,6 +195,7 @@ export function ChatListPage({
                   }
                   : undefined,
                 scrollToMessageId: messageId,
+                fromPath: location.pathname,
               },
             })}
         />
@@ -207,7 +209,7 @@ export function ChatListPage({
           rowActionLabel={rowActionLabel}
           activeChatId={activeChatId}
           streamingChatIds={streamingChatIds}
-          onOpenChat={(chat) => navigate(`/chats/${chat.id}`, { state: { chat } })}
+          onOpenChat={(chat) => navigate(`/chats/${chat.id}`, { state: { chat, fromPath: location.pathname } })}
           onMarkRead={markChatRead}
           onMarkUnread={markChatUnread}
           onTogglePin={togglePin}
