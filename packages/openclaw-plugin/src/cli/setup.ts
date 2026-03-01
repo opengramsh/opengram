@@ -1,8 +1,6 @@
 import type { OpenClawConfig, WizardPrompter } from "openclaw/plugin-sdk";
 
 import { OpenGramClient } from "../api-client.js";
-import type { AutoRenameConfig } from "../config.js";
-import { RENAME_PROVIDERS, detectApiKey, getEnvVarName } from "../rename-providers.js";
 import { detectOpengramUrl } from "./tailscale.js";
 
 export type SetupWizardOptions = {
@@ -35,7 +33,6 @@ export async function runSetupWizard(
       baseUrl?: string;
       instanceSecret?: string;
       agents?: string[];
-      autoRename?: AutoRenameConfig;
     } | undefined) ?? {};
 
   // --- Step 1: OpenGram URL ---
@@ -70,9 +67,6 @@ export async function runSetupWizard(
   // --- Step 5: Agent selection (from OpenClaw config) ---
   const { agentIds, agentConfigs } = await promptAgents(prompter, cfg, existing.agents);
 
-  // --- Step 5b: Auto-rename configuration ---
-  const autoRename = await promptAutoRename(prompter, existing.autoRename);
-
   // --- Step 6: Push to OpenGram ---
   if (agentConfigs.length > 0) {
     const spin = prompter.progress("Pushing config to OpenGram…");
@@ -94,7 +88,6 @@ export async function runSetupWizard(
     baseUrl,
     instanceSecret,
     agents: agentIds,
-    autoRename,
   });
 
   await prompter.note(
@@ -347,130 +340,6 @@ async function promptAgents(
   return { agentIds: selected, agentConfigs };
 }
 
-async function promptAutoRename(
-  prompter: WizardPrompter,
-  existing?: AutoRenameConfig,
-): Promise<AutoRenameConfig | undefined> {
-  const enabled = await prompter.confirm({
-    message: "Enable automatic chat renaming? (Uses a cheap AI model to title new chats after the first exchange)",
-    initialValue: existing?.enabled ?? false,
-  });
-
-  if (!enabled) return undefined;
-
-  // --- Provider selection ---
-  const providerOptions = RENAME_PROVIDERS.map((p) => {
-    const hasEnvKey = !!detectApiKey(p);
-    const hasConfigKey = p.id === existing?.provider && !!existing?.apiKey;
-    const detected = hasEnvKey || hasConfigKey;
-    return {
-      value: p.id,
-      label: p.name,
-      hint: detected ? "API key detected ✓" : "no API key found",
-    };
-  });
-
-  // Default to existing provider, or the first one with a detected key, or the first overall.
-  const defaultProvider =
-    existing?.provider ??
-    RENAME_PROVIDERS.find((p) => detectApiKey(p) || (p.id === existing?.provider && !!existing?.apiKey))?.id ??
-    RENAME_PROVIDERS[0].id;
-
-  const providerId = await prompter.select<typeof RENAME_PROVIDERS[number]["id"]>({
-    message: "Which AI provider should be used for renaming chats?",
-    options: providerOptions,
-    initialValue: defaultProvider,
-  });
-
-  const provider = RENAME_PROVIDERS.find((p) => p.id === providerId);
-  if (!provider) return undefined;
-
-  // --- API key ---
-  const envKey = detectApiKey(provider);
-  const configKey = existing?.provider === providerId ? existing?.apiKey : undefined;
-  const detectedKey = envKey ?? configKey;
-  let apiKey: string | undefined;
-
-  if (detectedKey) {
-    const keySourceMsg = envKey
-      ? `${getEnvVarName(provider)} detected in environment`
-      : "API key found in existing config";
-    const useExistingKey = await prompter.confirm({
-      message: `${keySourceMsg}. Use this key for renaming?`,
-      initialValue: true,
-    });
-
-    if (!useExistingKey) {
-      apiKey = await prompter.text({
-        message: `Enter your ${provider.name} API key`,
-        placeholder: "sk-...",
-        validate(value: string) {
-          if (!value.trim()) return "API key cannot be empty";
-          return undefined;
-        },
-      });
-    } else if (configKey && !envKey) {
-      // Key came from config — persist it again so it isn't lost
-      apiKey = configKey;
-    }
-    // If envKey was used, apiKey stays undefined (use env var at runtime)
-  } else {
-    await prompter.note(
-      `No ${getEnvVarName(provider)} found in environment.\nYou can provide a key now, or set the environment variable before starting the gateway.`,
-      `${provider.name} API Key`,
-    );
-    apiKey = await prompter.text({
-      message: `Enter your ${provider.name} API key`,
-      placeholder: "sk-...",
-      validate(value: string) {
-        if (!value.trim()) return "API key cannot be empty";
-        return undefined;
-      },
-    });
-  }
-
-  // --- Model selection ---
-  const MANUAL_ENTRY_VALUE = "__manual__";
-  const modelOptions = [
-    ...provider.cheapModels.map((m) => ({ value: m.id, label: m.label })),
-    { value: MANUAL_ENTRY_VALUE, label: "Enter model ID manually" },
-  ];
-
-  const defaultModel =
-    existing?.provider === providerId && existing?.modelId
-      ? existing.modelId
-      : provider.cheapModels[0]?.id ?? MANUAL_ENTRY_VALUE;
-
-  const selectedModel = await prompter.select<string>({
-    message: `Which model should be used for renaming? (${provider.name})`,
-    options: modelOptions,
-    initialValue: modelOptions.some((o) => o.value === defaultModel)
-      ? defaultModel
-      : modelOptions[0].value,
-  });
-
-  let modelId: string;
-  if (selectedModel === MANUAL_ENTRY_VALUE) {
-    modelId = await prompter.text({
-      message: `Enter the exact model ID for ${provider.name}`,
-      placeholder: provider.cheapModels[0]?.id ?? "",
-      validate(value: string) {
-        if (!value.trim()) return "Model ID cannot be empty";
-        return undefined;
-      },
-    });
-  } else {
-    modelId = selectedModel;
-  }
-
-  return {
-    enabled: true,
-    provider: providerId,
-    modelId,
-    ...(apiKey ? { apiKey } : {}),
-  };
-}
-
 async function pushToOpenGram(
   baseUrl: string,
   instanceSecret: string | undefined,
@@ -506,7 +375,6 @@ export type OpenGramSetupInput = {
   baseUrl: string;
   instanceSecret?: string;
   agents: string[];
-  autoRename?: AutoRenameConfig;
 };
 
 /**
@@ -547,11 +415,8 @@ export function applyOpenGramConfig(
     delete opengramSection.instanceSecret;
   }
 
-  if (input.autoRename?.enabled) {
-    opengramSection.autoRename = input.autoRename;
-  } else {
-    delete opengramSection.autoRename;
-  }
+  // Auto-rename is now managed by Opengram itself — remove any legacy config
+  delete opengramSection.autoRename;
 
   // Disable the default daily 4 AM session reset so chat context persists
   // indefinitely. Uses idle mode with a ~100-year timeout since "never" is

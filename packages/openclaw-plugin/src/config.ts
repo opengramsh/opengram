@@ -2,15 +2,6 @@ import { z } from "zod";
 
 import type { OpenClawConfig } from "openclaw/plugin-sdk";
 
-export const AutoRenameConfigSchema = z.object({
-  enabled: z.boolean().optional().default(false).describe("Automatically rename new chats based on conversation content"),
-  provider: z.enum(["anthropic", "openai", "google", "xai", "openrouter"]).optional().describe("AI provider for title generation"),
-  modelId: z.string().optional().describe("Model ID to use for title generation"),
-  apiKey: z.string().optional().describe("API key (leave empty to use environment variable)"),
-});
-
-export type AutoRenameConfig = z.infer<typeof AutoRenameConfigSchema>;
-
 export const OpenGramConfigSchema = z.object({
   baseUrl: z.string().optional().default("http://localhost:3000").describe("OpenGram instance URL"),
   instanceSecret: z.string().optional().describe("API auth secret"),
@@ -19,7 +10,6 @@ export const OpenGramConfigSchema = z.object({
   dmPolicy: z.string().optional().default("pairing").describe("DM policy: open | pairing | allowlist | disabled"),
   allowFrom: z.array(z.string()).optional().default([]).describe("Static allowFrom entries"),
   showReasoningMessages: z.boolean().optional().default(false).describe("Show agent reasoning/thinking messages in chat"),
-  autoRename: AutoRenameConfigSchema.optional().describe("Automatic chat renaming configuration"),
 });
 
 export type OpenGramChannelConfig = z.infer<typeof OpenGramConfigSchema> & {
@@ -27,7 +17,6 @@ export type OpenGramChannelConfig = z.infer<typeof OpenGramConfigSchema> & {
   reconnectDelayMs: number;
   dmPolicy: string;
   allowFrom: string[];
-  autoRename?: AutoRenameConfig;
 };
 
 export type ResolvedOpenGramAccount = {
@@ -54,7 +43,6 @@ export function resolveOpenGramAccount(
       dmPolicy: section?.dmPolicy ?? "pairing",
       allowFrom: section?.allowFrom ?? [],
       showReasoningMessages: section?.showReasoningMessages ?? false,
-      autoRename: section?.autoRename,
     },
   };
 }

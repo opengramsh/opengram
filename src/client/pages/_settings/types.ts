@@ -12,6 +12,14 @@ export type Model = {
   description: string;
 };
 
+export type AutoRenameProviderInfo = {
+  id: string;
+  name: string;
+  envVar: string;
+  hasEnvKey: boolean;
+  cheapModels: { id: string; label: string }[];
+};
+
 export type ConfigResponse = {
   appName: string;
   agents: Agent[];
@@ -25,4 +33,11 @@ export type ConfigResponse = {
     instanceSecretEnabled?: boolean;
     readEndpointsRequireInstanceSecret?: boolean;
   };
+  autoRename?: {
+    enabled: boolean;
+    provider: string;
+    modelId: string;
+    hasApiKey: boolean;
+  } | null;
+  autoRenameProviders?: AutoRenameProviderInfo[];
 };

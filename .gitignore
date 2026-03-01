@@ -43,3 +43,6 @@ config/opengram.config.json
 scripts/manage-opengram-service.local.sh
 
 docs/*
+demo-video
+
+opengram.config.json

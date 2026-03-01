@@ -125,7 +125,80 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     instanceSecretEnabled = true;
   }
 
-  // 4. OpenClaw detection
+  // 4. Auto-rename
+  const { RENAME_PROVIDERS, getProviderById, resolveApiKey, getEnvVarName } = await import('./services/auto-rename-service.js');
+
+  const enableAutoRename = await p.confirm({
+    message: 'Enable automatic chat renaming?',
+    initialValue: true,
+  });
+
+  let autoRenameConfig: { enabled: boolean; provider: string; modelId: string; apiKey?: string } | null = null;
+
+  if (!p.isCancel(enableAutoRename) && enableAutoRename) {
+    const providerChoice = await p.select({
+      message: 'AI provider for title generation',
+      options: RENAME_PROVIDERS.map((prov) => {
+        const envVars = Array.isArray(prov.envVar) ? prov.envVar : [prov.envVar];
+        const hasKey = envVars.some((v) => Boolean(process.env[v]));
+        return {
+          value: prov.id,
+          label: prov.name,
+          hint: hasKey ? 'key detected' : undefined,
+        };
+      }),
+    });
+    if (p.isCancel(providerChoice)) { p.outro('Setup cancelled.'); return; }
+
+    const selectedProvider = getProviderById(providerChoice as string)!;
+    const envVars = Array.isArray(selectedProvider.envVar) ? selectedProvider.envVar : [selectedProvider.envVar];
+    const envKey = envVars.find((v) => Boolean(process.env[v]));
+    let chosenApiKey: string | undefined;
+
+    if (envKey) {
+      const useEnv = await p.confirm({
+        message: `Use detected ${envKey} from environment?`,
+        initialValue: true,
+      });
+      if (p.isCancel(useEnv)) { p.outro('Setup cancelled.'); return; }
+      if (!useEnv) {
+        const customKey = await p.text({
+          message: `Enter API key for ${selectedProvider.name}`,
+          placeholder: 'sk-...',
+        });
+        if (p.isCancel(customKey)) { p.outro('Setup cancelled.'); return; }
+        chosenApiKey = customKey || undefined;
+      }
+    } else {
+      const customKey = await p.text({
+        message: `Enter API key for ${selectedProvider.name} (optional — can be set later)`,
+        placeholder: getEnvVarName(selectedProvider),
+        defaultValue: '',
+      });
+      if (p.isCancel(customKey)) { p.outro('Setup cancelled.'); return; }
+      chosenApiKey = customKey || undefined;
+    }
+
+    const modelChoice = await p.select({
+      message: 'Model for title generation',
+      options: selectedProvider.cheapModels.map((m) => ({
+        value: m.id,
+        label: m.label,
+      })),
+    });
+    if (p.isCancel(modelChoice)) { p.outro('Setup cancelled.'); return; }
+
+    autoRenameConfig = {
+      enabled: true,
+      provider: providerChoice as string,
+      modelId: modelChoice as string,
+    };
+    if (chosenApiKey) {
+      autoRenameConfig.apiKey = chosenApiKey;
+    }
+  }
+
+  // 5. OpenClaw detection
   if (isOpenClawInstalled()) {
     p.note('OpenClaw CLI detected on PATH', 'Integrations');
     const connectOpenClaw = await p.confirm({
@@ -163,7 +236,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     }
   }
 
-  // 5. Generate config
+  // 6. Generate config
   const config: Record<string, unknown> = {};
 
   // Only write non-default values
@@ -179,6 +252,10 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     };
   }
 
+  if (autoRenameConfig) {
+    config.autoRename = autoRenameConfig;
+  }
+
   // Write config
   mkdirSync(home, { recursive: true });
   mkdirSync(path.join(home, 'data'), { recursive: true });
@@ -186,7 +263,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
 
   p.note(configPath, 'Config written');
 
-  // 6. Systemd service (Linux only)
+  // 7. Systemd service (Linux only)
   if (process.platform === 'linux') {
     const installSvc = await p.confirm({
       message: 'Start OpenGram automatically on boot? (systemd user service)',
@@ -208,7 +285,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     p.note('Run `opengram start` to start the server.\nFor auto-start on macOS, consider using a process manager like pm2.', 'Startup');
   }
 
-  // 7. Print summary
+  // 8. Print summary
   const lines: string[] = [
     `Config:    ${configPath}`,
     `Data:      ${path.join(home, 'data')}`,

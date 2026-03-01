@@ -6,6 +6,7 @@ import { encodeMessageCursor, parseMessagePagination } from '@/src/api/paginatio
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { getDb } from '@/src/db/client';
 import { enqueueDispatchInputForUserMessage } from '@/src/services/dispatch-service';
+import { maybeAutoRenameChat } from '@/src/services/auto-rename-service';
 import { emitEvent } from '@/src/services/events-service';
 import { notifyAgentMessageCreated } from '@/src/services/push-service';
 
@@ -459,6 +460,7 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
     }).catch((error) => {
       console.error('Failed to send message.created push notification.', error);
     });
+    void maybeAutoRenameChat(serialized.chat_id).catch(() => {});
   }
 
   if (normalized.streaming) {
@@ -666,6 +668,7 @@ function completeOrCancelStreamingMessage(
     }).catch((error) => {
       console.error('Failed to send message.created push notification.', error);
     });
+    void maybeAutoRenameChat(serialized.chat_id).catch(() => {});
   }
 
   return serialized;

@@ -15,6 +15,7 @@ export type OpengramConfig = {
   security: SecurityConfig;
   server: ServerConfig;
   hooks: HookConfig[];
+  autoRename?: AutoRenameConfig;
 };
 
 export type AgentConfig = {
@@ -88,6 +89,13 @@ export type HookConfig = {
   signingSecret?: string;
   timeoutMs?: number;
   maxRetries?: number;
+};
+
+export type AutoRenameConfig = {
+  enabled: boolean;
+  provider: 'anthropic' | 'openai' | 'google' | 'xai' | 'openrouter';
+  modelId: string;
+  apiKey?: string;
 };
 
 const DEFAULT_CONFIG_RELATIVE_PATH = "./config/opengram.config.json";
@@ -229,6 +237,9 @@ function mergeConfig(
     allowedMimeTypes: Array.isArray(incoming.allowedMimeTypes)
       ? (incoming.allowedMimeTypes as string[])
       : defaults.allowedMimeTypes,
+    autoRename: isRecord(incoming.autoRename)
+      ? (incoming.autoRename as unknown as AutoRenameConfig)
+      : defaults.autoRename,
   };
 
   return merged;
@@ -435,6 +446,20 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
   }
   config.server.corsOrigins = normalizedCorsOrigins;
 
+  if (config.autoRename && config.autoRename.enabled) {
+    const validProviders = ['anthropic', 'openai', 'google', 'xai', 'openrouter'];
+    if (!validProviders.includes(config.autoRename.provider)) {
+      throw new Error(
+        `Config validation error: autoRename.provider must be one of ${validProviders.join(', ')}.`,
+      );
+    }
+    if (!config.autoRename.modelId || typeof config.autoRename.modelId !== 'string') {
+      throw new Error(
+        "Config validation error: autoRename.modelId is required when autoRename is enabled.",
+      );
+    }
+  }
+
   return config;
 }
 
@@ -538,6 +563,7 @@ export function saveOpengramConfig(
     agents?: AgentConfig[];
     models?: ModelConfig[];
     security?: Partial<SecurityConfig>;
+    autoRename?: AutoRenameConfig | null;
   },
   configPath?: string,
 ): void {
@@ -566,6 +592,23 @@ export function saveOpengramConfig(
   if (updates.security !== undefined) {
     const existingSecurity = isRecord(current.security) ? current.security : {};
     current.security = { ...existingSecurity, ...updates.security };
+  }
+  if (updates.autoRename !== undefined) {
+    if (updates.autoRename === null) {
+      delete current.autoRename;
+    } else {
+      const existing = isRecord(current.autoRename) ? current.autoRename : {};
+      const merged: Record<string, unknown> = { ...existing, ...updates.autoRename };
+      // Preserve existing apiKey if not provided in update
+      if (updates.autoRename.apiKey === undefined && existing.apiKey) {
+        merged.apiKey = existing.apiKey;
+      }
+      // Remove apiKey if explicitly set to empty string
+      if (merged.apiKey === '') {
+        delete merged.apiKey;
+      }
+      current.autoRename = merged;
+    }
   }
 
   // Validate by running through the full load pipeline on the merged result

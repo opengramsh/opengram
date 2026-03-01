@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { DispatchClaimResponse, OpenGramClient } from "./api-client.js";
-import { maybeAutoRename } from "./auto-rename.js";
 import { ChatBatchCoordinator, type InboundBatchMessage } from "./chat-batch-coordinator.js";
 import { resolveAgentForChat, trackActiveChat } from "./chat-manager.js";
 import { resolveOpenGramAccount, type OpenGramChannelConfig } from "./config.js";
@@ -882,10 +881,6 @@ function buildDeliver(
         });
         await client.uploadMedia(chatId, { file: buffer, filename, contentType, messageId: msg.id });
       }
-      // Fire-and-forget: attempt auto-rename after first agent response.
-      maybeAutoRename({ chatId, cfg, client, log }).catch((err) => {
-        log?.warn(`[opengram:auto-rename] Unexpected error: ${String(err)}`);
-      });
       return;
     }
 
