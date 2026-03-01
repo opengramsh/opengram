@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Archive, Info, Inbox, Menu, Settings, X } from 'lucide-react';
+import { Archive, Inbox, Menu, Settings, X } from 'lucide-react';
 
 import logoSm from '/opengram-logo-sm.webp';
 import { Button } from '@/src/components/ui/button';
@@ -15,7 +15,6 @@ const MENU_ITEMS = [
   { href: '/', label: 'Inbox', icon: Inbox },
   { href: '/archived', label: 'Archived', icon: Archive },
   { href: '/settings', label: 'Settings', icon: Settings },
-  { href: '/about', label: 'About', icon: Info },
 ];
 
 export function HamburgerMenu() {
