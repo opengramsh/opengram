@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../../node_modules/streamdown/dist";
 
 :root {
   --background: hsl(220 16% 8%);
@@ -142,3 +143,4 @@ body {
   from { background-position: 100% center; }
   to { background-position: 0% center; }
 }
+
