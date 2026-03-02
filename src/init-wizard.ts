@@ -117,7 +117,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     const customSecret = await p.text({
       message: 'Enter your instance secret',
       validate: (val) => {
-        if (!val.trim()) return 'Secret cannot be empty';
+        if (!val?.trim()) return 'Secret cannot be empty';
       },
     });
     if (p.isCancel(customSecret)) { p.outro('Setup cancelled.'); return; }
