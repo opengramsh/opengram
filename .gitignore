@@ -42,7 +42,10 @@ config/opengram.config.json
 
 scripts/manage-opengram-service.local.sh
 
-docs/*
+docs/.next
+docs/.source
+docs/node_modules
+docs/out
 demo-video
 
 opengram.config.json
