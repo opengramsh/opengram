@@ -39,24 +39,12 @@ packages/openclaw-plugin/node_modules
 .next/*
 .codecrew/*
 .codex/
-.mutagenignore
+.claude/
 config/opengram.config.json
-
-scripts/manage-opengram-service.local.sh
-manage-opengram-service.local.sh
 
 docs/.next
 docs/.source
 docs/node_modules
 docs/out
-demo-video
 
 opengram.config.json
-
-# internal planning docs
-PUBLISHING.md
-findings.md
-openapi-remediation-plan.md
-openapi-review-findings.md
-progress.md
-task_plan.md
