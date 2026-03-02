@@ -97,10 +97,11 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
     messageToolHints: ({ cfg }) => {
       if (!getOpenGramSection(cfg!)?.enabled) return [];
       return [
-        "This conversation is via OpenGram. You can create structured Requests " +
-          "(choice/text_input/form) using the opengram_request tool instead of asking " +
-          "questions in plain text. Requests appear as tappable UI widgets in the mobile app. " +
-          "When using OpenGram tools, pass the chatId from the current conversation context.",
+        "This conversation is via OpenGram. Key info:\n" +
+          "- Chat ID: extract from the From field in your context (format: opengram:<chatId>). All OpenGram tools require this.\n" +
+          "- Structured requests: use opengram_request (choice/text_input/form) instead of plain-text questions. They render as tappable UI widgets.\n" +
+          "- Inbound media: if the user sent files, their paths are in MediaPath/MediaPaths in your context.\n" +
+          "- Outbound media: use opengram_media with a local file path to upload files to the chat.",
       ];
     },
   },

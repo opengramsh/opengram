@@ -7,20 +7,22 @@ export const opengramChatTool: AgentTool = {
   name: "opengram_chat",
   label: "OpenGram Chat",
   description:
-    "Manage OpenGram chats — create new chats, update metadata, or list existing chats.",
+    "Manage OpenGram chats — create new chats, update metadata, or list existing chats. " +
+    "The chatId is available from the From field in your conversation context (format: opengram:<chatId>). " +
+    "Creating a chat requires modelId — the tool will error without it.",
   parameters: Type.Object({
     action: Type.Union(
       [Type.Literal("create"), Type.Literal("update"), Type.Literal("list")],
       { description: "Action to perform" },
     ),
     chatId: Type.Optional(
-      Type.String({ description: "Chat ID (required for update)" }),
+      Type.String({ description: "Chat ID (required for update). Extract from From field: opengram:<chatId>." }),
     ),
     agentId: Type.Optional(
       Type.String({ description: "Agent ID for new chat (defaults to first configured agent)" }),
     ),
     modelId: Type.Optional(
-      Type.String({ description: "Model ID (required if agent has no default model configured in OpenGram)" }),
+      Type.String({ description: "Model ID — REQUIRED for create. The tool will error without it." }),
     ),
     title: Type.Optional(Type.String({ description: "Chat title" })),
     tags: Type.Optional(Type.Array(Type.String(), { description: "Chat tags" })),

@@ -5,17 +5,19 @@ description: Use OpenGram features — structured requests, chat management, med
 
 # OpenGram Skill
 
-OpenGram is a mobile-first chat interface for AI agents. When your messages are
+OpenGram is a chat interface and REST API for AI agents. When your messages are
 delivered via OpenGram (channel = "opengram"), you have access to features that
 standard chat platforms don't offer.
 
-## Chat Context
+## Chat ID
 
-When responding to an OpenGram message, your current chat ID is automatically
-available — you don't need to pass it explicitly to tools. The tools will
-auto-resolve the chat from your session context.
+All OpenGram tools require a `chatId` parameter. Extract it from the `From`
+field in your conversation context:
 
-## Structured Requests
+- Format: `From: opengram:<chatId>`
+- Example: if `From: opengram:abc123xyz`, use `chatId: "abc123xyz"`
+
+<!-- ## Structured Requests
 
 Instead of asking questions in plain text, use the `opengram_request` tool to
 create structured UI widgets. These appear prominently in the chat and give
@@ -26,6 +28,12 @@ users a clear, tappable interface for responding.
 - **Approvals/choices** → `choice` request (buttons the user taps)
 - **Need text input** → `text_input` request (input field with validation)
 - **Multiple fields** → `form` request (structured form with various field types)
+
+### When NOT to Use Requests
+
+- Open-ended questions — just ask in regular chat text
+- Simple yes/no that's part of a flowing conversation — plain text is fine
+- When you need to ask a follow-up immediately — requests are for standalone prompts
 
 ### Choice Request Example
 
@@ -77,40 +85,64 @@ users a clear, tappable interface for responding.
 }
 ```
 
-## When the User Responds
+### When the User Responds
 
 When a user resolves a request, you receive a message like:
 - Choice: `[Request resolved: "Deploy to production?"] Selected: approve`
 - Text: `[Request resolved: "PR Description"] Response: Fixed the auth bug...`
-- Form: `[Request resolved: "New Feature Proposal"] Form values: {"title": "...", ...}`
-
-## Streaming
-
-When you reply to an OpenGram chat, your response is streamed to the user in
-real-time. This happens automatically — you don't need to do anything special.
-The user sees your response appear progressively in the chat.
+- Form: `[Request resolved: "New Feature Proposal"] Form values: {"title": "...", ...}` -->
 
 ## Search
 
 Use `opengram_search` to search past conversations by title or message content.
-Useful for finding previous discussions or decisions.
 
-## Chat Management
+**Parameters:**
+- `query` (required) — the search text
+- `scope` (optional) — `"all"` (default), `"titles"`, or `"messages"`
 
-Use `opengram_chat` to create new chats, update titles/tags, or list existing
-chats. Most of the time the plugin handles chat creation automatically, but
-you can create purpose-specific chats when needed.
+**Results** include matching chats (with IDs and titles) and matching messages
+(with chat IDs and content snippets). Use the returned chat IDs to reference
+or link to past conversations.
 
 ## Media
 
-Use `opengram_media` to upload files (images, PDFs, audio) to a chat. The file
-appears as an attachment with proper previews.
+### Inbound (user sends files to you)
 
-## Best Practices
+When a user sends files in a message, you receive them as temporary local file
+paths in your context:
+
+- Single file: `MediaPath` contains the temp file path, `MediaType` has the MIME type
+- Multiple files: `MediaPaths` (array of paths), `MediaTypes` (array of MIME types)
+
+You can read these files directly from the provided paths.
+
+### Outbound (you send files to the user)
+
+Use `opengram_media` to upload files to a chat. The `filePath` parameter accepts:
+
+- A `MediaPath` you received from the user's inbound message
+- Any local file path (e.g., a file you generated or downloaded)
+
+The file appears as an attachment in the chat with proper previews for images,
+PDFs, and audio.
+
+## Chat Management
+
+Use `opengram_chat` to create, update, or list chats.
+
+**Create** — starts a new chat. Requires `modelId` (the model to use).
+Optionally set `title`, `tags`, and `agentId`.
+
+**Update** — modify an existing chat. Requires `chatId`. You can change
+`title`, `tags`, or `pinned` status.
+
+**List** — returns up to 20 recent chats with their IDs and titles.
+
+<!-- ## Best Practices
 
 1. Prefer requests over plain text for any question with discrete options
 2. Use choice requests for approvals, yes/no, multi-option decisions
 3. Use form requests when you need multiple pieces of information at once
 4. Keep request titles short — they should be scannable on mobile
-5. Set variants on choice options: primary = suggested, danger = destructive
-6. Don't create requests for open-ended questions — just ask in chat text
+5. Set variants on choice options: `"primary"` = suggested, `"danger"` = destructive
+6. Always extract your chatId from the `From` field before calling any tool -->

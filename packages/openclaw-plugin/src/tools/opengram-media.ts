@@ -10,10 +10,17 @@ import type { AgentTool } from "../types.js";
 export const opengramMediaTool: AgentTool = {
   name: "opengram_media",
   label: "OpenGram Media",
-  description: "Upload a file to an OpenGram chat (images, audio, PDFs, etc.).",
+  description:
+    "Upload a file to an OpenGram chat (images, audio, PDFs, etc.). " +
+    "The chatId is available from the From field in your conversation context (format: opengram:<chatId>). " +
+    "The filePath can be a MediaPath from a user's inbound message or any local file you generated.",
   parameters: Type.Object({
-    chatId: Type.String({ description: "The OpenGram chat ID to upload to." }),
-    filePath: Type.String({ description: "Local file path to upload" }),
+    chatId: Type.String({ description: "The OpenGram chat ID (extract from the From field: opengram:<chatId>)." }),
+    filePath: Type.String({
+      description:
+        "Local file path to upload. Use a MediaPath from the user's inbound context, " +
+        "or any local file path (e.g., a file you generated or downloaded).",
+    }),
     messageId: Type.Optional(
       Type.String({ description: "Link to an existing message" }),
     ),
