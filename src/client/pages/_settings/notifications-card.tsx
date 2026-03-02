@@ -156,7 +156,7 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
         {/* Browser notifications toggle */}
         <div className="flex items-center justify-between py-3">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium">Desktop notifications</p>
+            <p className="text-sm font-medium">Push notifications</p>
             <p className="text-xs text-muted-foreground">
               Show popup notifications for new messages
             </p>
@@ -172,8 +172,8 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
 
         {showDeniedHint && (
           <p className="pb-2 text-xs text-amber-600 dark:text-amber-400">
-            Notifications are blocked by your browser. Open your
-            browser&apos;s site settings to allow notifications.
+            Notifications are blocked by your browser. Open your browser&apos;s
+            site settings to allow notifications.
           </p>
         )}
         {showIosHint && (
@@ -183,9 +183,7 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
           </p>
         )}
         {statusMessage && (
-          <p className="pb-2 text-xs text-muted-foreground">
-            {statusMessage}
-          </p>
+          <p className="pb-2 text-xs text-muted-foreground">{statusMessage}</p>
         )}
 
         {showTestButton && (
