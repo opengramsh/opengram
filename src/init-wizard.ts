@@ -207,15 +207,15 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     });
     if (!p.isCancel(connectOpenClaw) && connectOpenClaw) {
       const pluginSpinner = p.spinner();
-      pluginSpinner.start('Installing openclaw-plugin-opengram...');
+      pluginSpinner.start('Installing @opengramsh/openclaw-plugin...');
       try {
-        execSync('npm install -g openclaw-plugin-opengram', {
+        execSync('npm install -g @opengramsh/openclaw-plugin', {
           stdio: ['ignore', 'pipe', 'ignore'],
           timeout: 120000,
         });
         pluginSpinner.stop('Plugin installed.');
       } catch {
-        pluginSpinner.stop('Plugin install failed — you can install it later with:\n  npm i -g openclaw-plugin-opengram');
+        pluginSpinner.stop('Plugin install failed — you can install it later with:\n  npm i -g @opengramsh/openclaw-plugin');
       }
 
       // Chain into the OpenClaw setup wizard with pre-filled values

@@ -448,9 +448,9 @@ export function applyOpenGramConfig(
 
   // Ensure the plugin is in plugins.allow (deduplicated)
   const existingAllow: string[] = Array.isArray(plugins.allow) ? plugins.allow : [];
-  const allow = existingAllow.includes("openclaw-plugin-opengram")
+  const allow = existingAllow.includes("@opengramsh/openclaw-plugin")
     ? existingAllow
-    : [...existingAllow, "openclaw-plugin-opengram"];
+    : [...existingAllow, "@opengramsh/openclaw-plugin"];
 
   // Ensure the plugin dir is in plugins.load.paths (deduplicated)
   const existingLoad = plugins.load ?? {};
@@ -474,8 +474,8 @@ export function applyOpenGramConfig(
       },
       entries: {
         ...entries,
-        "openclaw-plugin-opengram": {
-          ...entries["openclaw-plugin-opengram"],
+        "@opengramsh/openclaw-plugin": {
+          ...entries["@opengramsh/openclaw-plugin"],
           enabled: true,
         },
       },

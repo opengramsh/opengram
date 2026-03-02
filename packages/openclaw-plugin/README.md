@@ -1,4 +1,4 @@
-# openclaw-plugin-opengram
+# @opengramsh/openclaw-plugin
 
 OpenClaw channel plugin for [OpenGram](https://github.com/brice-ventures/opengram) — a mobile-first PWA for AI agent chat and task management.
 
@@ -7,14 +7,14 @@ This plugin connects OpenClaw agents to OpenGram, enabling bidirectional messagi
 ## Installation
 
 ```bash
-npm install openclaw-plugin-opengram
+npm install @opengramsh/openclaw-plugin
 ```
 
 Add the plugin to your OpenClaw configuration:
 
 ```json
 {
-  "plugins": ["openclaw-plugin-opengram"],
+  "plugins": ["@opengramsh/openclaw-plugin"],
   "channels": {
     "opengram": {
       "baseUrl": "http://localhost:3000",
@@ -54,7 +54,7 @@ All configuration lives under `channels.opengram` in your OpenClaw config file.
 ## Architecture
 
 ```
-OpenGram (PWA)          openclaw-plugin-opengram          OpenClaw Agent
+OpenGram (PWA)          @opengramsh/openclaw-plugin          OpenClaw Agent
      |                         |                              |
      |--- SSE events --------->|                              |
      |   message.created       |--- dispatch ----------------->|

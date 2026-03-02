@@ -199,14 +199,14 @@ describe("applyOpenGramConfig", () => {
     expect((result.channels as any).discord.token).toBe("abc");
   });
 
-  it("sets plugins.entries['openclaw-plugin-opengram'].enabled to true", () => {
+  it("sets plugins.entries['@opengramsh/openclaw-plugin'].enabled to true", () => {
     const cfg = createMinimalConfig();
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
     });
 
-    const entry = (result as any).plugins.entries["openclaw-plugin-opengram"];
+    const entry = (result as any).plugins.entries["@opengramsh/openclaw-plugin"];
     expect(entry.enabled).toBe(true);
   });
 
@@ -225,23 +225,23 @@ describe("applyOpenGramConfig", () => {
 
     const plugins = (result as any).plugins;
     expect(plugins.entries["some-other-plugin"]).toEqual({ enabled: true, foo: "bar" });
-    expect(plugins.entries["openclaw-plugin-opengram"].enabled).toBe(true);
+    expect(plugins.entries["@opengramsh/openclaw-plugin"].enabled).toBe(true);
   });
 
-  it("adds openclaw-plugin-opengram to plugins.allow", () => {
+  it("adds @opengramsh/openclaw-plugin to plugins.allow", () => {
     const cfg = createMinimalConfig();
     const result = applyOpenGramConfig(cfg, {
       baseUrl: "http://localhost:3000",
       agents: [],
     });
 
-    expect((result as any).plugins.allow).toContain("openclaw-plugin-opengram");
+    expect((result as any).plugins.allow).toContain("@opengramsh/openclaw-plugin");
   });
 
   it("deduplicates plugins.allow if already present", () => {
     const cfg = createMinimalConfig({
       plugins: {
-        allow: ["openclaw-plugin-opengram", "other-plugin"],
+        allow: ["@opengramsh/openclaw-plugin", "other-plugin"],
       },
     });
     const result = applyOpenGramConfig(cfg, {
@@ -250,7 +250,7 @@ describe("applyOpenGramConfig", () => {
     });
 
     const allow = (result as any).plugins.allow;
-    expect(allow.filter((p: string) => p === "openclaw-plugin-opengram")).toHaveLength(1);
+    expect(allow.filter((p: string) => p === "@opengramsh/openclaw-plugin")).toHaveLength(1);
     expect(allow).toContain("other-plugin");
   });
 
@@ -266,7 +266,7 @@ describe("applyOpenGramConfig", () => {
     });
 
     const allow = (result as any).plugins.allow;
-    expect(allow).toEqual(["other-plugin", "openclaw-plugin-opengram"]);
+    expect(allow).toEqual(["other-plugin", "@opengramsh/openclaw-plugin"]);
   });
 
   it("adds pluginDir to plugins.load.paths", () => {
