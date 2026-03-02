@@ -29,6 +29,8 @@
   "dependencies": {
     "@clack/prompts": "^1.0.1",
     "@hono/node-server": "^1.19.9",
+    "@hono/zod-openapi": "^1.2.2",
+    "@scalar/hono-api-reference": "^0.9.46",
     "better-sqlite3": "^12.4.1",
     "eventsource": "^4.1.0",
     "hono": "^4.12.3",

@@ -253,13 +253,9 @@ describe('search API', () => {
   it('returns validation errors for missing q and invalid scope', async () => {
     const missingQuery = await app.request('/api/v1/search?scope=titles');
     expect(missingQuery.status).toBe(400);
-    await expect(missingQuery.json()).resolves.toEqual({
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'q is required.',
-        details: { field: 'q' },
-      },
-    });
+    const missingQueryError = await missingQuery.json();
+    expect(missingQueryError.error.code).toBe('VALIDATION_ERROR');
+    expect(missingQueryError.error.details.fieldErrors.q).toBeDefined();
 
     const invalidScope = await app.request('/api/v1/search?q=hello&scope=bad');
     expect(invalidScope.status).toBe(400);

@@ -1,7 +1,17 @@
-import { Hono } from 'hono';
+import { createRoute } from '@hono/zod-openapi';
 
-import { parseJsonBody, toErrorResponse, validationError } from '@/src/api/http';
-import { applyWriteMiddlewares } from '@/src/api/write-controls';
+import { writeErrorResponses, createRouter } from '@/src/api/schemas/common';
+import {
+  BatchIdParamSchema,
+  ClaimDispatchBodySchema,
+  ClaimDispatchSingleBodySchema,
+  ClaimManyResponseSchema,
+  CompleteDispatchBodySchema,
+  DispatchBatchSchema,
+  FailDispatchBodySchema,
+  HeartbeatDispatchBodySchema,
+} from '@/src/api/schemas/dispatch';
+import { writeMiddleware } from '@/src/api/write-controls';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import {
   claimDispatchBatches,
@@ -10,169 +20,161 @@ import {
   heartbeatDispatchBatch,
 } from '@/src/services/dispatch-service';
 
-type ClaimDispatchBody = {
-  workerId?: unknown;
-  leaseMs?: unknown;
-  waitMs?: unknown;
-  limit?: unknown;
-};
+const dispatch = createRouter();
 
-type HeartbeatDispatchBody = {
-  workerId?: unknown;
-  extendMs?: unknown;
-};
-
-type CompleteDispatchBody = {
-  workerId?: unknown;
-};
-
-type FailDispatchBody = {
-  workerId?: unknown;
-  reason?: unknown;
-  retryable?: unknown;
-  retryDelayMs?: unknown;
-};
-
-function requireWorkerId(value: unknown) {
-  if (typeof value !== 'string' || !value.trim()) {
-    throw validationError('workerId is required.', { field: 'workerId' });
-  }
-
-  return value.trim();
-}
-
-function optionalPositiveInteger(value: unknown, field: string) {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!Number.isInteger(value) || (value as number) < 0) {
-    throw validationError(`${field} must be a non-negative integer.`, { field });
-  }
-
-  return value as number;
-}
-
-function optionalPositiveIntegerAtLeastOne(value: unknown, field: string) {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!Number.isInteger(value) || (value as number) < 1) {
-    throw validationError(`${field} must be a positive integer.`, { field });
-  }
-
-  return value as number;
-}
-
-const dispatch = new Hono();
-
-dispatch.post('/claim', async (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const body = await parseJsonBody<ClaimDispatchBody>(c.req.raw);
-    const cfg = loadOpengramConfig().server.dispatch;
-    const workerId = requireWorkerId(body.workerId);
-    const leaseMs = optionalPositiveInteger(body.leaseMs, 'leaseMs') ?? cfg.leaseMs;
-    const waitMs = optionalPositiveInteger(body.waitMs, 'waitMs') ?? cfg.claimWaitMs;
-    const claimed = await claimDispatchBatches({
-      workerId,
-      leaseMs,
-      waitMs,
-      limit: 1,
-      signal: c.req.raw.signal,
-    });
-    if (!claimed.length) {
-      return new Response(null, { status: 204 });
-    }
-
-    return c.json(claimed[0]);
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+const claimRoute = createRoute({
+  operationId: 'claimDispatch',
+  method: 'post',
+  path: '/claim',
+  tags: ['Dispatch'],
+  summary: 'Claim a dispatch batch',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    body: { content: { 'application/json': { schema: ClaimDispatchSingleBodySchema } }, required: true },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: DispatchBatchSchema } }, description: 'Batch claimed' },
+    204: { description: 'No batches available' },
+    ...writeErrorResponses,
+  },
 });
 
-dispatch.post('/claim-many', async (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const body = await parseJsonBody<ClaimDispatchBody>(c.req.raw);
-    const cfg = loadOpengramConfig().server.dispatch;
-    const workerId = requireWorkerId(body.workerId);
-    const leaseMs = optionalPositiveInteger(body.leaseMs, 'leaseMs') ?? cfg.leaseMs;
-    const waitMs = optionalPositiveInteger(body.waitMs, 'waitMs') ?? cfg.claimWaitMs;
-    const limit = optionalPositiveIntegerAtLeastOne(body.limit, 'limit') ?? cfg.claim.claimManyLimit;
-
-    const batches = await claimDispatchBatches({
-      workerId,
-      leaseMs,
-      waitMs,
-      limit,
-      signal: c.req.raw.signal,
-    });
-    if (!batches.length) {
-      return new Response(null, { status: 204 });
-    }
-
-    return c.json({ batches });
-  } catch (error) {
-    return toErrorResponse(error);
+dispatch.openapi(claimRoute, async (c) => {
+  const body = c.req.valid('json');
+  const cfg = loadOpengramConfig().server.dispatch;
+  const claimed = await claimDispatchBatches({
+    workerId: body.workerId,
+    leaseMs: body.leaseMs ?? cfg.leaseMs,
+    waitMs: body.waitMs ?? cfg.claimWaitMs,
+    limit: 1,
+    signal: c.req.raw.signal,
+  });
+  if (!claimed.length) {
+    return c.body(null, 204);
   }
+
+  return c.json(claimed[0]);
 });
 
-dispatch.post('/:batchId/heartbeat', async (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const batchId = c.req.param('batchId');
-    const body = await parseJsonBody<HeartbeatDispatchBody>(c.req.raw);
-    const workerId = requireWorkerId(body.workerId);
-    const cfg = loadOpengramConfig().server.dispatch;
-    const extendMs = optionalPositiveInteger(body.extendMs, 'extendMs') ?? cfg.leaseMs;
-
-    heartbeatDispatchBatch(batchId, workerId, extendMs);
-    return new Response(null, { status: 204 });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+const claimManyRoute = createRoute({
+  operationId: 'claimManyDispatches',
+  method: 'post',
+  path: '/claim-many',
+  tags: ['Dispatch'],
+  summary: 'Claim multiple dispatch batches',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    body: { content: { 'application/json': { schema: ClaimDispatchBodySchema } }, required: true },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: ClaimManyResponseSchema } }, description: 'Batches claimed' },
+    204: { description: 'No batches available' },
+    ...writeErrorResponses,
+  },
 });
 
-dispatch.post('/:batchId/complete', async (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const batchId = c.req.param('batchId');
-    const body = await parseJsonBody<CompleteDispatchBody>(c.req.raw);
-    const workerId = requireWorkerId(body.workerId);
+dispatch.openapi(claimManyRoute, async (c) => {
+  const body = c.req.valid('json');
+  const cfg = loadOpengramConfig().server.dispatch;
 
-    completeDispatchBatch(batchId, workerId);
-    return new Response(null, { status: 204 });
-  } catch (error) {
-    return toErrorResponse(error);
+  const batches = await claimDispatchBatches({
+    workerId: body.workerId,
+    leaseMs: body.leaseMs ?? cfg.leaseMs,
+    waitMs: body.waitMs ?? cfg.claimWaitMs,
+    limit: body.limit ?? cfg.claim.claimManyLimit,
+    signal: c.req.raw.signal,
+  });
+  if (!batches.length) {
+    return c.body(null, 204);
   }
+
+  return c.json({ batches });
 });
 
-dispatch.post('/:batchId/fail', async (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const batchId = c.req.param('batchId');
-    const body = await parseJsonBody<FailDispatchBody>(c.req.raw);
-    const workerId = requireWorkerId(body.workerId);
-    if (typeof body.reason !== 'string' || !body.reason.trim()) {
-      throw validationError('reason is required.', { field: 'reason' });
-    }
-    if (typeof body.retryable !== 'boolean') {
-      throw validationError('retryable must be a boolean.', { field: 'retryable' });
-    }
-    const retryDelayMs = optionalPositiveInteger(body.retryDelayMs, 'retryDelayMs');
+const heartbeatRoute = createRoute({
+  operationId: 'heartbeatDispatch',
+  method: 'post',
+  path: '/{batchId}/heartbeat',
+  tags: ['Dispatch'],
+  summary: 'Heartbeat a dispatch batch lease',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    params: BatchIdParamSchema,
+    body: { content: { 'application/json': { schema: HeartbeatDispatchBodySchema } }, required: true },
+  },
+  responses: {
+    204: { description: 'Heartbeat acknowledged' },
+    ...writeErrorResponses,
+  },
+});
 
-    failDispatchBatch(batchId, {
-      workerId,
-      reason: body.reason.trim(),
-      retryable: body.retryable,
-      retryDelayMs,
-    });
-    return new Response(null, { status: 204 });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+dispatch.openapi(heartbeatRoute, (c) => {
+  const { batchId } = c.req.valid('param');
+  const body = c.req.valid('json');
+  const cfg = loadOpengramConfig().server.dispatch;
+
+  heartbeatDispatchBatch(batchId, body.workerId, body.extendMs ?? cfg.leaseMs);
+  return c.body(null, 204);
+});
+
+const completeRoute = createRoute({
+  operationId: 'completeDispatch',
+  method: 'post',
+  path: '/{batchId}/complete',
+  tags: ['Dispatch'],
+  summary: 'Complete a dispatch batch',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    params: BatchIdParamSchema,
+    body: { content: { 'application/json': { schema: CompleteDispatchBodySchema } }, required: true },
+  },
+  responses: {
+    204: { description: 'Batch completed' },
+    ...writeErrorResponses,
+  },
+});
+
+dispatch.openapi(completeRoute, (c) => {
+  const { batchId } = c.req.valid('param');
+  const body = c.req.valid('json');
+
+  completeDispatchBatch(batchId, body.workerId);
+  return c.body(null, 204);
+});
+
+const failRoute = createRoute({
+  operationId: 'failDispatch',
+  method: 'post',
+  path: '/{batchId}/fail',
+  tags: ['Dispatch'],
+  summary: 'Fail a dispatch batch',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    params: BatchIdParamSchema,
+    body: { content: { 'application/json': { schema: FailDispatchBodySchema } }, required: true },
+  },
+  responses: {
+    204: { description: 'Batch failed' },
+    ...writeErrorResponses,
+  },
+});
+
+dispatch.openapi(failRoute, (c) => {
+  const { batchId } = c.req.valid('param');
+  const body = c.req.valid('json');
+
+  failDispatchBatch(batchId, {
+    workerId: body.workerId,
+    reason: body.reason.trim(),
+    retryable: body.retryable,
+    retryDelayMs: body.retryDelayMs,
+  });
+  return c.body(null, 204);
 });
 
 export default dispatch;

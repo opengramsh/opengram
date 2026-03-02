@@ -2,10 +2,15 @@ import { readFileSync } from "node:fs";
 
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { OpenAPIHono } from "@hono/zod-openapi";
+import { validationHook } from "@/src/api/schemas/common";
+import { apiReference } from "@scalar/hono-api-reference";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 
+import pkg from "@/package.json";
+import { ApiError } from "@/src/api/http";
 import { ensurePushProvisioned, loadOpengramConfig } from "@/src/config/opengram-config";
 import { getDb } from "@/src/db/client";
 import dispatch from "@/src/routes/dispatch";
@@ -52,8 +57,29 @@ function getCorsOrigins(): string[] {
   return cachedCorsOrigins;
 }
 
-export const app = new Hono();
+export const app = new OpenAPIHono({
+  defaultHook: validationHook,
+});
 const compressionMiddleware = compress();
+
+// Global error handler — replaces try/catch in every route handler
+app.onError((err, c) => {
+  if (err instanceof ApiError) {
+    const body = { error: { code: err.code, message: err.message, details: err.details } };
+    return Response.json(body, { status: err.status, headers: err.headers });
+  }
+  if (err instanceof HTTPException) {
+    return c.json(
+      { error: { code: 'VALIDATION_ERROR', message: err.message } },
+      err.status,
+    );
+  }
+  console.error('Unhandled error:', err);
+  return c.json(
+    { error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } },
+    500,
+  );
+});
 
 // Global middleware
 app.use(async (c, next) => {
@@ -97,6 +123,45 @@ app.route("/api/v1/tags", tags);
 app.route("/api/v1/events", events);
 app.route("/api/v1/push", push);
 app.route("/api/v1/dispatch", dispatch);
+
+// OpenAPI security scheme
+app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+  description: 'Instance secret token',
+});
+
+// OpenAPI spec + docs
+app.doc31('/api/v1/doc', {
+  openapi: '3.1.0',
+  info: {
+    title: 'Opengram API',
+    version: pkg.version,
+    description: 'API for the Opengram messaging platform.',
+  },
+  servers: [
+    { url: '/', description: 'Current instance root' },
+  ],
+  tags: [
+    { name: 'Chats', description: 'Chat lifecycle management' },
+    { name: 'Messages', description: 'Message creation, streaming, and listing' },
+    { name: 'Media', description: 'Media upload, metadata, and listing' },
+    { name: 'Files', description: 'File and thumbnail downloads' },
+    { name: 'Requests', description: 'Interactive request management (choices, forms)' },
+    { name: 'Dispatch', description: 'Agent dispatch batch claiming and lifecycle' },
+    { name: 'Events', description: 'Server-sent event streaming' },
+    { name: 'Config', description: 'Instance configuration' },
+    { name: 'Push', description: 'Web push notification subscriptions' },
+    { name: 'Search', description: 'Full-text search across chats and messages' },
+    { name: 'Tags', description: 'Tag suggestions' },
+    { name: 'Health', description: 'Health check' },
+  ],
+});
+
+app.get('/api/v1/reference', apiReference({
+  url: '/api/v1/doc',
+  theme: 'kepler',
+}));
 
 // Static file serving (production): hashed assets with immutable cache
 app.use(

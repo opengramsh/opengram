@@ -1,26 +1,38 @@
-import { Hono } from 'hono';
+import { createRoute } from '@hono/zod-openapi';
 
-import { toErrorResponse } from '@/src/api/http';
-import { applyReadMiddlewares } from '@/src/api/write-controls';
+import { readErrorResponses, createRouter } from '@/src/api/schemas/common';
+import { SearchQuerySchema, SearchResponseSchema } from '@/src/api/schemas/search';
+import { readMiddleware } from '@/src/api/write-controls';
 import { search } from '@/src/services/search-service';
 
-const searchRouter = new Hono();
+const searchRouter = createRouter();
 
-searchRouter.get('/', (c) => {
-  try {
-    applyReadMiddlewares(c.req.raw);
-    const result = search(new URL(c.req.url));
-    return c.json({
-      chats: result.chats,
-      messages: result.messages,
-      cursor: {
-        next: result.nextCursor,
-        hasMore: result.hasMore,
-      },
-    });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+const searchRoute = createRoute({
+  operationId: 'search',
+  method: 'get',
+  path: '/',
+  tags: ['Search'],
+  summary: 'Search chats and messages',
+  security: [{ bearerAuth: [] }],
+  middleware: [readMiddleware] as const,
+  request: { query: SearchQuerySchema },
+  responses: {
+    200: { content: { 'application/json': { schema: SearchResponseSchema } }, description: 'Search results' },
+    ...readErrorResponses,
+  },
+});
+
+searchRouter.openapi(searchRoute, (c) => {
+  const query = c.req.valid('query');
+  const result = search(query);
+  return c.json({
+    chats: result.chats,
+    messages: result.messages,
+    cursor: {
+      next: result.nextCursor,
+      hasMore: result.hasMore,
+    },
+  });
 });
 
 export default searchRouter;

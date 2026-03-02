@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { getDb } from '@/src/db/client';
 
-import { encodeCursor, parsePagination } from '@/src/api/pagination';
+import { decodeCursor, encodeCursor } from '@/src/api/pagination';
 import { notFoundError, validationError } from '@/src/api/http';
 import { enqueueDispatchInputForUserMessage } from '@/src/services/dispatch-service';
 import { emitEvent } from '@/src/services/events-service';
@@ -487,39 +487,40 @@ export function createChat(input: CreateChatInput) {
   return result.chat;
 }
 
-export function listChats(url: URL): ListChatsResult {
-  const params = url.searchParams;
-  const { limit, cursor } = parsePagination(params);
+export type ListChatsParams = {
+  limit?: number;
+  cursor?: string;
+  archived?: string;
+  tag?: string;
+  agentId?: string;
+  query?: string;
+};
+
+export function listChats(params: ListChatsParams = {}): ListChatsResult {
+  const limit = params.limit ?? 50;
+  const cursor = params.cursor ? decodeCursor(params.cursor) : null;
 
   const conditions: string[] = [];
   const queryParams: unknown[] = [];
 
-  const archived = params.get('archived');
-  if (archived !== null) {
-    if (archived !== 'true' && archived !== 'false') {
-      throw validationError('archived must be true or false.', { field: 'archived' });
-    }
-
+  if (params.archived !== undefined) {
     conditions.push('is_archived = ?');
-    queryParams.push(archived === 'true' ? 1 : 0);
+    queryParams.push(params.archived === 'true' ? 1 : 0);
   }
 
-  const tag = params.get('tag');
-  if (tag) {
+  if (params.tag) {
     conditions.push('EXISTS (SELECT 1 FROM json_each(chats.tags) WHERE json_each.value = ?)');
-    queryParams.push(tag);
+    queryParams.push(params.tag);
   }
 
-  const agentId = params.get('agentId');
-  if (agentId) {
+  if (params.agentId) {
     conditions.push('EXISTS (SELECT 1 FROM json_each(chats.agent_ids) WHERE json_each.value = ?)');
-    queryParams.push(agentId);
+    queryParams.push(params.agentId);
   }
 
-  const query = params.get('query');
-  if (query) {
+  if (params.query) {
     conditions.push('LOWER(title) LIKE ?');
-    queryParams.push(`%${query.toLowerCase()}%`);
+    queryParams.push(`%${params.query.toLowerCase()}%`);
   }
 
   if (cursor) {
@@ -573,19 +574,13 @@ export function listChats(url: URL): ListChatsResult {
   };
 }
 
-export function getPendingSummary(url: URL): PendingSummaryResult {
-  const params = url.searchParams;
+export function getPendingSummary(params: { archived?: string } = {}): PendingSummaryResult {
   const conditions: string[] = [];
   const queryParams: unknown[] = [];
 
-  const archived = params.get('archived');
-  if (archived !== null) {
-    if (archived !== 'true' && archived !== 'false') {
-      throw validationError('archived must be true or false.', { field: 'archived' });
-    }
-
+  if (params.archived !== undefined) {
     conditions.push('is_archived = ?');
-    queryParams.push(archived === 'true' ? 1 : 0);
+    queryParams.push(params.archived === 'true' ? 1 : 0);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -598,19 +593,13 @@ export function getPendingSummary(url: URL): PendingSummaryResult {
   return { pendingRequestsTotal: Math.max(0, total) };
 }
 
-export function getUnreadSummary(url: URL): UnreadSummaryResult {
-  const params = url.searchParams;
+export function getUnreadSummary(params: { archived?: string } = {}): UnreadSummaryResult {
   const conditions: string[] = [];
   const queryParams: unknown[] = [];
 
-  const archived = params.get('archived');
-  if (archived !== null) {
-    if (archived !== 'true' && archived !== 'false') {
-      throw validationError('archived must be true or false.', { field: 'archived' });
-    }
-
+  if (params.archived !== undefined) {
     conditions.push('is_archived = ?');
-    queryParams.push(archived === 'true' ? 1 : 0);
+    queryParams.push(params.archived === 'true' ? 1 : 0);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

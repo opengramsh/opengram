@@ -1,44 +1,88 @@
-import { Hono } from 'hono';
+import { createRoute } from '@hono/zod-openapi';
 
-import { parseJsonBody, toErrorResponse } from '@/src/api/http';
-import { applyWriteMiddlewares } from '@/src/api/write-controls';
+import { writeErrorResponses, createRouter } from '@/src/api/schemas/common';
+import {
+  RequestIdParamSchema,
+  RequestSchema,
+  ResolveRequestBodySchema,
+  UpdateRequestBodySchema,
+} from '@/src/api/schemas/requests';
+import { writeMiddleware } from '@/src/api/write-controls';
 import { cancelRequest, resolveRequest, updateRequest } from '@/src/services/requests-service';
 
-const requests = new Hono();
+const requests = createRouter();
 
-requests.patch('/:requestId', async (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const requestId = c.req.param('requestId');
-    const body = await parseJsonBody<Record<string, unknown>>(c.req.raw);
-    const updated = updateRequest(requestId, body);
-    return c.json(updated);
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+const updateRequestRoute = createRoute({
+  operationId: 'updateRequest',
+  method: 'patch',
+  path: '/{requestId}',
+  tags: ['Requests'],
+  summary: 'Update a request',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    params: RequestIdParamSchema,
+    body: { content: { 'application/json': { schema: UpdateRequestBodySchema } }, required: true },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: RequestSchema } }, description: 'Request updated' },
+    ...writeErrorResponses,
+  },
 });
 
-requests.post('/:requestId/resolve', async (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const requestId = c.req.param('requestId');
-    const payload = await parseJsonBody<Record<string, unknown>>(c.req.raw);
-    const resolved = resolveRequest(requestId, payload);
-    return c.json(resolved);
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+requests.openapi(updateRequestRoute, (c) => {
+  const { requestId } = c.req.valid('param');
+  const body = c.req.valid('json');
+  const updated = updateRequest(requestId, body);
+  return c.json(updated);
 });
 
-requests.post('/:requestId/cancel', (c) => {
-  try {
-    applyWriteMiddlewares(c.req.raw);
-    const requestId = c.req.param('requestId');
-    const cancelled = cancelRequest(requestId);
-    return c.json(cancelled);
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+const resolveRequestRoute = createRoute({
+  operationId: 'resolveRequest',
+  method: 'post',
+  path: '/{requestId}/resolve',
+  tags: ['Requests'],
+  summary: 'Resolve a request',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    params: RequestIdParamSchema,
+    body: { content: { 'application/json': { schema: ResolveRequestBodySchema } }, required: true },
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: RequestSchema } }, description: 'Request resolved' },
+    ...writeErrorResponses,
+  },
+});
+
+requests.openapi(resolveRequestRoute, (c) => {
+  const { requestId } = c.req.valid('param');
+  const payload = c.req.valid('json');
+  const resolved = resolveRequest(requestId, payload);
+  return c.json(resolved);
+});
+
+const cancelRequestRoute = createRoute({
+  operationId: 'cancelRequest',
+  method: 'post',
+  path: '/{requestId}/cancel',
+  tags: ['Requests'],
+  summary: 'Cancel a request',
+  security: [{ bearerAuth: [] }],
+  middleware: [writeMiddleware] as const,
+  request: {
+    params: RequestIdParamSchema,
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: RequestSchema } }, description: 'Request cancelled' },
+    ...writeErrorResponses,
+  },
+});
+
+requests.openapi(cancelRequestRoute, (c) => {
+  const { requestId } = c.req.valid('param');
+  const cancelled = cancelRequest(requestId);
+  return c.json(cancelled);
 });
 
 export default requests;

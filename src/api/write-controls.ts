@@ -1,3 +1,5 @@
+import { createMiddleware } from 'hono/factory';
+
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import type { OpengramConfig } from '@/src/config/opengram-config';
 
@@ -197,6 +199,22 @@ export function applyReadMiddlewares(
     middleware(request);
   }
 }
+
+// Hono middleware wrappers
+export const writeMiddleware = createMiddleware(async (c, next) => {
+  applyWriteMiddlewares(c.req.raw);
+  await next();
+});
+
+export const readMiddleware = createMiddleware(async (c, next) => {
+  applyReadMiddlewares(c.req.raw);
+  await next();
+});
+
+export const sseAuthMiddleware = createMiddleware(async (c, next) => {
+  requireSseAuth(c.req.raw);
+  await next();
+});
 
 export function resetWriteRateLimitForTests() {
   writeRateBuckets.clear();

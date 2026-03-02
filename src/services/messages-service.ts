@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 
 import { conflictError, notFoundError, validationError } from '@/src/api/http';
-import { encodeMessageCursor, parseMessagePagination } from '@/src/api/pagination';
+import { decodeMessageCursor, encodeMessageCursor } from '@/src/api/pagination';
 import { loadOpengramConfig } from '@/src/config/opengram-config';
 import { getDb } from '@/src/db/client';
 import { enqueueDispatchInputForUserMessage } from '@/src/services/dispatch-service';
@@ -470,8 +470,9 @@ export function createMessage(chatId: string, input: CreateMessageInput) {
   return serialized;
 }
 
-export function listMessages(chatId: string, url: URL): ListMessagesResult {
-  const { limit, cursor } = parseMessagePagination(url.searchParams);
+export function listMessages(chatId: string, params: { limit?: number; cursor?: string } = {}): ListMessagesResult {
+  const limit = params.limit ?? 50;
+  const cursor = params.cursor ? decodeMessageCursor(params.cursor) : null;
 
   const db = getDb();
   getChatMessageMetadata(db, chatId);

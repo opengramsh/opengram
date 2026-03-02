@@ -1,24 +1,32 @@
-import { Hono } from 'hono';
+import { createRoute } from '@hono/zod-openapi';
 
 import pkg from '@/package.json';
-import { toErrorResponse } from '@/src/api/http';
+import { createRouter } from '@/src/api/schemas/common';
+import { HealthResponseSchema } from '@/src/api/schemas/health';
 
 const processStartedAt = Date.now();
 
-const health = new Hono();
+const health = createRouter();
 
-health.get('/', (c) => {
-  try {
-    const uptime = Math.floor((Date.now() - processStartedAt) / 1000);
-    return c.json({
-      service: 'opengram',
-      status: 'ok',
-      version: pkg.version,
-      uptime,
-    });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+const getHealthRoute = createRoute({
+  operationId: 'getHealth',
+  method: 'get',
+  path: '/',
+  tags: ['Health'],
+  summary: 'Health check',
+  responses: {
+    200: { content: { 'application/json': { schema: HealthResponseSchema } }, description: 'Service is healthy' },
+  },
+});
+
+health.openapi(getHealthRoute, (c) => {
+  const uptime = Math.floor((Date.now() - processStartedAt) / 1000);
+  return c.json({
+    service: 'opengram' as const,
+    status: 'ok' as const,
+    version: pkg.version,
+    uptime,
+  });
 });
 
 export default health;

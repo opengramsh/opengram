@@ -63,48 +63,6 @@ export function internalError(message: string, details?: unknown) {
   return new ApiError(500, 'INTERNAL_ERROR', message, details);
 }
 
-export function successCollection<T>(data: T[], next: string | null, hasMore: boolean) {
-  return Response.json({
-    data,
-    cursor: {
-      next,
-      hasMore,
-    },
-  });
-}
-
-export function successOk() {
-  return Response.json({ ok: true });
-}
-
-export function toErrorResponse(error: unknown) {
-  if (error instanceof ApiError) {
-    return Response.json(
-      {
-        error: {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-        },
-      },
-      {
-        status: error.status,
-        headers: error.headers,
-      },
-    );
-  }
-
-  return Response.json(
-    {
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Unexpected server error.',
-      },
-    },
-    { status: 500 },
-  );
-}
-
 export async function parseJsonBody<T>(request: Request): Promise<T> {
   let parsed: unknown;
   try {

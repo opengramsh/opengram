@@ -1,24 +1,34 @@
-import { Hono } from 'hono';
+import { createRoute } from '@hono/zod-openapi';
 
-import { toErrorResponse } from '@/src/api/http';
-import { applyReadMiddlewares } from '@/src/api/write-controls';
+import { TagSuggestionListSchema, TagSuggestionsQuerySchema } from '@/src/api/schemas/chats';
+import { readErrorResponses, createRouter } from '@/src/api/schemas/common';
+import { readMiddleware } from '@/src/api/write-controls';
 import { listTagSuggestions } from '@/src/services/chats-service';
 
-const tags = new Hono();
+const tags = createRouter();
 
-tags.get('/suggestions', (c) => {
-  try {
-    applyReadMiddlewares(c.req.raw);
-    const url = new URL(c.req.url);
-    const query = url.searchParams.get('q') ?? '';
-    const limitParam = url.searchParams.get('limit');
-    const limit = limitParam ? Number.parseInt(limitParam, 10) : 10;
+const listTagSuggestionsRoute = createRoute({
+  operationId: 'listTagSuggestions',
+  method: 'get',
+  path: '/suggestions',
+  tags: ['Tags'],
+  summary: 'List tag suggestions',
+  security: [{ bearerAuth: [] }],
+  middleware: [readMiddleware] as const,
+  request: { query: TagSuggestionsQuerySchema },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: TagSuggestionListSchema } },
+      description: 'Tag suggestions',
+    },
+    ...readErrorResponses,
+  },
+});
 
-    const data = listTagSuggestions(query, Number.isNaN(limit) ? 10 : limit);
-    return c.json({ data });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
+tags.openapi(listTagSuggestionsRoute, (c) => {
+  const { q, limit } = c.req.valid('query');
+  const data = listTagSuggestions(q ?? '', limit ?? 10);
+  return c.json({ data });
 });
 
 export default tags;

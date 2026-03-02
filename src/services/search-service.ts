@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 
 import { validationError } from '@/src/api/http';
-import { encodeSearchCursor, parseSearchPagination, type SearchCursor } from '@/src/api/pagination';
+import { decodeSearchCursor, encodeSearchCursor, type SearchCursor } from '@/src/api/pagination';
 import { getDb } from '@/src/db/client';
 
 type SearchScope = 'all' | 'titles' | 'messages';
@@ -285,10 +285,18 @@ function queryMessageMatches(
   }
 }
 
-export function search(url: URL): SearchResult {
-  const scope = normalizeScope(url.searchParams.get('scope'));
-  const query = normalizeQuery(url.searchParams.get('q'));
-  const { limit, cursor } = parseSearchPagination(url.searchParams);
+export type SearchParams = {
+  q?: string;
+  scope?: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export function search(params: SearchParams = {}): SearchResult {
+  const scope = normalizeScope(params.scope ?? null);
+  const query = normalizeQuery(params.q ?? null);
+  const limit = params.limit ?? 50;
+  const cursor = params.cursor ? decodeSearchCursor(params.cursor) : null;
 
   const db = getDb();
   const candidates: CombinedSearchRow[] = [];
