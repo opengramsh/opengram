@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 290" fill="none">
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }
+    .box-label { font-size: 14px; font-weight: 600; fill: #c9d1d9; }
+    .box-sublabel { font-size: 11px; fill: #8b949e; }
+    .arrow-label { font-size: 11px; fill: #8b949e; font-weight: 500; }
+    .box { rx: 10; ry: 10; }
+  </style>
+
+  <!-- User box -->
+  <rect class="box" x="20" y="102" width="130" height="70" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text class="box-label" x="85" y="134" text-anchor="middle">User</text>
+  <text class="box-sublabel" x="85" y="152" text-anchor="middle">Desktop &amp; PWA</text>
+
+  <!-- Opengram outer box -->
+  <rect x="195" y="18" width="510" height="258" rx="14" ry="14" fill="none" stroke="#30363d" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text class="box-label" x="450" y="38" text-anchor="middle" font-size="12">Opengram (single process)</text>
+
+  <!-- Web UI box -->
+  <rect class="box" x="210" y="82" width="150" height="110" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text class="box-label" x="285" y="117" text-anchor="middle">Web UI</text>
+  <text class="box-sublabel" x="285" y="137" text-anchor="middle">React + Vite</text>
+
+  <!-- User -> Web UI arrow -->
+  <line x1="150" y1="137" x2="210" y2="137" stroke="#58a6ff" stroke-width="1.5"/>
+  <polygon points="208,133 218,137 208,141" fill="#58a6ff"/>
+
+  <!-- Backend box -->
+  <rect class="box" x="460" y="52" width="230" height="210" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text class="box-label" x="575" y="87" text-anchor="middle">Backend</text>
+  <text class="box-sublabel" x="575" y="109" text-anchor="middle">Hono API + SQLite</text>
+
+  <!-- Dispatch queue inside Backend -->
+  <rect x="490" y="127" width="170" height="44" rx="6" ry="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text class="box-sublabel" x="575" y="153" text-anchor="middle">Dispatch Queue</text>
+
+  <!-- Webhooks inside Backend -->
+  <rect x="490" y="185" width="170" height="44" rx="6" ry="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text class="box-sublabel" x="575" y="211" text-anchor="middle">Webhooks</text>
+
+  <!-- Agent box -->
+  <rect class="box" x="750" y="102" width="120" height="70" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+  <text class="box-label" x="810" y="134" text-anchor="middle">Your Agent</text>
+  <text class="box-sublabel" x="810" y="152" text-anchor="middle">Any HTTP client</text>
+
+  <!-- Web UI -> Backend (REST) -->
+  <line x1="360" y1="120" x2="460" y2="120" stroke="#58a6ff" stroke-width="1.5"/>
+  <polygon points="458,116 468,120 458,124" fill="#58a6ff"/>
+  <text class="arrow-label" x="410" y="113" text-anchor="middle">REST</text>
+
+  <!-- Backend -> Web UI (SSE) -->
+  <line x1="460" y1="152" x2="360" y2="152" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <polygon points="362,148 352,152 362,156" fill="#8b949e"/>
+  <text class="arrow-label" x="410" y="169" text-anchor="middle">SSE (real-time)</text>
+
+  <!-- Agent <-> Backend arrows -->
+  <line x1="690" y1="130" x2="750" y2="130" stroke="#58a6ff" stroke-width="1.5"/>
+  <polygon points="748,126 758,130 748,134" fill="#58a6ff"/>
+  <line x1="750" y1="144" x2="690" y2="144" stroke="#58a6ff" stroke-width="1.5"/>
+  <polygon points="692,140 682,144 692,148" fill="#58a6ff"/>
+  <text class="arrow-label" x="720" y="122" text-anchor="middle">REST API</text>
+
+  <!-- Webhooks -> External -->
+  <line x1="660" y1="207" x2="750" y2="207" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <polygon points="748,203 758,207 748,211" fill="#8b949e"/>
+  <rect x="758" y="192" width="100" height="30" rx="6" ry="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <text class="box-sublabel" x="808" y="211" text-anchor="middle">Your endpoints</text>
+
+</svg>
