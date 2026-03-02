@@ -13,18 +13,27 @@ function writeConfigFile(content: unknown) {
   return filePath;
 }
 
-let previousCorsOriginsEnv: string | undefined;
+const ENV_KEYS = [
+  "OPENGRAM_SERVER_PORT",
+  "OPENGRAM_PUBLIC_BASE_URL",
+  "OPENGRAM_INSTANCE_SECRET",
+  "OPENGRAM_CORS_ORIGINS",
+] as const;
+
+let savedEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
-  previousCorsOriginsEnv = process.env.OPENGRAM_CORS_ORIGINS;
+  savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 });
 
 afterEach(() => {
   resetConfigCacheForTests();
-  if (previousCorsOriginsEnv === undefined) {
-    delete process.env.OPENGRAM_CORS_ORIGINS;
-  } else {
-    process.env.OPENGRAM_CORS_ORIGINS = previousCorsOriginsEnv;
+  for (const key of ENV_KEYS) {
+    if (savedEnv[key] === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = savedEnv[key];
+    }
   }
 });
 
@@ -113,11 +122,9 @@ describe("loadOpengramConfig", () => {
 
     const config = loadOpengramConfig(filePath);
     expect(config.server.corsOrigins).toEqual(["https://app.example.com"]);
-    expect(process.env.OPENGRAM_CORS_ORIGINS).toBe("https://app.example.com");
   });
 
-  it("clears OPENGRAM_CORS_ORIGINS when corsOrigins is empty", () => {
-    process.env.OPENGRAM_CORS_ORIGINS = "https://stale.example.com";
+  it("accepts empty corsOrigins array", () => {
     const filePath = writeConfigFile({
       server: {
         corsOrigins: [],
@@ -126,7 +133,6 @@ describe("loadOpengramConfig", () => {
 
     const config = loadOpengramConfig(filePath);
     expect(config.server.corsOrigins).toEqual([]);
-    expect(process.env.OPENGRAM_CORS_ORIGINS).toBeUndefined();
   });
 
   it("rejects empty values in server.corsOrigins", () => {
@@ -243,5 +249,83 @@ describe("loadOpengramConfig", () => {
     const configB = loadOpengramConfig(filePathB);
     expect(configA.appName).toBe("A");
     expect(configB.appName).toBe("B");
+  });
+
+  it("OPENGRAM_PUBLIC_BASE_URL overrides server.publicBaseUrl", () => {
+    process.env.OPENGRAM_PUBLIC_BASE_URL = "https://my-instance.example.com";
+    const filePath = writeConfigFile({});
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.server.publicBaseUrl).toBe("https://my-instance.example.com");
+  });
+
+  it("OPENGRAM_INSTANCE_SECRET overrides security.instanceSecret and enables auth", () => {
+    process.env.OPENGRAM_INSTANCE_SECRET = "secret123";
+    const filePath = writeConfigFile({});
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.security.instanceSecret).toBe("secret123");
+    expect(config.security.instanceSecretEnabled).toBe(true);
+  });
+
+  it("OPENGRAM_CORS_ORIGINS overrides server.corsOrigins (comma-separated)", () => {
+    process.env.OPENGRAM_CORS_ORIGINS = "https://a.example.com, https://b.example.com";
+    const filePath = writeConfigFile({});
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.server.corsOrigins).toEqual([
+      "https://a.example.com",
+      "https://b.example.com",
+    ]);
+  });
+
+  it("empty env vars do not override config values", () => {
+    process.env.OPENGRAM_PUBLIC_BASE_URL = "";
+    process.env.OPENGRAM_INSTANCE_SECRET = "  ";
+    const filePath = writeConfigFile({
+      server: { publicBaseUrl: "https://from-config.example.com" },
+    });
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.server.publicBaseUrl).toBe("https://from-config.example.com");
+    expect(config.security.instanceSecretEnabled).toBe(false);
+  });
+
+  it("undefined env vars do not override config values", () => {
+    delete process.env.OPENGRAM_PUBLIC_BASE_URL;
+    delete process.env.OPENGRAM_INSTANCE_SECRET;
+    delete process.env.OPENGRAM_CORS_ORIGINS;
+    const filePath = writeConfigFile({
+      server: { publicBaseUrl: "https://from-config.example.com" },
+      security: { instanceSecretEnabled: true, instanceSecret: "from-config" },
+    });
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.server.publicBaseUrl).toBe("https://from-config.example.com");
+    expect(config.security.instanceSecret).toBe("from-config");
+  });
+
+  it("OPENGRAM_CORS_ORIGINS env var overrides config file corsOrigins", () => {
+    process.env.OPENGRAM_CORS_ORIGINS = "https://env.example.com";
+    const filePath = writeConfigFile({
+      server: { corsOrigins: ["https://config.example.com"] },
+    });
+
+    const config = loadOpengramConfig(filePath);
+    expect(config.server.corsOrigins).toEqual(["https://env.example.com"]);
+  });
+
+  it("invalidates cache when env overrides change", () => {
+    const filePath = writeConfigFile({});
+
+    process.env.OPENGRAM_PUBLIC_BASE_URL = "https://first.example.com";
+    resetConfigCacheForTests();
+    const first = loadOpengramConfig(filePath);
+    expect(first.server.publicBaseUrl).toBe("https://first.example.com");
+
+    process.env.OPENGRAM_PUBLIC_BASE_URL = "https://second.example.com";
+    const second = loadOpengramConfig(filePath);
+    expect(second.server.publicBaseUrl).toBe("https://second.example.com");
+    expect(second).not.toBe(first);
   });
 });

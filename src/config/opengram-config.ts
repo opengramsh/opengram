@@ -460,47 +460,67 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
   return config;
 }
 
-function syncCorsOriginsEnv(corsOrigins: string[]) {
-  if (!corsOrigins.length) {
-    delete process.env.OPENGRAM_CORS_ORIGINS;
-    return;
-  }
-
-  process.env.OPENGRAM_CORS_ORIGINS = corsOrigins.join(",");
-}
-
 type ConfigCache = {
   resolvedPath: string;
   mtimeMs: number | null;
-  envServerPortRaw: string | undefined;
+  envOverridesSnapshot: string;
   config: OpengramConfig;
 };
 
 let configCache: ConfigCache | null = null;
 
+function getEnvOverridesSnapshot(): string {
+  return JSON.stringify([
+    process.env.OPENGRAM_SERVER_PORT,
+    process.env.OPENGRAM_PUBLIC_BASE_URL,
+    process.env.OPENGRAM_INSTANCE_SECRET,
+    process.env.OPENGRAM_CORS_ORIGINS,
+  ]);
+}
+
 function applyEnvOverrides(config: OpengramConfig): OpengramConfig {
   const rawPort = process.env.OPENGRAM_SERVER_PORT;
-  if (rawPort === undefined) {
-    return config;
+  if (rawPort !== undefined) {
+    const port = Number(rawPort);
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+      throw new Error(
+        "Config validation error: OPENGRAM_SERVER_PORT must be an integer between 1 and 65535.",
+      );
+    }
+    config.server.port = port;
   }
 
-  const port = Number(rawPort);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    throw new Error(
-      "Config validation error: OPENGRAM_SERVER_PORT must be an integer between 1 and 65535.",
-    );
+  const rawPublicBaseUrl = process.env.OPENGRAM_PUBLIC_BASE_URL;
+  if (rawPublicBaseUrl !== undefined && rawPublicBaseUrl.trim() !== "") {
+    config.server.publicBaseUrl = rawPublicBaseUrl.trim();
   }
 
-  config.server.port = port;
+  const rawInstanceSecret = process.env.OPENGRAM_INSTANCE_SECRET;
+  if (rawInstanceSecret !== undefined && rawInstanceSecret.trim() !== "") {
+    config.security.instanceSecret = rawInstanceSecret.trim();
+    config.security.instanceSecretEnabled = true;
+  }
+
+  const rawCorsOrigins = process.env.OPENGRAM_CORS_ORIGINS;
+  if (rawCorsOrigins !== undefined) {
+    const origins = rawCorsOrigins
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+    if (origins.length > 0) {
+      config.server.corsOrigins = origins;
+    }
+  }
+
   return config;
 }
 
 export function loadOpengramConfig(configPath?: string): OpengramConfig {
   const resolvedPath = resolveConfigPath(configPath);
-  const envServerPortRaw = process.env.OPENGRAM_SERVER_PORT;
+  const envOverridesSnapshot = getEnvOverridesSnapshot();
 
   if (configCache && configCache.resolvedPath === resolvedPath) {
-    if (configCache.envServerPortRaw !== envServerPortRaw) {
+    if (configCache.envOverridesSnapshot !== envOverridesSnapshot) {
       configCache = null;
     } else {
       if (configCache.mtimeMs === null) {
@@ -526,8 +546,7 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
     const config = validateConfig(
       applyEnvOverrides(structuredClone(defaultConfig)),
     );
-    syncCorsOriginsEnv(config.server.corsOrigins);
-    configCache = { resolvedPath, mtimeMs: null, envServerPortRaw, config };
+    configCache = { resolvedPath, mtimeMs: null, envOverridesSnapshot, config };
     return config;
   }
 
@@ -542,7 +561,6 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
 
   const merged = mergeConfig(structuredClone(defaultConfig), parsed);
   const config = validateConfig(applyEnvOverrides(merged));
-  syncCorsOriginsEnv(config.server.corsOrigins);
 
   let mtimeMs: number | null = null;
   try {
@@ -551,7 +569,7 @@ export function loadOpengramConfig(configPath?: string): OpengramConfig {
     // Unlikely race — file removed between read and stat; still cache it
   }
 
-  configCache = { resolvedPath, mtimeMs, envServerPortRaw, config };
+  configCache = { resolvedPath, mtimeMs, envOverridesSnapshot, config };
   return config;
 }
 

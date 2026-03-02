@@ -35,26 +35,8 @@ import requests from "@/src/routes/requests";
 import searchRouter from "@/src/routes/search";
 import tags from "@/src/routes/tags";
 
-let cachedCorsOriginsRaw: string | undefined;
-let cachedCorsOrigins: string[] = [];
-
 function getCorsOrigins(): string[] {
-  const raw = process.env.OPENGRAM_CORS_ORIGINS;
-  if (raw === cachedCorsOriginsRaw) {
-    return cachedCorsOrigins;
-  }
-
-  cachedCorsOriginsRaw = raw;
-  if (!raw || !raw.trim()) {
-    cachedCorsOrigins = [];
-    return cachedCorsOrigins;
-  }
-
-  cachedCorsOrigins = raw
-    .split(",")
-    .map((o) => o.trim())
-    .filter(Boolean);
-  return cachedCorsOrigins;
+  return loadOpengramConfig().server.corsOrigins;
 }
 
 export const app = new OpenAPIHono({

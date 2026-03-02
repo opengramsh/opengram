@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { resetConfigCacheForTests } from "@/src/config/opengram-config";
 import { app } from "@/src/server";
 
 let previousCorsOrigins: string | undefined;
@@ -17,6 +18,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  resetConfigCacheForTests();
   if (previousCorsOrigins === undefined) {
     delete process.env.OPENGRAM_CORS_ORIGINS;
   } else {
