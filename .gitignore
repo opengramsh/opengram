@@ -38,9 +38,12 @@ packages/openclaw-plugin/node_modules
 
 .next/*
 .codecrew/*
+.codex/
+.mutagenignore
 config/opengram.config.json
 
 scripts/manage-opengram-service.local.sh
+manage-opengram-service.local.sh
 
 docs/.next
 docs/.source
