@@ -256,6 +256,29 @@ export async function uninstallService(): Promise<boolean> {
   return uninstallSystemdService();
 }
 
+export function restartService(): void {
+  if (isMacOS()) {
+    const uid = execSync('id -u', { encoding: 'utf8' }).trim();
+    const ok = run(`launchctl kickstart -k gui/${uid}/${PLIST_LABEL}`);
+    if (ok) {
+      console.log('OpenGram service restarted.');
+    } else {
+      console.error('Failed to restart the service. Is it installed? Run `opengram service install` first.');
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (!checkSystemd()) return;
+  const ok = run('systemctl --user restart opengram');
+  if (ok) {
+    console.log('OpenGram service restarted.');
+  } else {
+    console.error('Failed to restart the service. Is it installed? Run `opengram service install` first.');
+    process.exit(1);
+  }
+}
+
 export function showServiceStatus(): void {
   if (isMacOS()) return showLaunchdStatus();
   showSystemdStatus();
@@ -285,6 +308,9 @@ export async function runServiceCommand(
     case 'uninstall':
       await uninstallService();
       break;
+    case 'restart':
+      restartService();
+      break;
     case 'status':
       showServiceStatus();
       break;
@@ -293,7 +319,7 @@ export async function runServiceCommand(
       break;
     default:
       console.error(`Unknown service action: ${action ?? '(none)'}`);
-      console.log('Usage: opengram service <install|uninstall|status|logs>');
+      console.log('Usage: opengram service <install|uninstall|restart|status|logs>');
       process.exit(1);
   }
 }

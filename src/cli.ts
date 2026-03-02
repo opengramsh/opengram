@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -30,9 +31,12 @@ Usage: opengram <command> [options]
 Commands:
   init                  Interactive setup wizard
   start [--port N]      Start the server
+  restart               Restart the background service
+  upgrade               Upgrade to the latest version
   service <action>      Manage background service
     install             Install, enable, and start the service
     uninstall           Stop, disable, and remove the service
+    restart             Restart the service
     status              Show service status
     logs                Tail service logs
   version               Print version
@@ -90,6 +94,66 @@ async function cmdService(action: string | undefined) {
   await runServiceCommand(action, { resolveHome });
 }
 
+function detectPkgManager(): string {
+  for (const pm of ['pnpm', 'bun']) {
+    try {
+      execSync(`which ${pm}`, { stdio: ['ignore', 'pipe', 'ignore'] });
+      return pm;
+    } catch {
+      // not found
+    }
+  }
+  return 'npm';
+}
+
+function isServiceRunning(): boolean {
+  try {
+    if (process.platform === 'darwin') {
+      execSync('launchctl list sh.opengram.server', {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return true;
+    }
+    const result = execSync('systemctl --user is-active opengram', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return result === 'active';
+  } catch {
+    return false;
+  }
+}
+
+async function cmdUpgrade() {
+  const oldVersion = getVersion();
+  const pm = detectPkgManager();
+
+  console.log(`Upgrading Opengram via ${pm}...`);
+
+  try {
+    execSync(`${pm} install -g @opengramsh/opengram@latest`, {
+      stdio: 'inherit',
+    });
+  } catch {
+    console.error('Upgrade failed. Check the error above.');
+    process.exit(1);
+  }
+
+  const newVersion = getVersion();
+
+  if (isServiceRunning()) {
+    console.log('Service is running, restarting...');
+    const { restartService } = await import('./cli-service.js');
+    restartService();
+  }
+
+  if (oldVersion === newVersion) {
+    console.log(`Already on the latest version (v${newVersion}).`);
+  } else {
+    console.log(`Upgraded: v${oldVersion} → v${newVersion}`);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -107,6 +171,14 @@ async function main() {
 
     case 'init':
       await cmdInit();
+      break;
+
+    case 'restart':
+      await cmdService('restart');
+      break;
+
+    case 'upgrade':
+      await cmdUpgrade();
       break;
 
     case 'service':

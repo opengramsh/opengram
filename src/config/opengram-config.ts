@@ -99,7 +99,6 @@ export type AutoRenameConfig = {
 };
 
 const DEFAULT_CONFIG_RELATIVE_PATH = "./config/opengram.config.json";
-const PROD_CONFIG_PATH = "/opt/opengram/config/opengram.config.json";
 
 const defaultConfig: OpengramConfig = {
   appName: "OpenGram",
@@ -174,9 +173,7 @@ function resolveConfigPath(configPath?: string) {
     return path.resolve(process.env.OPENGRAM_CONFIG_PATH);
   }
 
-  return process.env.NODE_ENV === "production"
-    ? PROD_CONFIG_PATH
-    : path.resolve(DEFAULT_CONFIG_RELATIVE_PATH);
+  return path.resolve(DEFAULT_CONFIG_RELATIVE_PATH);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
