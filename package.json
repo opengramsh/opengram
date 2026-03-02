@@ -1,7 +1,23 @@
 {
-  "name": "opengram",
+  "name": "@opengramsh/opengram",
   "version": "0.1.0",
+  "description": "Open-source, self-hosted chat UI and REST API for AI agent workflows",
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opengramsh/opengram.git"
+  },
+  "homepage": "https://opengram.sh",
+  "bugs": {
+    "url": "https://github.com/opengramsh/opengram/issues"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "agents",
+    "mobile"
+  ],
   "bin": {
     "opengram": "./dist/cli/cli.js"
   },
