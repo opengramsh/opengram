@@ -49,3 +49,11 @@ docs/out
 demo-video
 
 opengram.config.json
+
+# internal planning docs
+PUBLISHING.md
+findings.md
+openapi-remediation-plan.md
+openapi-review-findings.md
+progress.md
+task_plan.md

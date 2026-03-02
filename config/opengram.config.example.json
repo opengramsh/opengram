@@ -1,0 +1,50 @@
+{
+  "appName": "OpenGram",
+  "maxUploadBytes": 50000000,
+  "allowedMimeTypes": [
+    "*/*"
+  ],
+  "titleMaxChars": 48,
+  "agents": [
+    {
+      "id": "main",
+      "name": "My Agent",
+      "description": "Default agent",
+      "defaultModelId": "anthropic/claude-sonnet-4-6"
+    }
+  ],
+  "models": [
+    {
+      "id": "anthropic/claude-sonnet-4-6",
+      "name": "Claude Sonnet",
+      "description": ""
+    }
+  ],
+  "push": {
+    "enabled": false,
+    "vapidPublicKey": "",
+    "vapidPrivateKey": "",
+    "subject": ""
+  },
+  "security": {
+    "instanceSecretEnabled": false,
+    "instanceSecret": "",
+    "readEndpointsRequireInstanceSecret": false
+  },
+  "server": {
+    "publicBaseUrl": "http://localhost:3333",
+    "port": 3333,
+    "streamTimeoutSeconds": 60,
+    "corsOrigins": [
+      "http://localhost:5173"
+    ],
+    "idempotencyTtlSeconds": 86400
+  },
+  "hooks": [],
+  "autoRename": {
+    "enabled": false,
+    "provider": "openrouter",
+    "modelId": "google/gemini-2.5-flash-lite",
+    "apiKey": "your-api-key-here"
+  }
+}
