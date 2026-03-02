@@ -43,6 +43,8 @@ function getActiveChatId() {
   });
 }
 
+var isIos = /iPad|iPhone|iPod/.test(self.navigator.userAgent);
+
 self.addEventListener('push', (event) => {
   let payload = {
     title: 'OpenGram',
@@ -63,12 +65,16 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil((async () => {
-    const chatId = payload.data && payload.data.chatId;
-    if (chatId) {
-      var idbTimeout = new Promise(function (resolve) { self.setTimeout(function () { resolve(null); }, 1500); });
-      const activeChatId = await Promise.race([getActiveChatId(), idbTimeout]);
-      if (activeChatId === chatId) {
-        return;
+    // On iOS, every push MUST show a notification — Safari kills the
+    // subscription after 3 "silent" pushes. Skip suppression on iOS.
+    if (!isIos) {
+      const chatId = payload.data && payload.data.chatId;
+      if (chatId) {
+        var idbTimeout = new Promise(function (resolve) { self.setTimeout(function () { resolve(null); }, 1500); });
+        const activeChatId = await Promise.race([getActiveChatId(), idbTimeout]);
+        if (activeChatId === chatId) {
+          return;
+        }
       }
     }
 
