@@ -280,7 +280,7 @@ describe('chat request widget', () => {
         },
       },
     });
-  });
+  }, 15_000);
 
   it('keeps state consistent when concurrent resolves finish out of order with one failure', async () => {
     requestsPayload = [

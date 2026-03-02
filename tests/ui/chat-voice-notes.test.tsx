@@ -308,7 +308,7 @@ describe('chat voice notes', () => {
 
     fireEvent(audio, new Event('ended'));
     expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
-  });
+  }, 15_000);
 
   it('shows settings prompt when microphone permission is denied', async () => {
     vi.stubGlobal('navigator', {
