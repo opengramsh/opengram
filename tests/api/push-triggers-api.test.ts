@@ -84,6 +84,8 @@ beforeEach(() => {
 
   db = new Database(dbPath);
   db.exec(migrationSql);
+  db.exec("CREATE TABLE IF NOT EXISTS __opengram_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)");
+  db.prepare("INSERT INTO __opengram_migrations (name, applied_at) VALUES (?, ?)").run('0000_initial.sql', Date.now());
   resetDbForTests();
 
   db.prepare(

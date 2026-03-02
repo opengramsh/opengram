@@ -6,13 +6,6 @@ import Database from "better-sqlite3";
 const DEFAULT_DB_PATH = "/opt/opengram/data/opengram.db";
 const DEFAULT_MIGRATIONS_DIR = "/opt/opengram/web/migrations";
 
-function tableExists(db, tableName) {
-  const row = db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-    .get(tableName);
-  return Boolean(row);
-}
-
 function listMigrationFiles(migrationsDir) {
   if (!fs.existsSync(migrationsDir)) {
     return [];
@@ -24,75 +17,12 @@ function listMigrationFiles(migrationsDir) {
     .sort();
 }
 
-function resolveMigrationTrackingColumn(db) {
-  const columns = db.prepare("PRAGMA table_info(__opengram_migrations)").all();
-  const columnNames = new Set(columns.map((column) => column.name));
-  if (columnNames.has("name")) {
-    return "name";
-  }
+function getAppliedNames(db) {
+  const rows = db
+    .prepare("SELECT name FROM __opengram_migrations")
+    .all();
 
-  if (columnNames.has("tag")) {
-    return "tag";
-  }
-
-  if (columnNames.has("hash")) {
-    return "hash";
-  }
-
-  return null;
-}
-
-function getAppliedNames(db, migrationFiles, trackingColumn) {
-  const appliedNames = new Set();
-  const knownFiles = new Set(migrationFiles);
-
-  if (trackingColumn) {
-    const trackedRows = db
-      .prepare(`SELECT "${trackingColumn}" AS name FROM __opengram_migrations`)
-      .all();
-    for (const row of trackedRows) {
-      if (typeof row.name === "string") {
-        appliedNames.add(row.name);
-      }
-    }
-  }
-
-  if (!tableExists(db, "__drizzle_migrations")) {
-    // Existing databases with baseline schema should never replay initial migration.
-    if (migrationFiles[0] && tableExists(db, "chats")) {
-      appliedNames.add(migrationFiles[0]);
-    }
-    return appliedNames;
-  }
-
-  const columns = db.prepare("PRAGMA table_info(__drizzle_migrations)").all();
-  const legacyNameColumn = columns.find((column) => column.name === "hash" || column.name === "tag");
-  if (legacyNameColumn) {
-    const legacyRows = db
-      .prepare(`SELECT "${legacyNameColumn.name}" AS name FROM __drizzle_migrations`)
-      .all();
-    for (const row of legacyRows) {
-      if (typeof row.name !== "string" || !row.name) {
-        continue;
-      }
-
-      const directMatch = row.name;
-      const sqlMatch = `${row.name}.sql`;
-
-      if (knownFiles.has(directMatch)) {
-        appliedNames.add(directMatch);
-      } else if (knownFiles.has(sqlMatch)) {
-        appliedNames.add(sqlMatch);
-      }
-    }
-  }
-
-  // Existing databases with baseline schema should never replay initial migration.
-  if (migrationFiles[0] && tableExists(db, "chats")) {
-    appliedNames.add(migrationFiles[0]);
-  }
-
-  return appliedNames;
+  return new Set(rows.map((row) => row.name));
 }
 
 function main() {
@@ -118,12 +48,7 @@ function main() {
     )
   `);
 
-  const trackingColumn = resolveMigrationTrackingColumn(db);
-  if (!trackingColumn) {
-    throw new Error("Unable to resolve migration tracking column for __opengram_migrations");
-  }
-
-  const appliedNames = getAppliedNames(db, migrationFiles, trackingColumn);
+  const appliedNames = getAppliedNames(db);
   for (const fileName of migrationFiles) {
     if (appliedNames.has(fileName)) {
       continue;
@@ -133,7 +58,7 @@ function main() {
     const migrationSql = fs.readFileSync(migrationPath, "utf8");
     const applyMigration = db.transaction(() => {
       db.exec(migrationSql);
-      db.prepare(`INSERT INTO __opengram_migrations ("${trackingColumn}", applied_at) VALUES (?, ?)`).run(
+      db.prepare("INSERT INTO __opengram_migrations (name, applied_at) VALUES (?, ?)").run(
         fileName,
         Date.now(),
       );

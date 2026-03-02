@@ -1,15 +1,11 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { closeDb, getDb, resetDbForTests } from '@/src/db/client';
 import { resetSqliteReadyForTests } from '@/src/db/migrations';
-
-const repoRoot = join(import.meta.dirname, '..', '..');
-const initialMigrationSql = readFileSync(join(repoRoot, 'migrations', '0000_initial.sql'), 'utf8');
 
 afterEach(() => {
   closeDb();
@@ -47,62 +43,5 @@ describe('runtime sqlite bootstrap', () => {
     expect(mmapSize).toBe(268435456);
     expect(tempStore).toBe(2); // MEMORY
     expect(foreignKeys).toBe(1);
-  });
-
-  it('handles databases that already have the baseline schema', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'opengram-runtime-migrations-existing-'));
-    const dbPath = join(tempDir, 'opengram.db');
-
-    const seeded = new Database(dbPath);
-    seeded.exec(initialMigrationSql);
-    seeded.close();
-
-    process.env.DATABASE_URL = dbPath;
-    const db = getDb();
-    const rows = db
-      .prepare('SELECT name FROM __opengram_migrations ORDER BY name ASC')
-      .all() as Array<{ name: string }>;
-
-    expect(rows.map((row) => row.name)).toEqual([
-      '0001_messages_fts_trigger_upgrade.sql',
-      '0002_messages_stream_sweep_index.sql',
-      '0003_add_notifications_muted.sql',
-      '0004_drop_custom_state.sql',
-      '0005_add_title_source.sql',
-      '0006_dispatch_queue.sql',
-    ]);
-  });
-
-  it('supports legacy __opengram_migrations tag column', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'opengram-runtime-migrations-legacy-tags-'));
-    const dbPath = join(tempDir, 'opengram.db');
-
-    const seeded = new Database(dbPath);
-    seeded.exec(initialMigrationSql);
-    seeded.exec(`
-      CREATE TABLE __opengram_migrations (
-        tag TEXT PRIMARY KEY,
-        applied_at INTEGER NOT NULL
-      )
-    `);
-    seeded
-      .prepare('INSERT INTO __opengram_migrations (tag, applied_at) VALUES (?, ?)')
-      .run('0001_messages_fts_trigger_upgrade.sql', Date.now());
-    seeded.close();
-
-    process.env.DATABASE_URL = dbPath;
-    const db = getDb();
-    const rows = db
-      .prepare('SELECT tag FROM __opengram_migrations ORDER BY tag ASC')
-      .all() as Array<{ tag: string }>;
-
-    expect(rows.map((row) => row.tag)).toEqual([
-      '0001_messages_fts_trigger_upgrade.sql',
-      '0002_messages_stream_sweep_index.sql',
-      '0003_add_notifications_muted.sql',
-      '0004_drop_custom_state.sql',
-      '0005_add_title_source.sql',
-      '0006_dispatch_queue.sql',
-    ]);
   });
 });
