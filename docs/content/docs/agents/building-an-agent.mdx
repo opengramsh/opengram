@@ -1,0 +1,227 @@
+---
+title: Building an Agent
+description: Step-by-step guide to building an agent that connects to Opengram, claims dispatches, and sends responses.
+---
+
+This guide walks through building an agent that connects to the Opengram API. Your agent will claim dispatched messages, process them, and send responses back -- including streaming tokens and interactive requests.
+
+## Architecture overview
+
+```
+User ──▶ Opengram UI ──▶ Opengram API ──▶ Dispatch Queue
+                                              │
+                                              ▼
+                              Your Agent (claim → process → respond)
+```
+
+Your agent is a standalone process that communicates with Opengram over HTTP. It does not need to be written in any particular language or framework. The flow is:
+
+1. **Claim** a dispatch from the queue (long-poll).
+2. **Process** the batch -- read messages, call your LLM, generate a response.
+3. **Respond** by sending messages back to the chat via the API.
+4. **Complete** the dispatch to signal you are done.
+
+## Minimal agent (Node.js)
+
+```js
+const BASE = "http://localhost:3000/api/v1";
+const SECRET = "og_your-secret-here";
+const AGENT_ID = "assistant";
+const headers = {
+  Authorization: `Bearer ${SECRET}`,
+  "Content-Type": "application/json",
+};
+
+async function run() {
+  while (true) {
+    // 1. Claim a dispatch (long-polls for up to 10s)
+    const claim = await fetch(`${BASE}/dispatch/claim`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ workerId: "worker-1", leaseMs: 30000, waitMs: 10000 }),
+    });
+
+    if (claim.status === 204) continue; // No work available
+
+    const batch = await claim.json();
+    const { batchId, chatId, compiledContent } = batch;
+
+    try {
+      // 2. Send a response message
+      const reply = `You said: ${compiledContent}`;
+      await fetch(`${BASE}/chats/${chatId}/messages`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ role: "agent", agentId: AGENT_ID, content: reply }),
+      });
+
+      // 3. Complete the dispatch
+      await fetch(`${BASE}/dispatch/${batchId}/complete`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ workerId: "worker-1" }),
+      });
+    } catch (err) {
+      // 4. Report failure so it can be retried
+      await fetch(`${BASE}/dispatch/${batchId}/fail`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          workerId: "worker-1",
+          reason: err.message,
+          retryable: true,
+        }),
+      });
+    }
+  }
+}
+
+run();
+```
+
+## Minimal agent (Python)
+
+```python
+import requests, time
+
+BASE = "http://localhost:3000/api/v1"
+SECRET = "og_your-secret-here"
+AGENT_ID = "assistant"
+HEADERS = {"Authorization": f"Bearer {SECRET}", "Content-Type": "application/json"}
+
+while True:
+    # 1. Claim a dispatch
+    r = requests.post(f"{BASE}/dispatch/claim", headers=HEADERS,
+                      json={"workerId": "worker-1", "leaseMs": 30000, "waitMs": 10000})
+
+    if r.status_code == 204:
+        continue  # No work available
+
+    batch = r.json()
+    batch_id, chat_id = batch["batchId"], batch["chatId"]
+    content = batch["compiledContent"]
+
+    try:
+        # 2. Send a response
+        requests.post(f"{BASE}/chats/{chat_id}/messages", headers=HEADERS,
+                      json={"role": "agent", "agentId": AGENT_ID, "content": f"You said: {content}"})
+
+        # 3. Complete the dispatch
+        requests.post(f"{BASE}/dispatch/{batch_id}/complete", headers=HEADERS,
+                      json={"workerId": "worker-1"})
+    except Exception as e:
+        requests.post(f"{BASE}/dispatch/{batch_id}/fail", headers=HEADERS,
+                      json={"workerId": "worker-1", "reason": str(e), "retryable": True})
+```
+
+## Streaming responses
+
+For a ChatGPT-style typing effect, create the message with `stream: true`, append chunks, then complete:
+
+```js
+// 1. Create a streaming message
+const msg = await fetch(`${BASE}/chats/${chatId}/messages`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ role: "agent", agentId: AGENT_ID, content: "", stream: true }),
+}).then((r) => r.json());
+
+const messageId = msg.id;
+
+// 2. Append chunks as your LLM generates tokens
+for (const token of tokens) {
+  await fetch(`${BASE}/chats/${chatId}/messages/${messageId}/chunks`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ deltaText: token }),
+  });
+}
+
+// 3. Finalize the message
+await fetch(`${BASE}/chats/${chatId}/messages/${messageId}/complete`, {
+  method: "POST",
+  headers,
+});
+```
+
+## Heartbeats
+
+If your agent takes more than a few seconds to process, send periodic heartbeats to prevent the lease from expiring and the dispatch from being returned to the queue:
+
+```js
+const heartbeatInterval = setInterval(async () => {
+  await fetch(`${BASE}/dispatch/${batchId}/heartbeat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ workerId: "worker-1" }),
+  });
+}, 5000); // every 5 seconds
+
+// ... do your processing ...
+
+clearInterval(heartbeatInterval);
+```
+
+The default lease is 30 seconds (`dispatch.leaseMs`). Send heartbeats more frequently than this interval.
+
+## Handling interactive requests
+
+Your agent can ask the user for structured input by creating an interactive request:
+
+```js
+// Create a choice request
+await fetch(`${BASE}/chats/${chatId}/requests`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    type: "choice",
+    title: "How should I proceed?",
+    config: {
+      options: [
+        { id: "approve", label: "Approve" },
+        { id: "reject", label: "Reject" },
+      ],
+    },
+  }),
+});
+```
+
+When the user responds, a new dispatch is created with `kind: "request_batch"`. Your agent claims it like any other dispatch and reads the resolved request data from the batch items.
+
+## The batch payload
+
+When you claim a dispatch, the response includes the full batch payload:
+
+```json
+{
+  "batchId": "abc123",
+  "chatId": "chat_456",
+  "kind": "user_batch",
+  "agentIdHint": "assistant",
+  "compiledContent": "Hello, can you help me?",
+  "items": [
+    {
+      "inputId": "inp_1",
+      "sourceKind": "user_message",
+      "sourceId": "msg_789",
+      "senderId": "user",
+      "content": "Hello, can you help me?",
+      "mediaIds": [],
+      "attachmentNames": []
+    }
+  ],
+  "attachments": []
+}
+```
+
+- `kind` -- `"user_batch"` for user messages, `"request_batch"` for resolved requests.
+- `compiledContent` -- a combined text string of all items in the batch.
+- `items` -- individual input items with source metadata.
+- `attachments` -- media files attached to the messages.
+
+## Error handling tips
+
+- **204 on claim**: No dispatches available. Loop and try again.
+- **Heartbeat fails (404)**: The lease expired and the dispatch was reclaimed. Stop processing and claim a new one.
+- **Complete fails (409)**: The dispatch was already completed or failed by another worker.
+- **Network errors**: Mark the dispatch as failed with `retryable: true` so Opengram retries it.

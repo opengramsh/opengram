@@ -1,0 +1,98 @@
+---
+title: Interactive Requests
+description: Let agents ask users for structured input through choice buttons, text inputs, and multi-field forms.
+---
+
+Interactive requests allow agents to collect structured input from users. Instead of parsing free-text replies, agents create a typed request and receive a clean, validated response.
+
+## Request Types
+
+There are three request types:
+
+### Choice
+
+Presents the user with a set of buttons to pick from.
+
+```json
+{
+  "type": "choice",
+  "title": "How would you like to proceed?",
+  "options": [
+    { "label": "Approve", "value": "approve" },
+    { "label": "Reject", "value": "reject" },
+    { "label": "Ask for changes", "value": "changes" }
+  ]
+}
+```
+
+### Text Input
+
+Asks the user for a single free-text response.
+
+```json
+{
+  "type": "text_input",
+  "title": "What is the project name?",
+  "placeholder": "Enter a name..."
+}
+```
+
+### Form
+
+Collects multiple fields at once.
+
+```json
+{
+  "type": "form",
+  "title": "Deployment details",
+  "fields": [
+    { "name": "environment", "label": "Environment", "type": "select", "options": ["staging", "production"] },
+    { "name": "version", "label": "Version", "type": "text", "placeholder": "e.g. 1.2.3" },
+    { "name": "notify", "label": "Send notification", "type": "checkbox" }
+  ]
+}
+```
+
+## How It Works
+
+1. The agent creates a request by calling `POST /api/v1/chats/:chatId/requests` with the request body.
+2. A floating widget appears above the composer in the user's chat, showing the request.
+3. The user fills in or selects their answer and submits it.
+4. The request is resolved, and the agent receives the result either through the [dispatch system](/docs/agents/dispatch) or via [webhook](/docs/agents/webhooks).
+
+## Widget Behavior
+
+The request widget floats above the message composer so it stays visible while the user scrolls through the conversation. Users can collapse the widget if they want to continue reading before responding.
+
+If multiple requests are pending, they stack in the widget and the user resolves them one at a time.
+
+## Form field types
+
+When using the `form` request type, each field in the `fields` array has a `type` property:
+
+| Field Type | Description | Extra Properties |
+|---|---|---|
+| `text` | Single-line text input | `placeholder` |
+| `select` | Dropdown select | `options` (string array) |
+| `checkbox` | Boolean toggle | -- |
+
+## Resolution payloads
+
+When a request is resolved, the resolution payload varies by type:
+
+| Request Type | Resolution Payload |
+|---|---|
+| `choice` | `{ "selectedOptionIds": ["approve"] }` |
+| `text_input` | `{ "text": "The user's response" }` |
+| `form` | `{ "values": { "environment": "production", "version": "1.2.3", "notify": true } }` |
+
+When a request is **cancelled**, the resolution payload is `null` and the status changes to `"cancelled"`.
+
+## API Reference
+
+See the full API details at:
+
+- [Create a request](/docs/api-reference/createChatRequest) -- `POST /api/v1/chats/:chatId/requests`
+- [Resolve a request](/docs/api-reference/resolveRequest) -- `POST /api/v1/chats/:chatId/requests/:requestId/resolve`
+- [Cancel a request](/docs/api-reference/cancelRequest) -- `POST /api/v1/chats/:chatId/requests/:requestId/cancel`
+- [List requests](/docs/api-reference/listChatRequests) -- `GET /api/v1/chats/:chatId/requests`

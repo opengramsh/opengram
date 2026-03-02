@@ -1,0 +1,139 @@
+---
+title: Configuration
+description: Configure Opengram using the config file, the init wizard, or the admin API.
+---
+
+Opengram is configured through a single JSON file, `opengram.config.json`. This file controls agents, models, push notifications, security, server behavior, and more.
+
+## Ways to edit configuration
+
+There are three ways to update the configuration:
+
+1. **Edit the file directly** -- open `opengram.config.json` in any text editor and restart Opengram to apply changes.
+2. **Run the init wizard** -- `opengram init` walks you through the most common settings interactively.
+3. **Use the admin API** -- send a `PATCH` request to `/api/v1/config/admin` to update configuration at runtime without a restart.
+
+<Callout type="info">
+Changes made by editing the JSON file require a restart to take effect. The admin API applies changes immediately.
+</Callout>
+
+## Config file location
+
+After installation, the config file lives at:
+
+```
+/opt/opengram/config/opengram.config.json
+```
+
+If you are running from source, the file is in the project root. When using the CLI, `opengram init` writes the config to `~/.opengram/opengram.config.json` (or the path set by `$OPENGRAM_HOME`).
+
+## Top-level structure
+
+The configuration file has the following top-level sections:
+
+| Section | Purpose |
+|---|---|
+| `appName` | Display name for the instance |
+| `agents` | Array of agent definitions |
+| `models` | Array of model definitions |
+| `push` | Web Push notification settings |
+| `security` | Instance secret and access control |
+| `server` | Port, public base URL, dispatch, and streaming settings |
+| `hooks` | Webhook endpoint definitions |
+| `autoRename` | LLM-based chat renaming settings |
+
+## Agents
+
+The `agents` array defines the AI agents available in your Opengram instance. Each agent has an identifier, a display name, and optionally a default model:
+
+```json
+{
+  "agents": [
+    {
+      "id": "assistant",
+      "name": "Assistant",
+      "description": "General-purpose AI assistant",
+      "avatarUrl": "/avatars/assistant.png",
+      "defaultModelId": "gpt-4o"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | Unique identifier for the agent |
+| `name` | `string` | Display name shown in the UI |
+| `description` | `string` | Short description of what the agent does |
+| `avatarUrl` | `string` | URL to the agent's avatar image |
+| `defaultModelId` | `string` | ID of the default model (must match an entry in `models`) |
+
+## Models
+
+The `models` array defines the language models your agents can use:
+
+```json
+{
+  "models": [
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "description": "OpenAI GPT-4o",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | Unique identifier for the model |
+| `name` | `string` | Display name shown in the UI |
+| `description` | `string` | Short description of the model |
+| `metadata` | `object` | Arbitrary key-value pairs for your agent to consume |
+
+## Environment variable overrides
+
+Some configuration values can be overridden by environment variables. For example, `OPENGRAM_SERVER_PORT` overrides `server.port`. See the [Environment Variables reference](/docs/reference/environment-variables) for the full list.
+
+## Example configuration
+
+Here is a minimal configuration with one agent and two models:
+
+```json title="opengram.config.json"
+{
+  "appName": "My Opengram",
+  "agents": [
+    {
+      "id": "assistant",
+      "name": "Assistant",
+      "description": "General-purpose AI assistant",
+      "defaultModelId": "claude-sonnet"
+    }
+  ],
+  "models": [
+    {
+      "id": "claude-sonnet",
+      "name": "Claude Sonnet",
+      "description": "Anthropic Claude Sonnet"
+    },
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "description": "OpenAI GPT-4o"
+    }
+  ],
+  "server": {
+    "port": 3000,
+    "publicBaseUrl": "https://chat.example.com"
+  },
+  "security": {
+    "instanceSecretEnabled": true,
+    "instanceSecret": "og_your-secret-here"
+  }
+}
+```
+
+## Full reference
+
+For the complete configuration schema including `push`, `hooks`, `autoRename`, and `server.dispatch` settings, see the [Configuration Reference](/docs/reference/configuration).

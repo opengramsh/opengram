@@ -1,0 +1,67 @@
+---
+title: Auto-Rename
+description: Automatically generate descriptive chat titles using an LLM after the first user message.
+---
+
+Opengram can automatically generate descriptive titles for chats using an LLM. When a user sends their first message in a chat that still has the default title, the auto-rename feature calls the configured LLM to produce a short, relevant title based on the conversation content.
+
+## Supported Providers
+
+| Provider | Config value | Environment variable |
+|---|---|---|
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai` | `OPENAI_API_KEY` |
+| Google | `google` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
+| xAI | `xai` | `XAI_API_KEY` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` |
+
+## Setup
+
+The easiest way to configure auto-rename is through the init wizard:
+
+```bash
+opengram init
+```
+
+The wizard will prompt you to select a provider, enter an API key, and choose a model.
+
+Alternatively, configure it directly in your configuration file:
+
+```json
+{
+  "autoRename": {
+    "enabled": true,
+    "provider": "anthropic",
+    "modelId": "claude-haiku-4-0",
+    "apiKey": "sk-ant-..."
+  }
+}
+```
+
+### API Key Resolution
+
+The API key can be provided in two ways:
+
+1. **In the config file** -- set the `apiKey` field in the `autoRename` section
+2. **Via environment variable** -- set the provider's environment variable (see table above)
+
+If both are set, the config file value takes precedence.
+
+## How it works
+
+1. A user sends a message in a chat that still has the default title (e.g. "New Chat").
+2. Opengram checks that the chat has at least **6 messages** and the user's messages total at least **30 characters** of content.
+3. Opengram sends the **last 6 messages** (each truncated to 300 characters) to the configured LLM.
+4. The LLM returns a short title (3--7 words), which is trimmed to the `titleMaxChars` limit (default: **48 characters**).
+5. The chat title is updated automatically.
+
+Auto-rename only triggers once per chat -- when the title source is still `default`. If a user or agent has already set a custom title, auto-rename is skipped.
+
+## Configuration Options
+
+| Option | Type | Description |
+|---|---|---|
+| `enabled` | boolean | Whether auto-rename is active |
+| `provider` | string | One of `anthropic`, `openai`, `google`, `xai`, `openrouter` |
+| `modelId` | string | The model ID to use (e.g. `claude-haiku-4-0`, `gpt-4o-mini`) |
+| `apiKey` | string | API key for the provider (optional if set via environment variable) |

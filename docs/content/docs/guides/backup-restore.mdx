@@ -1,0 +1,79 @@
+---
+title: Backup & Restore
+description: How to back up and restore your Opengram data, configuration, and media files.
+---
+
+Opengram stores all data in a SQLite database file and an uploads directory. Backing up is a matter of copying these files.
+
+## What to back up
+
+| File/Directory | Location (direct install) | Description |
+|---|---|---|
+| `opengram.db` | `/opt/opengram/data/opengram.db` | SQLite database (chats, messages, events, etc.) |
+| `opengram.db-wal` | `/opt/opengram/data/opengram.db-wal` | SQLite write-ahead log (must be included) |
+| `uploads/` | `/opt/opengram/data/uploads/` | Uploaded files and media attachments |
+| `opengram.config.json` | `/opt/opengram/config/opengram.config.json` | Instance configuration |
+| `opengram.env` | `/opt/opengram/config/opengram.env` | Environment variables |
+
+## SQLite backup
+
+For a consistent backup, stop the server first to ensure no writes are in progress:
+
+```bash
+sudo systemctl stop opengram-web
+
+cp /opt/opengram/data/opengram.db /backup/opengram.db
+cp /opt/opengram/data/opengram.db-wal /backup/opengram.db-wal
+
+sudo systemctl start opengram-web
+```
+
+Alternatively, use SQLite's built-in `.backup` command for an online backup (does not require stopping the server):
+
+```bash
+sqlite3 /opt/opengram/data/opengram.db ".backup /backup/opengram.db"
+```
+
+## Media backup
+
+Copy the entire uploads directory:
+
+```bash
+cp -r /opt/opengram/data/uploads/ /backup/uploads/
+```
+
+## Docker volume backup
+
+If using Docker with a named volume:
+
+```bash
+docker stop opengram
+
+docker run --rm \
+  -v opengram_data:/data \
+  -v "$(pwd)/backup:/backup" \
+  alpine tar czf /backup/opengram-data.tar.gz -C /data .
+
+docker start opengram
+```
+
+## Restore
+
+To restore from a backup:
+
+1. Stop the server.
+2. Copy the backed-up files to their original locations.
+3. Start the server.
+
+```bash
+sudo systemctl stop opengram-web
+
+cp /backup/opengram.db /opt/opengram/data/opengram.db
+cp /backup/opengram.db-wal /opt/opengram/data/opengram.db-wal
+cp -r /backup/uploads/ /opt/opengram/data/uploads/
+cp /backup/opengram.config.json /opt/opengram/config/opengram.config.json
+
+sudo systemctl start opengram-web
+```
+
+For Docker, restore the volume contents and restart the container.

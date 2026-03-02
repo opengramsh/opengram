@@ -1,0 +1,71 @@
+---
+title: Upgrading
+description: How to upgrade Opengram to a new version.
+---
+
+Opengram applies database migrations automatically on startup, so upgrading is straightforward regardless of your deployment method.
+
+## Before upgrading
+
+Back up your data before upgrading. The critical files are:
+
+- `opengram.db` and `opengram.db-wal` (the SQLite database and write-ahead log)
+- `uploads/` directory (uploaded files and media)
+- `opengram.config.json` (your configuration)
+
+See [Backup & Restore](/docs/guides/backup-restore) for detailed instructions.
+
+## Docker
+
+Pull the latest image and restart the container:
+
+```bash
+docker pull opengram/web:latest
+docker restart opengram
+```
+
+Or with Docker Compose:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Migrations run automatically when the container starts.
+
+## Direct install
+
+Re-run the install script from the updated repository:
+
+```bash
+cd /path/to/opengram
+git pull
+sudo ./install.sh
+```
+
+The script rebuilds the application, copies files to `/opt/opengram/web/`, runs migrations, and restarts the systemd service.
+
+## Manual (from source)
+
+```bash
+cd /path/to/opengram
+git pull
+npm install
+npm run build
+```
+
+Then restart the server. Migrations apply automatically on startup.
+
+## Verify the upgrade
+
+After upgrading, check that the server is healthy:
+
+```bash
+curl -fsS http://localhost:3000/api/v1/health
+```
+
+Check the version:
+
+```bash
+opengram version
+```

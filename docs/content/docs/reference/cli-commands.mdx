@@ -1,0 +1,89 @@
+---
+title: CLI Commands
+description: Opengram CLI command reference.
+---
+
+The `opengram` CLI manages server setup, startup, and system service integration. It is installed globally as part of the [direct install](/docs/deployment/direct-install) process.
+
+## `opengram init`
+
+Interactive setup wizard that walks through initial configuration.
+
+```bash
+opengram init
+```
+
+The wizard prompts for:
+
+- **Server port** -- the HTTP port Opengram listens on
+- **Base URL** -- the public URL used for push notifications and webhooks
+- **Instance secret** -- generates a secure `og_`-prefixed token for API authentication
+- **Auto-rename** -- configure automatic chat title generation with an LLM provider
+- **OpenClaw plugin** -- optionally set up the OpenClaw agent plugin
+- **systemd service** -- optionally install a systemd service for automatic startup (Linux only)
+
+Configuration is written to `opengram.config.json` and `opengram.env` in the config directory.
+
+The wizard auto-detects the Tailscale hostname (if available) and suggests it as the default base URL.
+
+## `opengram start`
+
+Start the Opengram server.
+
+```bash
+opengram start
+opengram start --port 8080
+```
+
+| Flag | Description |
+|------|-------------|
+| `--port N` | Override the port from the configuration file |
+
+The server runs in the foreground. Use `opengram service install` or Docker for production deployments that should survive terminal closure.
+
+When starting, the CLI automatically sets these environment variables:
+
+| Variable | Value |
+|---|---|
+| `NODE_ENV` | `production` |
+| `DATABASE_URL` | `<dataDir>/opengram.db` |
+| `OPENGRAM_DATA_ROOT` | `<dataDir>` |
+| `OPENGRAM_MIGRATIONS_DIR` | `<pkgRoot>/migrations` |
+| `OPENGRAM_CONFIG_PATH` | `<home>/opengram.config.json` (if the file exists) |
+
+Where `<home>` is `$OPENGRAM_HOME` (default: `~/.opengram`) and `<dataDir>` is `<home>/data`.
+
+## `opengram service`
+
+Manage the systemd service (Linux only).
+
+```bash
+opengram service <action>
+```
+
+| Action | Description |
+|--------|-------------|
+| `install` | Create and enable the systemd service. The service starts on boot and restarts automatically on failure |
+| `uninstall` | Stop and remove the systemd service |
+| `status` | Show whether the service is running and recent log output |
+| `logs` | Stream live log output from the service (equivalent to `journalctl -fu opengram`) |
+
+## `opengram version`
+
+Print the installed Opengram version.
+
+```bash
+opengram version
+opengram --version
+opengram -v
+```
+
+## `opengram help`
+
+Show available commands and usage information.
+
+```bash
+opengram help
+opengram --help
+opengram -h
+```

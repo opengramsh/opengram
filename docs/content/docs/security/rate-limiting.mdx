@@ -1,0 +1,73 @@
+---
+title: Rate Limiting
+description: Protect your Opengram instance from abuse with per-IP rate limiting on write endpoints.
+---
+
+Opengram rate-limits write endpoints by default to prevent abuse and protect server resources. Read endpoints are not rate-limited.
+
+## Default Behavior
+
+All mutating API requests (POST, PUT, PATCH, DELETE) are subject to rate limiting. The defaults are:
+
+| Setting | Default |
+|---------|---------|
+| Max requests per window | 100 |
+| Window duration | 1000 ms |
+
+This means each IP address can make up to 100 write requests per second before receiving a `429 Too Many Requests` response. Read endpoints (GET requests) are **not** rate-limited.
+
+### 429 response format
+
+When the limit is exceeded, the response includes a `Retry-After` header and a JSON error body:
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_ERROR",
+    "message": "Write rate limit exceeded.",
+    "details": { "retryAfterSeconds": 1 }
+  }
+}
+```
+
+The `Retry-After` header value is in seconds.
+
+## Configuration
+
+Adjust the limits using environment variables:
+
+```bash
+# Maximum number of write requests allowed per window
+OPENGRAM_WRITE_RATE_LIMIT_MAX=100
+
+# Window duration in milliseconds
+OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS=1000
+```
+
+Set these in your `opengram.env` file or pass them directly as environment variables when starting the server.
+
+## Per-IP Bucketing
+
+Rate limits are tracked per IP address. Each unique IP gets its own request counter that resets after the configured window duration.
+
+## Running Behind a Proxy
+
+When Opengram runs behind a reverse proxy (Nginx, Caddy, Cloudflare, etc.), all requests appear to come from the proxy's IP address by default. This would cause all users to share a single rate-limit bucket.
+
+To use the real client IP instead, enable proxy header trust:
+
+```bash
+OPENGRAM_TRUST_PROXY_HEADERS=true
+```
+
+When enabled, Opengram reads the client IP from forwarded headers in this order of priority:
+
+1. `cf-connecting-ip` (Cloudflare)
+2. `x-real-ip`
+3. `x-forwarded-for` (first address in the list)
+
+Only enable this setting when Opengram is actually behind a trusted proxy. If exposed directly to the internet without a proxy, a malicious client could spoof these headers to bypass rate limiting.
+
+## Stale bucket cleanup
+
+Rate-limit buckets for inactive IP addresses are automatically cleaned up every 10 seconds. Buckets older than the configured window duration are removed to prevent memory growth.

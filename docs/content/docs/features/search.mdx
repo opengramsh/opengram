@@ -1,0 +1,62 @@
+---
+title: Search
+description: Full-text search across chat titles and message content powered by SQLite FTS5.
+---
+
+Opengram includes full-text search powered by SQLite's FTS5 extension. Users can search across chat titles, message content, or both.
+
+## Search Scopes
+
+There are three search scopes:
+
+| Scope | What it searches |
+|---|---|
+| `titles` | Chat titles only |
+| `messages` | Message content only |
+| `all` | Both titles and messages |
+
+## Using Search in the UI
+
+Search is accessed through the search icon in the chat list header. Typing a query filters results in real time. Users can switch between scopes to narrow down results.
+
+Search results show:
+
+- **Chat matches** -- chats whose title matches the query
+- **Message matches** -- individual messages that match, grouped by chat, with a snippet highlighting the matched text
+
+Tapping a result navigates directly to that chat or to the specific message within the chat.
+
+## API
+
+The search endpoint is available for agents and integrations:
+
+```
+GET /api/v1/search?query=hello&scope=all&limit=20
+```
+
+### Parameters
+
+| Parameter | Type | Default | Max | Description |
+|---|---|---|---|---|
+| `query` | string | required | -- | The search query |
+| `scope` | string | `all` | -- | One of `titles`, `messages`, or `all` |
+| `limit` | number | `50` | `100` | Maximum number of results per page |
+| `cursor` | string | -- | -- | Cursor for pagination (from previous response) |
+
+See the full API details at [Search API reference](/docs/api-reference/search).
+
+## How FTS5 Works
+
+Opengram automatically maintains an FTS5 index alongside the main database tables. When messages are created or chats are renamed, the index is updated. Searches use FTS5's ranking algorithm to return the most relevant results first.
+
+No additional setup is required -- the FTS5 index is created automatically when Opengram starts.
+
+### Query syntax
+
+FTS5 supports several query operators:
+
+| Syntax | Example | Description |
+|---|---|---|
+| Space-separated terms | `hello world` | Matches documents containing both terms (implicit AND) |
+| Quoted phrases | `"hello world"` | Matches the exact phrase |
+| Prefix wildcard | `hello*` | Matches any term starting with `hello` |

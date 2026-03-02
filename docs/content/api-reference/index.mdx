@@ -1,0 +1,120 @@
+---
+title: API Overview
+description: Authentication, error handling, pagination, idempotency, and streaming for the Opengram REST API.
+---
+
+All Opengram API endpoints are under `/api/v1/`. This page covers the conventions shared across every endpoint.
+
+## Authentication
+
+When the [instance secret](/docs/security/instance-secret) is enabled, include it in every request using one of two methods:
+
+**Authorization header** (preferred):
+
+```
+Authorization: Bearer og_your-secret-here
+```
+
+**Query parameter** (for SSE and other clients that cannot set headers):
+
+```
+GET /api/v1/events/stream?token=og_your-secret-here
+```
+
+By default, only write endpoints (POST, PATCH, DELETE) require the secret. Set `security.readEndpointsRequireInstanceSecret` to `true` to require it on GET endpoints as well.
+
+## Error format
+
+All errors return a consistent JSON envelope:
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Chat not found.",
+    "details": { "chatId": "abc123" }
+  }
+}
+```
+
+| HTTP Status | Error Code | Description |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Invalid request body or query parameters |
+| 401 | `UNAUTHORIZED` | Missing or invalid instance secret |
+| 404 | `NOT_FOUND` | Resource does not exist |
+| 409 | `CONFLICT` | Idempotency key reused with a different request body, or resource state conflict |
+| 413 | `PAYLOAD_TOO_LARGE` | File or request body exceeds size limits |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | File type not allowed (e.g. SVG) |
+| 429 | `RATE_LIMIT_ERROR` | Write rate limit exceeded. Includes a `Retry-After` header (seconds) |
+| 500 | `INTERNAL_ERROR` | Unexpected server error |
+
+## Pagination
+
+List endpoints use cursor-based pagination. Responses include a `cursor` object:
+
+```json
+{
+  "data": [ ... ],
+  "cursor": {
+    "next": "eyJjcmVhdGVkQXQiOjE3MDk...",
+    "hasMore": true
+  }
+}
+```
+
+To get the next page, pass the `cursor` value as a query parameter:
+
+```
+GET /api/v1/chats?cursor=eyJjcmVhdGVkQXQiOjE3MDk...
+```
+
+### Default and maximum limits
+
+| Endpoint | Default Limit | Max Limit |
+|---|---|---|
+| List chats | 50 | 100 |
+| List messages | 50 | 200 |
+| List media | 50 | 100 |
+| Search | 50 | 100 |
+
+Pass `limit` as a query parameter to control page size.
+
+## Idempotency
+
+Send an `Idempotency-Key` header on POST and PATCH requests to safely retry operations without causing duplicates:
+
+```
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+```
+
+- **Same key + same body** → the cached response is replayed (no side effects).
+- **Same key + different body** → `409 Conflict` error.
+- Keys expire after 24 hours by default (configurable via `server.idempotencyTtlSeconds`).
+
+## Streaming messages
+
+To stream a message token-by-token (ChatGPT-style):
+
+1. **Create** the message with `stream: true`:
+   ```
+   POST /api/v1/chats/:chatId/messages
+   { "role": "agent", "agentId": "assistant", "content": "", "stream": true }
+   ```
+
+2. **Append chunks** as tokens arrive:
+   ```
+   POST /api/v1/chats/:chatId/messages/:messageId/chunks
+   { "deltaText": "Hello" }
+   ```
+
+3. **Complete** the message when done:
+   ```
+   POST /api/v1/chats/:chatId/messages/:messageId/complete
+   ```
+
+4. Or **cancel** if something went wrong:
+   ```
+   POST /api/v1/chats/:chatId/messages/:messageId/cancel
+   ```
+
+Streaming messages that are not completed within `server.streamTimeoutSeconds` (default: 60) are auto-cancelled.

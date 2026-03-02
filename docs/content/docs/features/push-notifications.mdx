@@ -1,0 +1,110 @@
+---
+title: Push Notifications
+description: Web push notifications for new messages and requests, with VAPID key management and device subscription.
+---
+
+Opengram supports web push notifications to alert users about new messages and requests even when the app is not in the foreground.
+
+## Enabling Push Notifications
+
+Enable push notifications in your configuration:
+
+```json
+{
+  "push": {
+    "enabled": true
+  }
+}
+```
+
+### VAPID Keys
+
+VAPID (Voluntary Application Server Identification) keys are required for web push. Opengram **automatically generates** a VAPID key pair on first startup when push is enabled. No manual key generation is needed.
+
+The generated keys are stored in the database and reused on subsequent starts.
+
+### Requirements
+
+- **HTTPS is required** -- push notifications only work over secure connections. If you are running behind a [reverse proxy](/docs/deployment/reverse-proxy), make sure TLS is terminated there.
+- **VAPID subject** -- the configured subject (typically your email or site URL) cannot be `localhost`. Use a real domain or email address.
+
+## Notification types
+
+Users receive push notifications for:
+
+- **New messages** -- when an agent sends a message to a chat
+- **New requests** -- when an agent creates an interactive request that needs user input
+
+### Payload structure
+
+Each push notification contains:
+
+```json
+{
+  "title": "Agent Name",
+  "body": "The first 240 characters of the message...",
+  "data": {
+    "chatId": "chat_123",
+    "messageId": "msg_456",
+    "type": "message",
+    "url": "https://your-instance.com/chats/chat_123"
+  }
+}
+```
+
+- The `body` is truncated to **240 characters** if the message is longer.
+- The total payload is capped at **4000 bytes**. If the payload exceeds this, the body is progressively shortened to fit.
+
+## Subscribing Devices
+
+Devices subscribe to push notifications through the API:
+
+```
+POST /api/v1/push/subscribe
+```
+
+The request body includes the push subscription object from the browser's Push API. The UI handles this automatically when users opt in to notifications.
+
+To unsubscribe:
+
+```
+POST /api/v1/push/unsubscribe
+```
+
+## Supported Push Services
+
+Opengram sends notifications through standard Web Push protocol endpoints, which are provided by the browser vendor:
+
+| Browser | Push Service |
+|---|---|
+| Chrome / Edge | Google FCM |
+| Safari | Apple APNs |
+| Firefox | Mozilla Push Service |
+
+No additional configuration is required for these providers -- the Web Push protocol handles routing automatically.
+
+### Allowed push endpoint hosts
+
+For security, Opengram only sends push notifications to known push service hosts:
+
+- `fcm.googleapis.com` (Google FCM)
+- `*.push.apple.com` (Apple APNs)
+- `*.push.services.mozilla.com` (Mozilla)
+
+Endpoints pointing to `localhost`, `.local`, `.internal`, private IP ranges, or any other host are rejected.
+
+## Testing
+
+You can send a test notification to verify your push setup:
+
+```
+POST /api/v1/push/test
+```
+
+This sends a test notification to all subscribed devices. Use it to confirm that VAPID keys, HTTPS, and device subscriptions are all working correctly.
+
+## API Reference
+
+- [Subscribe to push](/docs/api-reference/subscribePush) -- `POST /api/v1/push/subscribe`
+- [Unsubscribe from push](/docs/api-reference/unsubscribePush) -- `POST /api/v1/push/unsubscribe`
+- [Test push notifications](/docs/api-reference/testPush) -- `POST /api/v1/push/test`

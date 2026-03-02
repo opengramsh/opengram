@@ -1,0 +1,126 @@
+---
+title: Docker
+description: Run Opengram as a Docker container with persistent data, config mounting, and health checks.
+---
+
+Docker is the quickest way to deploy Opengram. A single command gives you a running instance with automatic database migrations and a built-in health check.
+
+## Quick start
+
+```bash
+docker run -d \
+  --name opengram \
+  -p 3000:3000 \
+  -v opengram_data:/opt/opengram/data \
+  -v "$(pwd)/config:/opt/opengram/config" \
+  opengram/web:latest
+```
+
+This starts Opengram on port 3000 with persistent storage for both the database and your configuration file.
+
+## Environment variables
+
+The container uses the following environment variables by default:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `NODE_ENV` | `production` | Node.js environment mode |
+| `DATABASE_URL` | `/opt/opengram/data/opengram.db` | Path to the SQLite database file |
+| `OPENGRAM_CONFIG_PATH` | `/opt/opengram/config/opengram.config.json` | Path to the configuration file |
+
+You can override any of these with `-e`:
+
+```bash
+docker run -d \
+  --name opengram \
+  -p 3000:3000 \
+  -e DATABASE_URL=/opt/opengram/data/opengram.db \
+  -v opengram_data:/opt/opengram/data \
+  opengram/web:latest
+```
+
+## Data persistence
+
+Mount `/opt/opengram/data` to persist the SQLite database and uploaded files across container restarts:
+
+```bash
+-v opengram_data:/opt/opengram/data
+```
+
+This volume contains:
+
+- `opengram.db` -- the SQLite database with all chats, messages, and metadata
+- `uploads/` -- uploaded files and media attachments
+
+Back up this volume to preserve all Opengram data.
+
+## Config mounting
+
+Mount your local config directory to `/opt/opengram/config` so the container can read your `opengram.config.json`:
+
+```bash
+-v "$(pwd)/config:/opt/opengram/config"
+```
+
+If no config file exists, run `opengram init` inside the container to generate one:
+
+```bash
+docker exec -it opengram opengram init
+```
+
+## Resource recommendations
+
+Opengram is lightweight. For reference, the systemd service template uses:
+
+- **Memory**: 256 MB soft limit, 384 MB hard limit
+- **CPU**: Minimal -- a single core is sufficient for most workloads
+
+For Docker, you can set equivalent limits:
+
+```bash
+docker run -d --name opengram \
+  --memory=384m \
+  -p 3000:3000 \
+  -v opengram_data:/opt/opengram/data \
+  opengram/web:latest
+```
+
+## Health check
+
+The image includes a built-in health check that polls `GET /api/v1/health` every 30 seconds with a 5-second timeout. Container orchestrators like Docker Compose and Kubernetes will automatically use this to determine container health.
+
+## Entrypoint and migrations
+
+The container entrypoint runs database migrations before starting the server. This means you can safely upgrade to a new image version and migrations will apply automatically on the next startup.
+
+## Docker Compose
+
+For a more maintainable setup, use Docker Compose:
+
+```yaml title="docker-compose.yml"
+services:
+  opengram:
+    image: opengram/web:latest
+    container_name: opengram
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - opengram_data:/opt/opengram/data
+      - ./config:/opt/opengram/config
+
+volumes:
+  opengram_data:
+```
+
+Start the service:
+
+```bash
+docker compose up -d
+```
+
+View logs:
+
+```bash
+docker compose logs -f opengram
+```

@@ -1,0 +1,118 @@
+---
+title: Webhooks
+description: Receive real-time HTTP callbacks when events occur in your Opengram instance.
+---
+
+Webhooks let your backend receive HTTP POST notifications when specific events occur in Opengram. This is useful for logging, triggering external workflows, or integrating with systems that cannot poll the API.
+
+## Configuration
+
+Define webhooks in the `hooks` array of `opengram.config.json`. Each hook object supports:
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `url` | Yes | -- | The endpoint Opengram will POST to. |
+| `events` | Yes | -- | Array of event names to subscribe to. |
+| `headers` | No | `{}` | Extra headers to include in the request. |
+| `signingSecret` | No | -- | Secret used to sign payloads for verification. |
+| `timeoutMs` | No | 5000 | Request timeout in milliseconds. |
+| `maxRetries` | No | 3 | Maximum number of retry attempts on failure. |
+
+### Example
+
+```json title="opengram.config.json"
+{
+  "hooks": [
+    {
+      "url": "https://api.example.com/opengram/webhook",
+      "events": ["message.created", "request.resolved"],
+      "signingSecret": "whsec_your_secret_here",
+      "headers": {
+        "X-Custom-Header": "my-value"
+      },
+      "timeoutMs": 10000,
+      "maxRetries": 5
+    }
+  ]
+}
+```
+
+## Supported events
+
+| Event | Description |
+| --- | --- |
+| `message.created` | A new message was created in a chat (by a user or an agent). |
+| `request.resolved` | An interactive request was resolved by the user. |
+| `request.cancelled` | An interactive request was cancelled. |
+
+## Payload
+
+Each webhook delivery is an HTTP POST with a JSON body. The payload is an event envelope with enriched data, so your handler does not need to make additional API calls.
+
+### Example: `message.created`
+
+```json
+{
+  "id": "evt_abc123",
+  "type": "message.created",
+  "timestamp": 1709312400000,
+  "payload": {
+    "chatId": "chat_456",
+    "agentIds": ["assistant"],
+    "messageId": "msg_789",
+    "senderId": "user",
+    "role": "user",
+    "content": "Hello, can you help me?",
+    "modelId": null,
+    "pendingRequestsCount": 0,
+    "trace": null
+  }
+}
+```
+
+The payload fields vary by event type but always include `chatId`, `agentIds`, and `pendingRequestsCount`.
+
+## Signature verification
+
+When a `signingSecret` is configured, Opengram includes an `X-OpenGram-Signature` header with every delivery. The signature is computed as:
+
+```
+sha256=<hex-encoded HMAC-SHA256 of the raw request body>
+```
+
+To verify a webhook in your handler:
+
+1. Read the raw request body as bytes.
+2. Compute the HMAC-SHA256 of the body using your `signingSecret` as the key.
+3. Compare the hex-encoded result with the value after `sha256=` in the header.
+4. Use a constant-time comparison to prevent timing attacks.
+
+### Node.js example
+
+```js
+import { createHmac, timingSafeEqual } from "crypto";
+
+function verifySignature(body, secret, signatureHeader) {
+  const hmac = createHmac("sha256", secret);
+  hmac.update(body);
+  const expected = `sha256=${hmac.digest("hex")}`;
+  return (
+    expected.length === signatureHeader.length &&
+    timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader))
+  );
+}
+```
+
+## Retry logic
+
+When a delivery fails, Opengram retries with exponential backoff up to the configured `maxRetries`:
+
+- **4xx responses** are treated as permanent failures and are not retried.
+- **5xx responses** and network errors are retried.
+- The backoff delay increases exponentially between attempts.
+
+After all retry attempts are exhausted, the delivery is marked as failed.
+
+## Delivery logging
+
+Every webhook delivery attempt is logged in the `webhook_deliveries` table with the HTTP status code, success/failure status, and any error message. Delivery records are retained for 30 days alongside their parent events. This log is useful for debugging delivery issues.

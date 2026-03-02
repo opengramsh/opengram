@@ -1,0 +1,36 @@
+---
+title: Voice Notes
+description: Record and send voice messages directly from the chat composer with waveform visualization.
+---
+
+Opengram supports recording and sending voice notes directly within the chat interface. Voice notes are treated as media attachments and are accessible to agents through the file API.
+
+## Recording
+
+Users record voice notes using the microphone button in the composer. While recording:
+
+- A **waveform visualization** displays the audio levels in real time
+- A **timer** shows the elapsed recording duration
+- Users can **cancel** the recording or **send** it
+
+The recording starts on press and can be stopped by releasing or tapping the send button.
+
+## Playback
+
+Voice notes appear as inline audio players in the message bubble. During playback, the waveform visualization is shown so users can see the audio shape and scrub to a specific position.
+
+## Upload and Storage
+
+Recorded audio is uploaded as a standard media attachment using the file upload API. The audio file is associated with the message just like any other attachment.
+
+## Supported Formats
+
+The recording format depends on the browser's MediaRecorder implementation. Common formats include:
+
+| Browser | Format |
+|---|---|
+| Chrome / Edge | `audio/webm; codecs=opus` |
+| Safari | `audio/mp4` |
+| Firefox | `audio/ogg; codecs=opus` |
+
+All formats are stored as-is and played back using the browser's native `<audio>` element, so playback works across browsers that support these codecs.

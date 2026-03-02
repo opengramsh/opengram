@@ -1,0 +1,97 @@
+---
+title: Direct Install
+description: Install Opengram directly on a Linux server with the install script and systemd service.
+---
+
+The direct install method runs the install script from the repository root to set up Opengram as a systemd service on a Debian or Ubuntu server.
+
+## Prerequisites
+
+- **Debian or Ubuntu** Linux distribution
+- **systemd** init system (standard on modern Debian/Ubuntu)
+- **Root or sudo access**
+
+## Installation
+
+From the Opengram repository root, run:
+
+```bash
+sudo ./install.sh
+```
+
+The script performs the following steps:
+
+1. Installs Node.js 20 if it is not already present.
+2. Installs dependencies and builds the application.
+3. Creates the directory structure under `/opt/opengram/`.
+4. Runs database migrations.
+5. Installs and enables a systemd service.
+
+After installation, run the init wizard to configure your instance:
+
+```bash
+opengram init
+```
+
+Verify the server is running:
+
+```bash
+curl -fsS http://127.0.0.1:3000/api/v1/health
+# → {"status":"ok"}
+```
+
+## Filesystem layout
+
+After installation, files are organized as follows:
+
+```
+/opt/opengram/
+  web/              # Built application code
+  data/
+    opengram.db     # SQLite database
+    uploads/        # Uploaded files and media
+  config/
+    opengram.config.json   # Application configuration
+    opengram.env           # Environment variables
+```
+
+- **`web/`** -- the built Next.js application.
+- **`data/`** -- all persistent state. Back up this directory to preserve your database and uploads.
+- **`config/`** -- configuration files. See [Configuration](/docs/configuration) for details on `opengram.config.json`.
+
+## Service management
+
+The systemd service is named `opengram-web`. Use standard systemctl commands to manage it:
+
+```bash
+sudo systemctl status opengram-web
+sudo systemctl restart opengram-web
+sudo systemctl stop opengram-web
+```
+
+Opengram also provides CLI shortcuts for common service operations:
+
+```bash
+opengram service status
+opengram service logs
+```
+
+To view logs directly with journalctl:
+
+```bash
+journalctl -u opengram-web -f
+```
+
+## Systemd service details
+
+The service is configured with the following properties:
+
+- **Auto-start on boot** -- the service is enabled by default and starts automatically after a reboot.
+- **Memory limits** -- `MemoryHigh=256M` and `MemoryMax=384M` to prevent runaway memory usage.
+- **Security hardening** -- the unit file includes `NoNewPrivileges=true`, `PrivateTmp=true`, and `ProtectSystem=strict` to limit the service's access to the host system.
+
+To view the full unit file:
+
+```bash
+systemctl cat opengram-web
+```

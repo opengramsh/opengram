@@ -1,0 +1,140 @@
+---
+title: Dispatch System
+description: How Opengram batches, queues, and delivers messages to your agent workers.
+---
+
+The dispatch system is the bridge between the Opengram UI and your agent. When a user sends a message, the dispatch system collects it, optionally batches it with other pending messages, and makes it available for your worker to claim and process.
+
+## Dispatch modes
+
+Configure the mode with the `dispatch.mode` field in `opengram.config.json`. Three modes are available:
+
+### immediate
+
+Each message is dispatched the moment it arrives. No batching, no debouncing. Use this when latency matters more than efficiency, or when your agent processes each message independently.
+
+### sequential
+
+Messages are dispatched one at a time in the order they were received. The next message is not dispatched until the current one is completed. This is useful when message order is critical and your agent cannot handle concurrent inputs.
+
+### batched_sequential (default)
+
+Messages are collected into batches using a debounce window, then dispatched sequentially. This is the default mode and works well for most use cases -- it handles rapid-fire messages from users without overwhelming your agent.
+
+Batching is controlled by three timing parameters:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `batchDebounceMs` | 600 | Wait this long after the last message before sealing the batch. |
+| `typingGraceMs` | 2000 | Extra grace period if the user is still typing. |
+| `maxBatchWaitMs` | 30000 | Maximum time to wait before forcing the batch to dispatch. |
+
+```json title="opengram.config.json"
+{
+  "dispatch": {
+    "mode": "batched_sequential",
+    "batchDebounceMs": 600,
+    "typingGraceMs": 2000,
+    "maxBatchWaitMs": 30000
+  }
+}
+```
+
+## Input sources
+
+A dispatch can be triggered by different input sources:
+
+- **`user_message`** -- the user sent one or more messages in the chat.
+- **`request_resolved`** -- the user resolved an interactive request (e.g. answered a question or submitted a form).
+
+Your worker receives the input source in the dispatch payload so it can decide how to handle each case.
+
+## Worker claiming flow
+
+Your agent worker pulls dispatches from Opengram using a claim-based protocol:
+
+1. **Claim** -- call `POST /api/v1/dispatch/claim` to claim a single dispatch, or `POST /api/v1/dispatch/claim-many` to claim up to N dispatches at once. The response includes the batch payload with all messages, chat context, and agent/model information.
+2. **Heartbeat** -- while processing, call `POST /api/v1/dispatch/{id}/heartbeat` periodically to extend the lease. If the lease expires without a heartbeat, the dispatch is returned to the queue.
+3. **Complete or fail** -- call `POST /api/v1/dispatch/{id}/complete` when done, or `POST /api/v1/dispatch/{id}/fail` if something went wrong.
+
+During processing, your worker can send messages, stream tokens, attach files, and create interactive requests using the standard API endpoints.
+
+### Claim response
+
+A successful claim returns `200` with the batch payload:
+
+```json
+{
+  "batchId": "abc123",
+  "chatId": "chat_456",
+  "kind": "user_batch",
+  "agentIdHint": "assistant",
+  "compiledContent": "Hello! Can you help me with something?",
+  "items": [
+    {
+      "inputId": "inp_1",
+      "sourceKind": "user_message",
+      "sourceId": "msg_789",
+      "senderId": "user",
+      "content": "Hello! Can you help me with something?",
+      "mediaIds": [],
+      "attachmentNames": []
+    }
+  ],
+  "attachments": []
+}
+```
+
+When no work is available, the claim endpoint **long-polls** for up to `claimWaitMs` (default: 10 seconds) before returning `204 No Content`. Your worker should loop and call claim again.
+
+The `kind` field indicates the dispatch source:
+- `"user_batch"` -- triggered by user messages
+- `"request_batch"` -- triggered by a resolved interactive request
+
+### Minimal claim loop (Node.js)
+
+```js
+while (true) {
+  const res = await fetch(`${BASE}/dispatch/claim`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ workerId: "w1", leaseMs: 30000, waitMs: 10000 }),
+  });
+
+  if (res.status === 204) continue;
+
+  const { batchId, chatId, compiledContent } = await res.json();
+
+  // Process the batch, send messages, then complete
+  await fetch(`${BASE}/dispatch/${batchId}/complete`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ workerId: "w1" }),
+  });
+}
+```
+
+See [Building an Agent](/docs/agents/building-an-agent) for a complete walkthrough.
+
+## Autoscaling
+
+The dispatch system supports autoscaling the number of concurrent workers it expects:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `dispatch.execution.autoscaleEnabled` | `true` | Whether autoscaling is active. |
+| `dispatch.execution.minConcurrency` | 2 | Minimum concurrent workers. |
+| `dispatch.execution.maxConcurrency` | 10 | Maximum concurrent workers. |
+| `dispatch.execution.scaleCooldownMs` | 5000 | Cooldown period (ms) before scaling down. |
+
+These settings control how `claim-many` distributes work. When the queue is deep, Opengram signals workers to scale up. When idle, it scales back down after the cooldown period.
+
+## Retry behavior
+
+Failed dispatches are retried with exponential backoff:
+
+- **Base delay**: 500ms
+- **Maximum delay**: 30s
+- **Maximum attempts**: 8
+
+Client errors (4xx from your worker) are not retried. Server errors (5xx) and network failures trigger the retry logic. After all attempts are exhausted, the dispatch is marked as permanently failed.

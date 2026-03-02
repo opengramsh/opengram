@@ -1,0 +1,56 @@
+---
+title: Environment Variables
+description: Complete list of environment variables for configuring Opengram.
+---
+
+Opengram reads environment variables from the shell environment and from the `opengram.env` file in the config directory. Environment variables take precedence over values in `opengram.config.json` where both apply (e.g. `OPENGRAM_SERVER_PORT` overrides `server.port`).
+
+### Env file location
+
+- **Direct install**: `/opt/opengram/config/opengram.env`
+- **Manual / CLI**: `~/.opengram/opengram.env` (or `$OPENGRAM_HOME/opengram.env`)
+- **Docker**: passed via `-e` flags or `env_file` in Docker Compose
+
+### Boolean values
+
+Boolean environment variables accept `'1'`, `'true'`, or `'yes'` (case-insensitive) as truthy. All other values (empty string, `'0'`, `'false'`) are falsy.
+
+## Core
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `./data/opengram.db` | Path to the SQLite database file |
+| `NODE_ENV` | `development` | Environment mode. Set to `production` for deployed instances |
+| `OPENGRAM_CONFIG_PATH` | `./config/opengram.config.json` | Path to the JSON configuration file |
+| `OPENGRAM_DATA_ROOT` | (set by CLI) | Root directory for data storage (database and uploads) |
+| `OPENGRAM_HOME` | `~/.opengram` | Home directory used by the CLI for global state |
+| `OPENGRAM_MIGRATIONS_DIR` | (set by CLI) | Directory containing database migration files |
+
+## Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENGRAM_SERVER_PORT` | (from config) | Override the server port defined in `opengram.config.json` |
+| `OPENGRAM_PUBLIC_BASE_URL` | (from config) | Override `server.publicBaseUrl` in the config file |
+| `OPENGRAM_INSTANCE_SECRET` | (from config) | Override `security.instanceSecret` in the config file |
+| `OPENGRAM_TRUST_PROXY_HEADERS` | (empty) | Set to `true` to trust forwarded IP headers (`x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`). Required when running behind a reverse proxy |
+| `OPENGRAM_CORS_ORIGINS` | (empty) | Comma-separated list of allowed CORS origins. Overrides `server.corsOrigins` in the config file |
+
+## Rate Limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENGRAM_WRITE_RATE_LIMIT_MAX` | `100` | Maximum number of write requests allowed per rate-limit window |
+| `OPENGRAM_WRITE_RATE_LIMIT_WINDOW_MS` | `1000` | Duration of the rate-limit window in milliseconds |
+
+## API Keys (Auto-Rename)
+
+These keys are used by the [auto-rename](/docs/features/auto-rename) feature to generate chat titles via an LLM. Only the key for your chosen provider is required.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | -- | API key for Anthropic (Claude models) |
+| `OPENAI_API_KEY` | -- | API key for OpenAI (GPT models) |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | -- | API key for Google (Gemini models). Either variable name works |
+| `XAI_API_KEY` | -- | API key for xAI (Grok models) |
+| `OPENROUTER_API_KEY` | -- | API key for OpenRouter |

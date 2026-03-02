@@ -1,0 +1,33 @@
+---
+title: OpenClaw Plugin
+description: Connect OpenClaw AI agents to Opengram using the official plugin.
+---
+
+[OpenClaw](https://openclaw.dev) is an open-source AI agent framework for building tool-using, multi-step agents. The **openclaw-plugin-opengram** plugin connects OpenClaw agents to Opengram, letting them send and receive messages, handle interactive requests, and stream responses through the Opengram chat UI.
+
+## How it works
+
+The plugin registers Opengram as a communication channel for your OpenClaw agent. When a message is dispatched to your agent, OpenClaw receives it through the plugin, runs its reasoning loop, and sends responses back through the Opengram API. The plugin handles claiming dispatches, heartbeating, and completing the dispatch lifecycle automatically.
+
+## Setup via init wizard
+
+If the `openclaw` CLI is available on your system, the Opengram init wizard detects it automatically during `opengram init`. When detected, the wizard offers to configure the OpenClaw plugin and pre-fills the connection settings:
+
+- **Base URL** -- the URL of your Opengram instance.
+- **Instance secret** -- the secret used to authenticate API requests.
+
+This writes the necessary configuration to your OpenClaw project so the plugin can connect to Opengram immediately.
+
+## Manual installation
+
+If you prefer to set up the plugin manually, install it from npm:
+
+```bash
+npm install openclaw-plugin-opengram
+```
+
+Then register it in your OpenClaw agent configuration. Refer to the [OpenClaw documentation](https://openclaw.dev/docs/plugins) for details on plugin registration and configuration options.
+
+## When to use this plugin
+
+The OpenClaw plugin is a good fit if you are already building agents with OpenClaw and want to give them a chat interface without writing HTTP plumbing yourself. If you are using a different agent framework, or building your agent from scratch, use the [Dispatch System](/docs/agents/dispatch) and [REST API](/docs/api-reference/createMessage) directly instead.

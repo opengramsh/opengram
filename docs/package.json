@@ -1,0 +1,31 @@
+{
+  "name": "opengram-docs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start",
+    "generate:openapi": "node scripts/generate-openapi-docs.mjs"
+  },
+  "dependencies": {
+    "fumadocs-core": "^16.6.2",
+    "fumadocs-mdx": "^14.2.8",
+    "fumadocs-openapi": "^10.3.11",
+    "fumadocs-ui": "^16.6.7",
+    "next": "^16.1.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "shiki": "^3.23.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}

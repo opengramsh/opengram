@@ -1,0 +1,57 @@
+---
+title: CORS
+description: Configure Cross-Origin Resource Sharing to control which domains can access the Opengram API from a browser.
+---
+
+CORS (Cross-Origin Resource Sharing) controls which web origins are permitted to make requests to the Opengram API from a browser. This is relevant when your frontend is served from a different domain than the API.
+
+## Default Behavior
+
+When no CORS origins are configured, Opengram allows requests from **all origins**. This is permissive by default to simplify initial setup.
+
+## Configuring Allowed Origins
+
+### Config File
+
+Add a `corsOrigins` array to the `server` section of `opengram.config.json`:
+
+```json
+{
+  "server": {
+    "corsOrigins": [
+      "https://app.example.com",
+      "https://admin.example.com"
+    ]
+  }
+}
+```
+
+### Environment Variable
+
+Alternatively, set the `OPENGRAM_CORS_ORIGINS` environment variable with a comma-separated list:
+
+```bash
+OPENGRAM_CORS_ORIGINS=https://app.example.com,https://admin.example.com
+```
+
+## Origin Format
+
+Each origin must be a valid `http` or `https` URL consisting of only the scheme, hostname, and optional port. Do not include paths, query strings, or fragments.
+
+Valid examples:
+- `https://app.example.com`
+- `http://localhost:3001`
+- `https://example.com:8443`
+
+Invalid examples:
+- `https://app.example.com/dashboard` (includes a path)
+- `app.example.com` (missing scheme)
+- `https://app.example.com?key=value` (includes a query string)
+
+## Allowed Methods and Headers
+
+When CORS is active, the following methods and headers are permitted on preflight and actual requests:
+
+**Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`
+
+**Headers:** `Authorization`, `Content-Type`, `Idempotency-Key`, `X-Instance-Secret`

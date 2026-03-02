@@ -1,0 +1,103 @@
+---
+title: Quick Start
+description: Get Opengram running and create your first chat in five minutes.
+---
+
+This guide takes you from zero to a working Opengram instance in a few minutes.
+
+## 1. Install Opengram
+
+Pick whichever method suits your environment:
+
+```bash title="Docker"
+docker run -d --name opengram -p 3000:3000 -v opengram_data:/opt/opengram/data opengram/web:latest
+```
+
+```bash title="Direct install"
+sudo ./install.sh
+```
+
+See [Installation](/docs/installation) for full details on each method.
+
+## 2. Run the init wizard
+
+The init wizard walks you through first-time configuration:
+
+```bash
+opengram init
+```
+
+The wizard will prompt you for:
+
+- **Port** -- the port Opengram listens on (default: `3000`).
+- **Base URL** -- the public URL where Opengram is accessible (e.g. `https://chat.example.com`).
+- **Instance secret** -- a secret key used to authenticate API requests from your agents.
+- **Auto-rename** -- whether to automatically rename chats using an LLM, and which model to use.
+- **OpenClaw plugin** -- optionally enable the OpenClaw agent plugin for quick testing.
+- **Systemd service** -- on Linux, whether to install and enable a systemd service.
+
+The wizard writes its output to `~/.opengram/opengram.config.json` (or `$OPENGRAM_HOME/opengram.config.json`). You can re-run it at any time or edit the file directly.
+
+## 3. Verify your setup
+
+Confirm that Opengram is running:
+
+```bash
+curl -fsS http://localhost:3000/api/v1/health
+# → {"status":"ok"}
+```
+
+## 4. Access the UI
+
+Open your browser and navigate to the URL you configured (or `http://localhost:3000` if using defaults). You should see the Opengram chat interface.
+
+## 5. Create your first chat
+
+Click the new-chat button in the UI to start a conversation. If you configured an agent, messages you send will be dispatched to it automatically.
+
+## 6. Connect an agent
+
+To connect your own AI agent, you will use the Opengram REST API. Your agent will:
+
+1. Poll for or receive dispatched messages.
+2. Send responses back (including streamed tokens).
+3. Optionally request user input with interactive widgets.
+
+Here is a minimal example that claims a dispatch and sends a reply:
+
+```js
+const BASE = "http://localhost:3000/api/v1";
+const HEADERS = {
+  Authorization: "Bearer og_your-secret-here",
+  "Content-Type": "application/json",
+};
+
+// Claim a dispatch (long-polls for up to 10s)
+const res = await fetch(`${BASE}/dispatch/claim`, {
+  method: "POST",
+  headers: HEADERS,
+  body: JSON.stringify({ workerId: "worker-1", leaseMs: 30000, waitMs: 10000 }),
+});
+
+if (res.status === 204) {
+  // No work available, try again
+} else {
+  const { batchId, chatId, compiledContent } = await res.json();
+
+  // Send a response message
+  await fetch(`${BASE}/chats/${chatId}/messages`, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify({ role: "agent", agentId: "assistant", content: `Echo: ${compiledContent}` }),
+  });
+
+  // Complete the dispatch
+  await fetch(`${BASE}/dispatch/${batchId}/complete`, {
+    method: "POST",
+    headers: HEADERS,
+    body: JSON.stringify({ workerId: "worker-1" }),
+  });
+}
+```
+
+See [Building an Agent](/docs/agents/building-an-agent) for a complete walkthrough including streaming, heartbeats, and interactive requests.

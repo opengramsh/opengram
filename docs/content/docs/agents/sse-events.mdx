@@ -1,0 +1,147 @@
+---
+title: SSE Event Streaming
+description: Subscribe to a real-time stream of events from your Opengram instance using Server-Sent Events.
+---
+
+Opengram exposes a Server-Sent Events (SSE) endpoint that streams all activity in real time. Use this to build dashboards, sync external systems, or drive agent logic that reacts to user actions as they happen.
+
+## Connecting
+
+Open a persistent HTTP connection to the SSE endpoint:
+
+```
+GET /api/v1/events/stream
+```
+
+### Authentication
+
+Pass your instance secret using either method:
+
+- **Query parameter**: `?token=your_instance_secret`
+- **Authorization header**: `Authorization: Bearer your_instance_secret`
+
+### Query parameters
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `cursor` | -- | Event ID to resume from. Only events after this ID are delivered. |
+| `ephemeral` | `true` | Include non-persisted events (typing indicators, streaming chunks). |
+| `limit` | -- | Maximum events per batch. Cannot exceed 200. |
+| `token` | -- | Instance secret for authentication. |
+
+## Event types
+
+### Chat events
+
+| Event | Ephemeral | Description |
+| --- | --- | --- |
+| `chat.created` | No | A new chat was created. |
+| `chat.updated` | No | Chat metadata changed (title, tags, model). |
+| `chat.archived` | No | A chat was archived. |
+| `chat.unarchived` | No | A chat was unarchived. |
+| `chat.read` | No | A chat was marked as read. |
+| `chat.unread` | No | A chat was marked as unread. |
+| `chat.typing` | Yes | An agent is typing in a chat. |
+| `chat.user_typing` | Yes | A user is typing in a chat. |
+
+### Message events
+
+| Event | Ephemeral | Description |
+| --- | --- | --- |
+| `message.created` | No | A new message was persisted. |
+| `message.streaming.chunk` | Yes | A token chunk was appended to a streaming message. |
+| `message.streaming.complete` | Yes | A streaming message finished. |
+
+### Request events
+
+| Event | Ephemeral | Description |
+| --- | --- | --- |
+| `request.created` | No | An interactive request was created. |
+| `request.resolved` | No | A request was resolved by the user. |
+| `request.cancelled` | No | A request was cancelled. |
+
+### Media events
+
+| Event | Ephemeral | Description |
+| --- | --- | --- |
+| `media.attached` | No | A file was attached to a message. |
+
+## Event envelope
+
+Each SSE event is delivered as a JSON envelope:
+
+```json
+{
+  "id": "evt_abc123",
+  "type": "message.created",
+  "timestamp": 1709312400000,
+  "payload": {
+    "chatId": "chat_456",
+    "messageId": "msg_789",
+    "senderId": "user",
+    "role": "user",
+    "content": "Hello!"
+  }
+}
+```
+
+The SSE wire format uses the `id` field for cursor tracking and `event` for the type:
+
+```
+id: evt_abc123
+event: message.created
+data: {"id":"evt_abc123","type":"message.created","timestamp":1709312400000,"payload":{...}}
+```
+
+## JavaScript client example
+
+```js
+const url = "https://your-instance.com/api/v1/events/stream?token=og_secret";
+const eventSource = new EventSource(url);
+
+eventSource.addEventListener("message.created", (e) => {
+  const event = JSON.parse(e.data);
+  console.log("New message:", event.payload);
+});
+
+eventSource.addEventListener("chat.typing", (e) => {
+  const event = JSON.parse(e.data);
+  console.log("Agent typing in:", event.payload.chatId);
+});
+
+eventSource.onerror = () => {
+  console.log("Connection lost, EventSource will auto-reconnect");
+};
+```
+
+## Ephemeral events
+
+Ephemeral events (typing indicators, streaming chunks) are **not** stored in the database. They are only delivered to clients connected at the time they occur. After a disconnect, ephemeral events cannot be replayed -- only persisted events are replayable via cursor.
+
+## Stream timeout
+
+The SSE connection respects `server.streamTimeoutSeconds` (default: 60). This controls how long streaming messages can remain in the `streaming` state before being auto-cancelled -- it does not affect the SSE connection itself, which stays open indefinitely.
+
+## Cursor-based replay
+
+Every non-ephemeral event includes a unique ID. To resume after a disconnect, pass the last event ID you received as the `cursor` query parameter. Opengram will replay all events that occurred after that cursor so you do not miss anything.
+
+```
+GET /api/v1/events/stream?cursor=evt_01HXK3...&token=your_secret
+```
+
+Ephemeral events (typing indicators, streaming chunks) are not replayable -- they are only delivered to clients connected at the time they occur.
+
+## Keep-alive
+
+The server sends a comment line (`: keep-alive`) every 15 seconds to prevent proxies and load balancers from closing idle connections.
+
+## Response headers
+
+The SSE endpoint returns these headers:
+
+| Header | Value | Purpose |
+| --- | --- | --- |
+| `Content-Type` | `text/event-stream` | Identifies the response as an SSE stream. |
+| `X-Accel-Buffering` | `no` | Tells Nginx (and similar proxies) not to buffer the response. |
+| `Cache-Control` | `no-cache` | Prevents caching of the event stream. |
