@@ -263,17 +263,20 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
 
   p.note(configPath, 'Config written');
 
-  // 7. Systemd service (Linux only)
-  if (process.platform === 'linux') {
+  // 7. Background service (Linux + macOS)
+  if (process.platform === 'linux' || process.platform === 'darwin') {
+    const isLinux = process.platform === 'linux';
     const installSvc = await p.confirm({
-      message: 'Start OpenGram automatically on boot? (systemd user service)',
+      message: isLinux
+        ? 'Start OpenGram automatically on boot? (systemd user service)'
+        : 'Start OpenGram automatically on login? (launchd service)',
       initialValue: true,
     });
 
     if (!p.isCancel(installSvc) && installSvc) {
       const { installService } = await import('./cli-service.js');
       const svcSpinner = p.spinner();
-      svcSpinner.start('Installing systemd service...');
+      svcSpinner.start(isLinux ? 'Installing systemd service...' : 'Installing launchd service...');
       const ok = await installService(home);
       if (ok) {
         svcSpinner.stop('Service installed and started.');
@@ -282,7 +285,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
       }
     }
   } else {
-    p.note('Run `opengram start` to start the server.\nFor auto-start on macOS, consider using a process manager like pm2.', 'Startup');
+    p.note('Run `opengram start` to start the server.\nFor auto-start, consider using a process manager like pm2.', 'Startup');
   }
 
   // 8. Print summary
@@ -298,9 +301,9 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
 
   p.note(lines.join('\n'), 'Summary');
 
-  if (process.platform !== 'linux') {
-    p.outro('Run `opengram start` to start the server.');
-  } else {
+  if (process.platform === 'linux' || process.platform === 'darwin') {
     p.outro('Setup complete!');
+  } else {
+    p.outro('Run `opengram start` to start the server.');
   }
 }

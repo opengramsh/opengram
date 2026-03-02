@@ -30,7 +30,7 @@ Usage: opengram <command> [options]
 Commands:
   init                  Interactive setup wizard
   start [--port N]      Start the server
-  service <action>      Manage systemd user service
+  service <action>      Manage background service
     install             Install, enable, and start the service
     uninstall           Stop, disable, and remove the service
     status              Show service status
