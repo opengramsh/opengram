@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   },
   description:
     'Documentation for Opengram — the open-source, self-hostable chat platform for AI agent workflows.',
+  icons: {
+    icon: [{ url: 'https://opengram.sh/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: ['https://opengram.sh/favicon.svg'],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
