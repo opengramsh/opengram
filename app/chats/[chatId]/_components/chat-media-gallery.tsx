@@ -112,8 +112,17 @@ export function ChatMediaGallery({
             )}
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {galleryListMedia.map((item) => (
-                <div key={item.id} className="rounded-xl border border-border bg-card p-2">
+              {galleryListMedia.map((item) => {
+                const canPreview = item.kind === 'file' && isPreviewable(item.content_type, item.byte_size || 0);
+                return (
+                <div
+                  key={item.id}
+                  role={canPreview ? 'button' : undefined}
+                  tabIndex={canPreview ? 0 : undefined}
+                  className={`rounded-xl border border-border bg-card p-2${canPreview ? ' cursor-pointer' : ''}`}
+                  onClick={canPreview ? () => setPreviewFileId(item.id) : undefined}
+                  onKeyDown={canPreview ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewFileId(item.id); } } : undefined}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm text-foreground">{item.filename || 'Attachment'}</p>
@@ -121,24 +130,24 @@ export function ChatMediaGallery({
                         {item.kind === 'audio' ? 'Audio' : 'File'} &bull; {formatBytes(item.byte_size || 0)}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {item.kind === 'file' && isPreviewable(item.content_type, item.byte_size || 0) && (
+                    <div className="flex shrink-0 items-center gap-2">
+                      {canPreview && (
                         <Button
                           variant="ghost"
-                          size="icon-xs"
+                          size="icon-sm"
                           aria-label={`Preview ${item.filename || 'attachment'}`}
-                          onClick={() => setPreviewFileId(item.id)}
+                          onClick={(e) => { e.stopPropagation(); setPreviewFileId(item.id); }}
                         >
-                          <Eye size={14} />
+                          <Eye size={16} />
                         </Button>
                       )}
                       <Button
                         variant="ghost"
-                        size="icon-xs"
+                        size="icon-sm"
                         aria-label={`Download ${item.filename || 'attachment'}`}
-                        onClick={() => downloadFile(buildFileUrl(item.id), item.filename || 'attachment')}
+                        onClick={(e) => { e.stopPropagation(); downloadFile(buildFileUrl(item.id), item.filename || 'attachment'); }}
                       >
-                        <Download size={14} />
+                        <Download size={16} />
                       </Button>
                     </div>
                   </div>
@@ -156,7 +165,8 @@ export function ChatMediaGallery({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </DrawerContent>
