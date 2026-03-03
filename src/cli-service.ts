@@ -256,6 +256,50 @@ export async function uninstallService(): Promise<boolean> {
   return uninstallSystemdService();
 }
 
+export function stopService(): void {
+  if (isMacOS()) {
+    const ok = run(`launchctl stop ${PLIST_LABEL}`);
+    if (ok) {
+      console.log('OpenGram service stopped.');
+    } else {
+      console.error('Failed to stop the service. Is it installed? Run `opengram service install` first.');
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (!checkSystemd()) return;
+  const ok = run('systemctl --user stop opengram');
+  if (ok) {
+    console.log('OpenGram service stopped.');
+  } else {
+    console.error('Failed to stop the service. Is it installed? Run `opengram service install` first.');
+    process.exit(1);
+  }
+}
+
+export function startService(): void {
+  if (isMacOS()) {
+    const ok = run(`launchctl start ${PLIST_LABEL}`);
+    if (ok) {
+      console.log('OpenGram service started.');
+    } else {
+      console.error('Failed to start the service. Is it installed? Run `opengram service install` first.');
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (!checkSystemd()) return;
+  const ok = run('systemctl --user start opengram');
+  if (ok) {
+    console.log('OpenGram service started.');
+  } else {
+    console.error('Failed to start the service. Is it installed? Run `opengram service install` first.');
+    process.exit(1);
+  }
+}
+
 export function restartService(): void {
   if (isMacOS()) {
     const uid = execSync('id -u', { encoding: 'utf8' }).trim();
@@ -308,6 +352,12 @@ export async function runServiceCommand(
     case 'uninstall':
       await uninstallService();
       break;
+    case 'start':
+      startService();
+      break;
+    case 'stop':
+      stopService();
+      break;
     case 'restart':
       restartService();
       break;
@@ -319,7 +369,7 @@ export async function runServiceCommand(
       break;
     default:
       console.error(`Unknown service action: ${action ?? '(none)'}`);
-      console.log('Usage: opengram service <install|uninstall|restart|status|logs>');
+      console.log('Usage: opengram service <install|uninstall|start|stop|restart|status|logs>');
       process.exit(1);
   }
 }

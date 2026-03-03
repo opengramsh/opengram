@@ -31,11 +31,14 @@ Usage: opengram <command> [options]
 Commands:
   init                  Interactive setup wizard
   start [--port N]      Start the server
+  stop                  Stop the background service
   restart               Restart the background service
   upgrade               Upgrade to the latest version
   service <action>      Manage background service
     install             Install, enable, and start the service
     uninstall           Stop, disable, and remove the service
+    start               Start the service
+    stop                Stop the service without removing it
     restart             Restart the service
     status              Show service status
     logs                Tail service logs
@@ -171,6 +174,10 @@ async function main() {
 
     case 'init':
       await cmdInit();
+      break;
+
+    case 'stop':
+      await cmdService('stop');
       break;
 
     case 'restart':
