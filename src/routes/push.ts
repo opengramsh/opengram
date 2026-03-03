@@ -10,6 +10,7 @@ import {
   UnsubscribeResponseSchema,
 } from '@/src/api/schemas/push';
 import { writeMiddleware } from '@/src/api/write-controls';
+import { repairPushSubjectFromOrigin } from '@/src/config/opengram-config';
 import { deletePushSubscription, sendTestPushNotification, upsertPushSubscription } from '@/src/services/push-service';
 
 const push = createRouter();
@@ -34,6 +35,12 @@ const subscribeRoute = createRoute({
 push.openapi(subscribeRoute, (c) => {
   const body = c.req.valid('json');
   const result = upsertPushSubscription(body, c.req.raw.headers.get('user-agent'));
+
+  const origin = c.req.raw.headers.get('origin');
+  if (origin) {
+    repairPushSubjectFromOrigin(origin);
+  }
+
   return c.json(result, 201);
 });
 

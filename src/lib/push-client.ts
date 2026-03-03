@@ -209,7 +209,9 @@ export async function disablePushNotifications() {
   return subscription.unsubscribe();
 }
 
-export async function sendPushTestNotification() {
+export type PushTestResult = { sent: number; failed: number; removed: number };
+
+export async function sendPushTestNotification(): Promise<PushTestResult> {
   const response = await apiFetch('/api/v1/push/test', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -224,4 +226,7 @@ export async function sendPushTestNotification() {
   if (!response.ok) {
     throw new Error(`Push test failed (${response.status}).`);
   }
+
+  const data = (await response.json()) as { sent?: number; failed?: number; removed?: number };
+  return { sent: data.sent ?? 0, failed: data.failed ?? 0, removed: data.removed ?? 0 };
 }

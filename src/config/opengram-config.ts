@@ -757,6 +757,40 @@ export function ensurePushProvisioned(configPath?: string): void {
   );
 }
 
+export function repairPushSubjectFromOrigin(origin: string): void {
+  const config = loadOpengramConfig();
+
+  // Already fixed — nothing to do
+  if (!config.push.subject.includes("localhost")) return;
+
+  // Only trust HTTPS origins
+  if (!origin.startsWith("https://")) return;
+
+  const resolvedPath = resolveConfigPath();
+
+  let current: Record<string, unknown> = {};
+  if (existsSync(resolvedPath)) {
+    const raw = readFileSync(resolvedPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (isRecord(parsed)) {
+      current = parsed;
+    }
+  }
+
+  const existingPush = isRecord(current.push) ? current.push : {};
+  current.push = { ...existingPush, subject: origin };
+
+  const existingServer = isRecord(current.server) ? current.server : {};
+  current.server = { ...existingServer, publicBaseUrl: origin };
+
+  writeFileSync(resolvedPath, JSON.stringify(current, null, 2) + "\n", "utf8");
+  configCache = null;
+
+  console.log(
+    `[push] Auto-detected public URL from Origin header — repaired VAPID subject: ${config.push.subject} → ${origin}`,
+  );
+}
+
 export function resetConfigCacheForTests() {
   configCache = null;
 }

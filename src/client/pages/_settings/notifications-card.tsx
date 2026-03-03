@@ -120,8 +120,20 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
     try {
       setBusyTest(true);
       setStatusMessage(null);
-      await sendPushTestNotification();
-      setStatusMessage("Test notification sent.");
+      const result = await sendPushTestNotification();
+      if (result.sent > 0) {
+        setStatusMessage(
+          `Test notification sent to ${result.sent} device(s).`,
+        );
+      } else if (result.failed > 0) {
+        setStatusMessage(
+          `Delivery failed for ${result.failed} device(s). Try disabling and re-enabling notifications.`,
+        );
+      } else {
+        setStatusMessage(
+          "No push subscriptions found. Try disabling and re-enabling notifications.",
+        );
+      }
     } catch {
       setStatusMessage("Unable to send test notification.");
     } finally {
@@ -133,6 +145,8 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
   const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const showIosHint = isIos && permission === "default";
   const showTestButton = browserOn && isSubscribed && config.push?.enabled;
+  const showLocalhostWarning =
+    config.push?.enabled && config.push.subject?.includes("localhost");
 
   return (
     <Card>
@@ -170,6 +184,13 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
           />
         </div>
 
+        {showLocalhostWarning && (
+          <p className="pb-2 text-xs text-amber-600 dark:text-amber-400">
+            Push notifications won&apos;t be delivered until the server detects
+            your domain. Try disabling and re-enabling push notifications to
+            trigger auto-detection.
+          </p>
+        )}
         {showDeniedHint && (
           <p className="pb-2 text-xs text-amber-600 dark:text-amber-400">
             Notifications are blocked by your browser. Open your browser&apos;s
