@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import { Download, Eye } from 'lucide-react';
 
 import {
   AudioPlayer,
@@ -109,7 +110,7 @@ export function ChatMediaGallery({
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {galleryListMedia.map((item) => (
                 <div key={item.id} className="rounded-xl border border-border bg-card p-2">
                   <div className="flex items-start justify-between gap-2">
@@ -119,24 +120,27 @@ export function ChatMediaGallery({
                         {item.kind === 'audio' ? 'Audio' : 'File'} &bull; {formatBytes(item.byte_size || 0)}
                       </p>
                     </div>
-                    {item.kind === 'file' && isPreviewable(item.content_type, item.byte_size || 0) && (
-                      <Button
-                        variant="link"
-                        size="sm"
-                        onClick={() => setPreviewFileId(item.id)}
-                      >
-                        Preview
+                    <div className="flex shrink-0 items-center gap-1">
+                      {item.kind === 'file' && isPreviewable(item.content_type, item.byte_size || 0) && (
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`Preview ${item.filename || 'attachment'}`}
+                          onClick={() => setPreviewFileId(item.id)}
+                        >
+                          <Eye size={14} />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon-xs" asChild>
+                        <a
+                          href={buildFileUrl(item.id)}
+                          download
+                          aria-label={`Download ${item.filename || 'attachment'}`}
+                        >
+                          <Download size={14} />
+                        </a>
                       </Button>
-                    )}
-                    <Button variant="link" size="sm" asChild>
-                      <a
-                        href={buildFileUrl(item.id)}
-                        download
-                        aria-label={`Download ${item.filename || 'attachment'}`}
-                      >
-                        Download
-                      </a>
-                    </Button>
+                    </div>
                   </div>
                   {item.kind === 'audio' && (
                     <div className="mt-2">
