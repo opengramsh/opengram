@@ -341,7 +341,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
     [offsetX, onAction, onOpen],
   );
 
-  const unread = chat.unread_count > 0 && !isActive;
+  const unread = chat.unread_count > 0 && (!isActive || chat.last_read_at === null);
   const pendingBadge = chat.pending_requests_count > 0
     ? (
       <Badge
@@ -406,7 +406,7 @@ function ChatRow({ chat, agentName, actionLabel, isActive = false, isStreaming =
               {chat.pinned && <Pin className="h-3 w-3 text-muted-foreground/60 fill-muted-foreground/60" />}
               <span className="text-[11px] text-muted-foreground/60">{formatInboxTimestamp(chat.last_message_at)}</span>
               {pendingBadge}
-              {!isActive && <UnreadBadge count={chat.unread_count} />}
+              {unread && <UnreadBadge count={chat.unread_count} />}
             </div>
           </div>
           <p className="text-[11px] font-semibold text-primary/60 truncate">{agentName}{isStreaming ? ' · typing...' : ''}</p>
