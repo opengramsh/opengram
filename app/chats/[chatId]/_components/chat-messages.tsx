@@ -3,6 +3,7 @@ import type { StickToBottomContext } from 'use-stick-to-bottom';
 import { ChevronRight, File, FileSpreadsheet, FileText, Video } from 'lucide-react';
 
 import { buildFileUrl } from '@/src/lib/api-fetch';
+import { downloadFile } from '@/app/chats/[chatId]/_lib/download-file';
 import { formatBytes, isMessageTyping, messageBubbleClass, messageText } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaItem, Message } from '@/app/chats/[chatId]/_lib/types';
@@ -131,14 +132,14 @@ function FileAttachmentCard({
   }
 
   return (
-    <a
-      href={buildFileUrl(item.id)}
-      download
+    <button
+      type="button"
       aria-label={`Download ${item.filename || 'attachment'}`}
-      className="flex items-center gap-3 rounded-xl bg-black/10 px-3 py-2.5"
+      className="flex w-full cursor-pointer items-center gap-3 rounded-xl bg-black/10 px-3 py-2.5"
+      onClick={() => downloadFile(buildFileUrl(item.id), item.filename || 'attachment')}
     >
       {inner}
-    </a>
+    </button>
   );
 }
 

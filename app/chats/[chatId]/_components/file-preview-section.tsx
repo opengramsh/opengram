@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 
+import { downloadFile } from '@/app/chats/[chatId]/_lib/download-file';
 import { getPreviewKind } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import { apiFetch, buildFileUrl } from '@/src/lib/api-fetch';
 import type { MediaItem } from '@/app/chats/[chatId]/_lib/types';
@@ -45,14 +46,14 @@ export function FilePreviewSection({ previewFile, setPreviewFileId }: FilePrevie
                 {previewFile.filename || 'File preview'}
               </p>
               <div className="flex shrink-0 items-center gap-1">
-                <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" asChild>
-                  <a
-                    href={buildFileUrl(previewFile.id)}
-                    download
-                    aria-label={`Download ${previewFile.filename || 'file'}`}
-                  >
-                    <Download size={16} />
-                  </a>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white/80 hover:text-white"
+                  aria-label={`Download ${previewFile.filename || 'file'}`}
+                  onClick={() => downloadFile(buildFileUrl(previewFile.id), previewFile.filename || 'file')}
+                >
+                  <Download size={16} />
                 </Button>
                 <Button
                   variant="ghost"

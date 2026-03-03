@@ -169,8 +169,7 @@ describe('chat media previews', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open image image-1.png' }));
 
-    const viewerDownload = await screen.findByRole('link', { name: 'Download image-1.png' });
-    expect(viewerDownload.getAttribute('href')).toBe('/api/v1/files/img-1');
+    expect(await screen.findByRole('button', { name: 'Download image-1.png' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
   });
 
@@ -185,7 +184,7 @@ describe('chat media previews', () => {
 
     const gallery = await screen.findByRole('dialog', { name: 'Media gallery' });
     expect(within(gallery).getByText('voice-1.webm')).toBeTruthy();
-    expect(within(gallery).getByRole('link', { name: 'Download report.pdf' })).toBeTruthy();
+    expect(within(gallery).getByRole('button', { name: 'Download report.pdf' })).toBeTruthy();
     expect(within(gallery).getByRole('button', { name: 'View image image-1.png' })).toBeTruthy();
 
     fireEvent.click(within(gallery).getByRole('button', { name: 'Images' }));
@@ -204,11 +203,9 @@ describe('chat media previews', () => {
     fireEvent.click(within(gallery).getByRole('button', { name: 'View image image-1.png' }));
 
     const viewer = await screen.findByRole('dialog', { name: 'Image viewer' });
-    const downloadLink = within(viewer).getByRole('link', { name: 'Download image-1.png' });
-    expect(downloadLink.getAttribute('href')).toBe('/api/v1/files/img-1');
+    expect(within(viewer).getByRole('button', { name: 'Download image-1.png' })).toBeTruthy();
 
-    const reportDownloads = within(gallery).getAllByRole('link', { name: 'Download report.pdf', hidden: true });
-    expect(reportDownloads.some((link) => link.getAttribute('href') === '/api/v1/files/file-1')).toBe(true);
-    expect(reportDownloads.some((link) => link.hasAttribute('download'))).toBe(true);
+    const reportDownloads = within(gallery).getAllByRole('button', { name: 'Download report.pdf', hidden: true });
+    expect(reportDownloads.length).toBeGreaterThan(0);
   });
 });

@@ -12,6 +12,7 @@ import {
   AudioPlayerDurationDisplay,
 } from '@/src/components/ai-elements/audio-player';
 import { buildFileUrl } from '@/src/lib/api-fetch';
+import { downloadFile } from '@/app/chats/[chatId]/_lib/download-file';
 import { formatBytes } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { isPreviewable } from '@/app/chats/[chatId]/_lib/file-preview-utils';
 import type { MediaFilter, MediaItem } from '@/app/chats/[chatId]/_lib/types';
@@ -131,14 +132,13 @@ export function ChatMediaGallery({
                           <Eye size={14} />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon-xs" asChild>
-                        <a
-                          href={buildFileUrl(item.id)}
-                          download
-                          aria-label={`Download ${item.filename || 'attachment'}`}
-                        >
-                          <Download size={14} />
-                        </a>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Download ${item.filename || 'attachment'}`}
+                        onClick={() => downloadFile(buildFileUrl(item.id), item.filename || 'attachment')}
+                      >
+                        <Download size={14} />
                       </Button>
                     </div>
                   </div>
@@ -256,14 +256,14 @@ function ImageViewerDialog({
             <div className="mb-3 flex items-center justify-between">
               <p className="truncate text-sm text-white">{viewerMedia.filename || 'Image viewer'}</p>
               <div className="flex items-center gap-3">
-                <a
-                  href={buildFileUrl(viewerMedia.id)}
-                  download
+                <button
+                  type="button"
                   aria-label={`Download ${viewerMedia.filename || 'image'}`}
-                  className="text-xs text-white/90"
+                  className="cursor-pointer text-xs text-white/90"
+                  onClick={() => downloadFile(buildFileUrl(viewerMedia.id), viewerMedia.filename || 'image')}
                 >
                   Download
-                </a>
+                </button>
                 <Button
                   variant="ghost"
                   size="xs"
