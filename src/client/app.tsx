@@ -8,7 +8,7 @@ import InboxLayout from '@/src/client/pages/inbox-layout';
 
 const ChatPage = lazy(() => import('@/src/client/pages/chat'));
 const NewChatPage = lazy(() => import('@/src/client/pages/new-chat'));
-const ArchivedPage = lazy(() => import('@/src/client/pages/archived'));
+const ArchivedLayout = lazy(() => import('@/src/client/pages/archived-layout'));
 const SettingsPage = lazy(() => import('@/src/client/pages/settings'));
 
 function RouteLoadingFallback() {
@@ -25,7 +25,11 @@ export function App() {
           <Route path="/chats/:chatId" element={<Suspense fallback={<RouteLoadingFallback />}><ChatPage /></Suspense>} />
           <Route path="/chats/new" element={<Suspense fallback={<RouteLoadingFallback />}><NewChatPage /></Suspense>} />
         </Route>
-        <Route path="/archived" element={<Suspense fallback={<RouteLoadingFallback />}><ArchivedPage /></Suspense>} />
+        <Route element={<Suspense fallback={<RouteLoadingFallback />}><ArchivedLayout /></Suspense>}>
+          <Route path="/archived" element={null} />
+          <Route path="/archived/chats/:chatId" element={<Suspense fallback={<RouteLoadingFallback />}><ChatPage /></Suspense>} />
+          <Route path="/archived/chats/new" element={<Suspense fallback={<RouteLoadingFallback />}><NewChatPage /></Suspense>} />
+        </Route>
         <Route path="/manage" element={<Navigate to="/settings" replace />} />
         <Route path="/settings" element={<Suspense fallback={<RouteLoadingFallback />}><SettingsPage /></Suspense>} />
       </Routes>

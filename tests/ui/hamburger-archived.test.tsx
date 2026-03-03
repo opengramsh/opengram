@@ -3,10 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import Home from '@/src/client/pages/inbox-layout';
-import ArchivedPage from '@/src/client/pages/archived';
+import ArchivedLayout from '@/src/client/pages/archived-layout';
 
 vi.mock('facehash', () => ({
   Facehash: ({ name }: { name: string }) => <div data-testid={`facehash-${name}`} />,
@@ -42,6 +42,20 @@ function renderRoute(page: React.JSX.Element, path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       {page}
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+}
+
+function renderArchived(path = '/archived') {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route element={<ArchivedLayout />}>
+          <Route path="/archived" element={null} />
+          <Route path="/archived/chats/:chatId" element={null} />
+        </Route>
+      </Routes>
       <LocationProbe />
     </MemoryRouter>,
   );
@@ -125,7 +139,7 @@ describe('hamburger + archived chats UI', () => {
   });
 
   it('loads archived screen using archived=true filter', async () => {
-    renderRoute(<ArchivedPage />, '/archived');
+    renderArchived();
 
     await screen.findByText('Archived chat');
     expect(
@@ -137,7 +151,7 @@ describe('hamburger + archived chats UI', () => {
   });
 
   it('unarchives from archived list via context menu', async () => {
-    renderRoute(<ArchivedPage />, '/archived');
+    renderArchived();
     const user = userEvent.setup();
 
     const chatTitle = await screen.findByText('Archived chat');
@@ -152,7 +166,7 @@ describe('hamburger + archived chats UI', () => {
   });
 
   it('unarchives from archived list via swipe gesture', async () => {
-    const { container } = renderRoute(<ArchivedPage />, '/archived');
+    const { container } = renderArchived();
 
     await screen.findByText('Archived chat');
     const swipeSurface = container.querySelector('[style*="translateX"]');
@@ -168,19 +182,19 @@ describe('hamburger + archived chats UI', () => {
   });
 
   it('opens archived chat row with keyboard Enter', async () => {
-    renderRoute(<ArchivedPage />, '/archived');
+    renderArchived();
 
     const chatRowButton = await screen.findByRole('button', { name: /Archived chat/i });
     chatRowButton.focus();
     fireEvent.keyDown(chatRowButton, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/chats/chat-archived');
+      expect(screen.getByTestId('location').textContent).toBe('/archived/chats/chat-archived');
     });
   });
 
   it('unarchives from archived list via keyboard Delete', async () => {
-    renderRoute(<ArchivedPage />, '/archived');
+    renderArchived();
 
     const chatRowButton = await screen.findByRole('button', { name: /Archived chat/i });
     chatRowButton.focus();
@@ -192,7 +206,7 @@ describe('hamburger + archived chats UI', () => {
   });
 
   it('shows the global + action on archived and navigates to new chat page', async () => {
-    renderRoute(<ArchivedPage />, '/archived');
+    renderArchived();
     const user = userEvent.setup();
 
     await screen.findByText('Archived chat');

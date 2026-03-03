@@ -21,6 +21,7 @@ type ChatListPageProps = {
   emptyLabel: string;
   rowActionLabel: 'Archive' | 'Unarchive';
   searchPlaceholder: string;
+  chatPathPrefix?: string;
   sidebarMode?: boolean;
   activeChatId?: string;
   streamingChatIds?: Set<string>;
@@ -34,6 +35,7 @@ export function ChatListPage({
   emptyLabel,
   rowActionLabel,
   searchPlaceholder,
+  chatPathPrefix = '',
   sidebarMode = false,
   activeChatId,
   streamingChatIds,
@@ -178,7 +180,7 @@ export function ChatListPage({
           query={searchQuery}
           agentsById={agentsById}
           onOpenChat={(chatId, chatSeed, messageId) =>
-            navigate(`/chats/${chatId}`, {
+            navigate(`${chatPathPrefix}/chats/${chatId}`, {
               state: {
                 chat: chatSeed
                   ? {
@@ -209,7 +211,7 @@ export function ChatListPage({
           rowActionLabel={rowActionLabel}
           activeChatId={activeChatId}
           streamingChatIds={streamingChatIds}
-          onOpenChat={(chat) => navigate(`/chats/${chat.id}`, { state: { chat, fromPath: location.pathname } })}
+          onOpenChat={(chat) => navigate(`${chatPathPrefix}/chats/${chat.id}`, { state: { chat, fromPath: location.pathname } })}
           onMarkRead={markChatRead}
           onMarkUnread={markChatUnread}
           onTogglePin={togglePin}
