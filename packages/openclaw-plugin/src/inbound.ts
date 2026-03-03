@@ -915,11 +915,13 @@ function parseChatId(
 }
 
 function formatRequestResolution(payload: Record<string, unknown>): string {
-  const { type, title, resolutionPayload } = payload as {
-    type: string;
-    title: string;
-    resolutionPayload: Record<string, unknown>;
-  };
+  const type = payload.type as string | undefined;
+  const title = (payload.title as string | undefined) ?? "Request";
+  const resolutionPayload =
+    (payload.resolutionPayload as Record<string, unknown> | undefined) ??
+    (payload.resolution_payload as Record<string, unknown> | undefined) ??
+    {};
+
   switch (type) {
     case "choice":
       return `[Request resolved: "${title}"] Selected: ${(resolutionPayload.selectedOptionIds as string[])?.join(", ")}`;

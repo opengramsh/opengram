@@ -794,8 +794,11 @@ export function resolveRequest(requestId: string, payload: unknown) {
     chatId: serialized.chat_id,
     requestId: serialized.id,
     type: serialized.type,
+    title: serialized.title,
     status: serialized.status,
+    senderId: serialized.resolved_by ?? null,
     resolution_payload: serialized.resolution_payload,
+    resolutionPayload: serialized.resolution_payload,
     trace: serialized.trace,
   });
 

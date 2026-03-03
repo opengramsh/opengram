@@ -688,7 +688,11 @@ function parseChatId(rawChatId, eventType, log) {
     return chatId;
 }
 function formatRequestResolution(payload) {
-    const { type, title, resolutionPayload } = payload;
+    const type = payload.type;
+    const title = payload.title ?? "Request";
+    const resolutionPayload = payload.resolutionPayload ??
+        payload.resolution_payload ??
+        {};
     switch (type) {
         case "choice":
             return `[Request resolved: "${title}"] Selected: ${resolutionPayload.selectedOptionIds?.join(", ")}`;
