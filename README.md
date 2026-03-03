@@ -106,7 +106,7 @@ Opengram is runtime-agnostic -- any framework that can make HTTP calls works. Op
 ### Operations
 
 - **Single process, SQLite** -- no external services to provision or maintain
-- **Docker or direct install** -- systemd service management, `opengram init` wizard
+- **Docker or npm install** -- systemd/launchd service management, `opengram init` wizard
 - **Instance secret auth** -- Bearer token protection with configurable rate limiting
 - **Tailscale-friendly** -- `tailscale serve --bg 3000` and you're done
 

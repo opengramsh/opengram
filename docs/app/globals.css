@@ -2,3 +2,13 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 @import 'fumadocs-openapi/css/preset.css';
+
+/* Blue border on prev/next page navigation buttons */
+a.flex.flex-col.rounded-lg.border {
+  --color-fd-border: #3eb5f0;
+}
+
+/* Blue active state for sidebar navigation */
+#nd-sidebar {
+  --color-fd-primary: #3eb5f0;
+}

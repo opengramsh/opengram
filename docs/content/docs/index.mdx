@@ -1,43 +1,16 @@
 ---
 title: Introduction
-description: Opengram is an open-source, self-hostable chat UI and API platform for AI agent workflows.
+description: Opengram is an open-source, self-hosted messaging app for talking to your AI agents.
 ---
 
-Opengram gives you a production-ready chat interface and REST API so you can focus on building your AI agent, not its frontend. It is fully self-hostable, works with any agent runtime, and ships as a single process backed by SQLite -- no external databases, no message queues, no infrastructure to manage.
+_Discord and Telegram are for people. Opengram is for agents._
 
-Whether you are prototyping a conversational assistant or running agents in production, Opengram provides the UI, the real-time transport, and the interaction primitives your agent needs to communicate with users.
+Opengram is a self-hosted messaging app that lets you chat with your AI agents from any device. Install it on a VPS, a Raspberry Pi, or your laptop, connect your agents, and you have your own private chat interface -- no cloud services, no subscriptions, no data leaving your network.
 
-## Key features
-
-- **Mobile-first PWA** -- installable on any device, optimized for touch, works offline-capable with service workers.
-- **Agent-runtime-agnostic REST API** -- connect any agent built in any language or framework. Send messages, stream tokens, and request user input through a simple HTTP API.
-- **Real-time SSE streaming** -- token-by-token streaming via Server-Sent Events for responsive, ChatGPT-style output.
-- **Interactive requests** -- ask users for structured input mid-conversation with choice, text, and form widgets.
-- **File attachments and media** -- upload, download, and preview images, PDFs, documents, and other files directly in the chat.
-- **Push notifications** -- Web Push support so users are notified even when the browser is closed.
-- **Auto-rename via LLM** -- automatically generate descriptive chat titles using a configurable language model.
-- **Tags and organization** -- tag, archive, and filter chats to keep things organized.
-- **Full-text search** -- search across all messages instantly.
-- **SQLite, zero-dependency** -- everything lives in a single SQLite database file. No Postgres, no Redis, no setup.
-- **Docker or direct install** -- run with a single `docker run` command or install directly on Linux with a systemd service.
-
-## Key concepts
-
-| Concept | Description |
-|---|---|
-| **Chat** | A conversation thread between a user and one or more agents |
-| **Message** | A single entry in a chat, sent by a user, agent, or the system |
-| **Agent** | An AI persona configured in Opengram. Your backend code claims work on behalf of agents |
-| **Model** | An LLM configuration (e.g. GPT-4o, Claude Sonnet) that agents can use |
-| **Dispatch** | The system that queues user messages and delivers them to your agent worker for processing |
-| **Request** | An interactive widget (choice, text input, or form) that an agent presents to the user for structured input |
+It ships as a single process backed by SQLite, works with any agent runtime (including [OpenClaw](https://openclaw.ai)), and is designed to work great with [Tailscale](https://tailscale.com) -- no public internet required.
 
 ## Tech stack
 
 Opengram is built with Node.js, [Hono](https://hono.dev) (HTTP framework), SQLite (via better-sqlite3), and Vite. The frontend is a Next.js PWA with Tailwind CSS. Everything runs as a single process with no external dependencies.
-
-## Who is Opengram for?
-
-Opengram is built for developers who are building AI agents and need a chat interface without building one from scratch. If you have an agent that can call HTTP endpoints, Opengram can be its frontend. You bring the intelligence; Opengram handles the conversation UI, message persistence, file management, and real-time delivery.
 
 The source code is available on [GitHub](https://github.com/nichochar/opengram).

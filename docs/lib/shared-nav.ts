@@ -1,20 +1,26 @@
-import type { LinkItemType } from 'fumadocs-ui/layouts/shared';
+import type { LinkItemType } from "fumadocs-ui/layouts/shared";
 
-export const navTitle = 'Opengram';
+export const navTitle = "Opengram";
 
-export const navLinks: LinkItemType[] = [
+const githubLink: LinkItemType = {
+  text: "GitHub",
+  url: "https://github.com/opengramsh/opengram",
+};
+
+export const docsNavLinks: LinkItemType[] = [
   {
-    text: 'Docs',
-    url: '/docs',
-    active: 'nested-url',
+    text: "API Reference",
+    url: "/api-reference",
+    active: "nested-url",
   },
+  githubLink,
+];
+
+export const apiNavLinks: LinkItemType[] = [
   {
-    text: 'API Reference',
-    url: '/api-reference',
-    active: 'nested-url',
+    text: "Docs",
+    url: "/docs",
+    active: "nested-url",
   },
-  {
-    text: 'GitHub',
-    url: 'https://github.com/opengram/opengram',
-  },
+  githubLink,
 ];

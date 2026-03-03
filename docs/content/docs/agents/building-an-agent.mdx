@@ -5,6 +5,12 @@ description: Step-by-step guide to building an agent that connects to Opengram, 
 
 This guide walks through building an agent that connects to the Opengram API. Your agent will claim dispatched messages, process them, and send responses back -- including streaming tokens and interactive requests.
 
+## Agent & model configuration
+
+Before building your agent, define it in `opengram.config.json`. The `agents` and `models` arrays tell the UI and dispatch system what agents exist and which models they can use. See the [Agents](/docs/configuration#agents) and [Models](/docs/configuration#models) sections in the configuration docs for the full field reference.
+
+When your agent creates a message through the API, it passes a `senderId` and optional `modelId` to identify itself. The `senderId` must match an agent `id` defined in the config. The dispatch system also includes an `agentIdHint` in the payload so your worker knows which agent should handle a given batch.
+
 ## Architecture overview
 
 ```
@@ -47,12 +53,12 @@ async function run() {
     const { batchId, chatId, compiledContent } = batch;
 
     try {
-      // 2. Send a response message
+      // 2. Send a response message (you can also pass modelId to record which model was used)
       const reply = `You said: ${compiledContent}`;
       await fetch(`${BASE}/chats/${chatId}/messages`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ role: "agent", agentId: AGENT_ID, content: reply }),
+        body: JSON.stringify({ role: "agent", senderId: AGENT_ID, content: reply }),
       });
 
       // 3. Complete the dispatch
@@ -104,7 +110,7 @@ while True:
     try:
         # 2. Send a response
         requests.post(f"{BASE}/chats/{chat_id}/messages", headers=HEADERS,
-                      json={"role": "agent", "agentId": AGENT_ID, "content": f"You said: {content}"})
+                      json={"role": "agent", "senderId": AGENT_ID, "content": f"You said: {content}"})
 
         # 3. Complete the dispatch
         requests.post(f"{BASE}/dispatch/{batch_id}/complete", headers=HEADERS,
@@ -116,29 +122,29 @@ while True:
 
 ## Streaming responses
 
-For a ChatGPT-style typing effect, create the message with `stream: true`, append chunks, then complete:
+For a ChatGPT-style typing effect, create the message with `streaming: true`, append chunks, then complete. Note that streaming endpoints are mounted at `/api/v1/messages/{messageId}/*`, not under `/chats`:
 
 ```js
 // 1. Create a streaming message
 const msg = await fetch(`${BASE}/chats/${chatId}/messages`, {
   method: "POST",
   headers,
-  body: JSON.stringify({ role: "agent", agentId: AGENT_ID, content: "", stream: true }),
+  body: JSON.stringify({ role: "agent", senderId: AGENT_ID, content: "", streaming: true }),
 }).then((r) => r.json());
 
 const messageId = msg.id;
 
 // 2. Append chunks as your LLM generates tokens
 for (const token of tokens) {
-  await fetch(`${BASE}/chats/${chatId}/messages/${messageId}/chunks`, {
+  await fetch(`${BASE}/messages/${messageId}/chunks`, {
     method: "POST",
     headers,
     body: JSON.stringify({ deltaText: token }),
   });
 }
 
-// 3. Finalize the message
-await fetch(`${BASE}/chats/${chatId}/messages/${messageId}/complete`, {
+// 3. Finalize the message (optionally pass { finalText } to override accumulated content)
+await fetch(`${BASE}/messages/${messageId}/complete`, {
   method: "POST",
   headers,
 });
@@ -224,4 +230,4 @@ When you claim a dispatch, the response includes the full batch payload:
 - **204 on claim**: No dispatches available. Loop and try again.
 - **Heartbeat fails (404)**: The lease expired and the dispatch was reclaimed. Stop processing and claim a new one.
 - **Complete fails (409)**: The dispatch was already completed or failed by another worker.
-- **Network errors**: Mark the dispatch as failed with `retryable: true` so Opengram retries it.
+- **Network errors**: Mark the dispatch as failed with `retryable: true` so Opengram retries it. You can also pass `retryDelayMs` to customize the retry delay.

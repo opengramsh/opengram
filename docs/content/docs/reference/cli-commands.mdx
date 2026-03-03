@@ -3,7 +3,7 @@ title: CLI Commands
 description: Opengram CLI command reference.
 ---
 
-The `opengram` CLI manages server setup, startup, and system service integration. It is installed globally as part of the [direct install](/docs/deployment/direct-install) process.
+The `opengram` CLI manages server setup, startup, and system service integration. It is installed globally via npm or the [install script](/docs/quickstart).
 
 ## `opengram init`
 
@@ -20,11 +20,9 @@ The wizard prompts for:
 - **Instance secret** -- generates a secure `og_`-prefixed token for API authentication
 - **Auto-rename** -- configure automatic chat title generation with an LLM provider
 - **OpenClaw plugin** -- optionally set up the OpenClaw agent plugin
-- **systemd service** -- optionally install a systemd service for automatic startup (Linux only)
+- **background service** -- optionally install a system service for automatic startup (Linux systemd and macOS launchd)
 
-Configuration is written to `opengram.config.json` and `opengram.env` in the config directory.
-
-The wizard auto-detects the Tailscale hostname (if available) and suggests it as the default base URL.
+Configuration is written to `~/.opengram/opengram.config.json` (or `$OPENGRAM_HOME/opengram.config.json`). The wizard auto-detects the Tailscale hostname (if available) and suggests it as the default base URL.
 
 ## `opengram start`
 
@@ -37,7 +35,7 @@ opengram start --port 8080
 
 | Flag | Description |
 |------|-------------|
-| `--port N` | Override the port from the configuration file |
+| `--port N` | Override the port from the configuration file (sets the `OPENGRAM_SERVER_PORT` env var) |
 
 The server runs in the foreground. Use `opengram service install` or Docker for production deployments that should survive terminal closure.
 
@@ -53,9 +51,44 @@ When starting, the CLI automatically sets these environment variables:
 
 Where `<home>` is `$OPENGRAM_HOME` (default: `~/.opengram`) and `<dataDir>` is `<home>/data`.
 
+## `opengram stop`
+
+Stop the background service. This is a shortcut for `opengram service stop`.
+
+```bash
+opengram stop
+```
+
+On Linux, this runs `systemctl --user stop opengram`. On macOS, it uses `launchctl stop` to stop the launchd agent.
+
+## `opengram restart`
+
+Restart the background service. This is a shortcut for `opengram service restart`.
+
+```bash
+opengram restart
+```
+
+On Linux, this runs `systemctl --user restart opengram`. On macOS, it uses `launchctl kickstart -k` to restart the launchd agent.
+
+## `opengram upgrade`
+
+Upgrade Opengram to the latest version.
+
+```bash
+opengram upgrade
+```
+
+This command:
+
+1. Detects your package manager (`pnpm`, `bun`, or `npm`)
+2. Runs `<pkg-mgr> install -g @opengramsh/opengram@latest`
+3. If the background service is running, restarts it automatically
+4. Prints the version change (e.g. `Upgraded: v0.1.0 → v0.2.0`)
+
 ## `opengram service`
 
-Manage the systemd service (Linux only).
+Manage the background service. Supported on Linux (systemd) and macOS (launchd). On other platforms, use `opengram start` directly or a process manager like pm2.
 
 ```bash
 opengram service <action>
@@ -63,10 +96,13 @@ opengram service <action>
 
 | Action | Description |
 |--------|-------------|
-| `install` | Create and enable the systemd service. The service starts on boot and restarts automatically on failure |
-| `uninstall` | Stop and remove the systemd service |
+| `install` | Create and enable the service. The service starts on boot and restarts automatically on failure |
+| `uninstall` | Stop and remove the service |
+| `start` | Start the service |
+| `stop` | Stop the service without removing it |
+| `restart` | Restart the service |
 | `status` | Show whether the service is running and recent log output |
-| `logs` | Stream live log output from the service (equivalent to `journalctl -fu opengram`) |
+| `logs` | Stream live log output from the service (`journalctl --user-unit opengram -f` on Linux, `tail -f ~/.opengram/logs/stdout.log` on macOS) |
 
 ## `opengram version`
 

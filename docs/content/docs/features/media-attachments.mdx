@@ -10,22 +10,20 @@ Opengram supports file and media attachments in chat messages. Users can share i
 Users can attach files to messages through several methods:
 
 - **File picker** -- click the attachment icon in the composer
-- **Drag and drop** -- drop files directly onto the chat
 - **Camera** -- take a photo on mobile devices using the camera input
-- **Paste** -- paste images from the clipboard
 
-Files are uploaded via `POST /api/v1/files` and attached to messages by referencing their file ID.
+Files are uploaded via `POST /api/v1/chats/:chatId/media` and attached to messages by referencing their file ID.
 
 ## Upload Limits
 
 Two configuration options control what can be uploaded:
 
-| Option | Default | Description |
-|---|---|---|
-| `maxUploadBytes` | `52428800` (50 MB) | Maximum file size in bytes |
-| `allowedMimeTypes` | All types | Array of allowed MIME types (e.g. `["image/*", "application/pdf"]`) |
+| Option             | Default            | Description                                                         |
+| ------------------ | ------------------ | ------------------------------------------------------------------- |
+| `maxUploadBytes`   | `50000000` (50 MB) | Maximum file size in bytes                                          |
+| `allowedMimeTypes` | All types          | Array of allowed MIME types (e.g. `["image/*", "application/pdf"]`) |
 
-These are set in your [configuration file](/docs/reference/configuration). If `allowedMimeTypes` is not specified, all file types are accepted.
+These are set in your [configuration file](/docs/configuration). If `allowedMimeTypes` is not specified, all file types are accepted.
 
 **SVG uploads are always blocked** regardless of the `allowedMimeTypes` setting, due to security risks (embedded scripts).
 
@@ -36,39 +34,44 @@ The API supports two upload formats:
 **Multipart form data** -- standard file upload with a `file` field:
 
 ```bash
-curl -X POST /api/v1/files \
+curl -X POST /api/v1/chats/chat_123/media \
   -H "Authorization: Bearer og_..." \
-  -F "file=@photo.jpg" \
-  -F "chatId=chat_123"
+  -F "file=@photo.jpg"
 ```
+
+Optional form fields: `kind` (override auto-detection) and `messageId` (attach to a message on upload).
 
 **JSON with base64 data** -- useful when your agent already has the file in memory:
 
-```json
-{
-  "chatId": "chat_123",
-  "fileName": "report.pdf",
-  "contentType": "application/pdf",
-  "base64Data": "JVBERi0xLjQK..."
-}
+```bash
+curl -X POST /api/v1/chats/chat_123/media \
+  -H "Authorization: Bearer og_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileName": "report.pdf",
+    "contentType": "application/pdf",
+    "base64Data": "JVBERi0xLjQK..."
+  }'
 ```
+
+Optional JSON fields: `kind` (override auto-detection) and `messageId` (attach to a message on upload).
 
 ## Media kind auto-detection
 
 If you do not specify a `kind` when uploading, Opengram detects it from the content type:
 
-| Content Type | Detected Kind |
-|---|---|
-| `image/*` | `image` (thumbnail generated automatically) |
-| `audio/*` | `audio` |
-| Everything else | `file` |
+| Content Type    | Detected Kind                               |
+| --------------- | ------------------------------------------- |
+| `image/*`       | `image` (thumbnail generated automatically) |
+| `audio/*`       | `audio`                                     |
+| Everything else | `file`                                      |
 
 ## Thumbnails
 
 Image attachments automatically get a thumbnail generated on upload. Thumbnails are served at a separate endpoint for efficient loading in the chat list and message bubbles:
 
-- **Full file**: `GET /api/v1/files/:id`
-- **Thumbnail**: `GET /api/v1/files/:id/thumbnail`
+- **Full file**: `GET /api/v1/files/:mediaId`
+- **Thumbnail**: `GET /api/v1/files/:mediaId/thumbnail`
 
 ## File Preview
 
@@ -76,12 +79,12 @@ Opengram includes a built-in file preview system. When a user taps on an attache
 
 Supported preview types:
 
-| File type | Behavior |
-|---|---|
-| **PDF** | Rendered inline using an embedded viewer |
-| **Markdown** | Rendered with full formatting |
-| **Plain text, JSON, code** | Displayed in a text viewer |
-| **Images** | Shown in a full-screen image viewer |
+| File type                  | Behavior                                 |
+| -------------------------- | ---------------------------------------- |
+| **PDF**                    | Rendered inline using an embedded viewer |
+| **Markdown**               | Rendered with full formatting            |
+| **Plain text, JSON, code** | Displayed in a text viewer               |
+| **Images**                 | Shown in a full-screen image viewer      |
 
 Text-based previews support files up to 20 MB. PDFs have no size limit for preview.
 
@@ -95,8 +98,9 @@ File downloads support HTTP range requests (`Range: bytes=0-1023`), returning `2
 
 ## API Reference
 
-- [Upload media](/docs/api-reference/uploadMedia) -- `POST /api/v1/files`
-- [Download file](/docs/api-reference/downloadFile) -- `GET /api/v1/files/:id`
-- [Download thumbnail](/docs/api-reference/downloadThumbnail) -- `GET /api/v1/files/:id/thumbnail`
+- [Upload media](/docs/api-reference/uploadMedia) -- `POST /api/v1/chats/:chatId/media`
+- [Get media metadata](/docs/api-reference/getMedia) -- `GET /api/v1/media/:mediaId`
+- [Download file](/docs/api-reference/downloadFile) -- `GET /api/v1/files/:mediaId`
+- [Download thumbnail](/docs/api-reference/downloadThumbnail) -- `GET /api/v1/files/:mediaId/thumbnail`
 - [List chat media](/docs/api-reference/listChatMedia) -- `GET /api/v1/chats/:chatId/media`
-- [Delete media](/docs/api-reference/deleteMedia) -- `DELETE /api/v1/files/:id`
+- [Delete media](/docs/api-reference/deleteMedia) -- `DELETE /api/v1/media/:mediaId`

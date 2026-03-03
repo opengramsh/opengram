@@ -23,9 +23,8 @@ When the limit is exceeded, the response includes a `Retry-After` header and a J
 ```json
 {
   "error": {
-    "code": "RATE_LIMIT_ERROR",
-    "message": "Write rate limit exceeded.",
-    "details": { "retryAfterSeconds": 1 }
+    "code": "RATE_LIMITED",
+    "message": "Write rate limit exceeded."
   }
 }
 ```
@@ -62,11 +61,15 @@ OPENGRAM_TRUST_PROXY_HEADERS=true
 
 When enabled, Opengram reads the client IP from forwarded headers in this order of priority:
 
-1. `cf-connecting-ip` (Cloudflare)
+1. `x-forwarded-for` (first address in the list)
 2. `x-real-ip`
-3. `x-forwarded-for` (first address in the list)
+3. `cf-connecting-ip` (Cloudflare)
 
 Only enable this setting when Opengram is actually behind a trusted proxy. If exposed directly to the internet without a proxy, a malicious client could spoof these headers to bypass rate limiting.
+
+## Fallback behavior
+
+When no client IP can be determined (e.g. proxy headers are not trusted and the runtime does not expose a socket IP), all requests share a single instance-wide rate-limit bucket. To ensure proper per-IP limiting, enable `OPENGRAM_TRUST_PROXY_HEADERS` when running behind a reverse proxy.
 
 ## Stale bucket cleanup
 

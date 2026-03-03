@@ -26,7 +26,7 @@ Pass your instance secret using either method:
 | --- | --- | --- |
 | `cursor` | -- | Event ID to resume from. Only events after this ID are delivered. |
 | `ephemeral` | `true` | Include non-persisted events (typing indicators, streaming chunks). |
-| `limit` | -- | Maximum events per batch. Cannot exceed 200. |
+| `limit` | `200` | Maximum events per batch. Cannot exceed 200. |
 | `token` | -- | Instance secret for authentication. |
 
 ## Event types
@@ -50,7 +50,7 @@ Pass your instance secret using either method:
 | --- | --- | --- |
 | `message.created` | No | A new message was persisted. |
 | `message.streaming.chunk` | Yes | A token chunk was appended to a streaming message. |
-| `message.streaming.complete` | Yes | A streaming message finished. |
+| `message.streaming.complete` | No | A streaming message finished. |
 
 ### Request events
 
@@ -66,21 +66,125 @@ Pass your instance secret using either method:
 | --- | --- | --- |
 | `media.attached` | No | A file was attached to a message. |
 
+## Payload reference
+
+Each event type includes a `payload` object with event-specific fields.
+
+### Chat event payloads
+
+All chat events (`chat.created`, `chat.updated`, `chat.archived`, `chat.unarchived`, `chat.read`, `chat.unread`) share the same payload shape:
+
+```json
+{ "chatId": "string" }
+```
+
+`chat.typing` adds an `agentId`:
+
+```json
+{ "chatId": "string", "agentId": "string" }
+```
+
+`chat.user_typing` adds a `senderId`:
+
+```json
+{ "chatId": "string", "senderId": "string" }
+```
+
+### Message event payloads
+
+**`message.created`**
+
+```json
+{
+  "chatId": "string",
+  "messageId": "string",
+  "role": "user | agent | system",
+  "senderId": "string",
+  "streamState": "complete | streaming",
+  "contentFinal": "string | null",
+  "createdAt": "string (ISO 8601)",
+  "trace": "object | null (optional)"
+}
+```
+
+**`message.streaming.chunk`**
+
+```json
+{
+  "chatId": "string",
+  "messageId": "string",
+  "deltaText": "string"
+}
+```
+
+**`message.streaming.complete`**
+
+```json
+{
+  "chatId": "string",
+  "messageId": "string",
+  "role": "string",
+  "streamState": "complete | cancelled",
+  "finalText": "string | null"
+}
+```
+
+### Request event payloads
+
+**`request.created`**
+
+```json
+{
+  "chatId": "string",
+  "requestId": "string",
+  "type": "string",
+  "title": "string"
+}
+```
+
+**`request.resolved`** / **`request.cancelled`**
+
+```json
+{
+  "chatId": "string",
+  "requestId": "string",
+  "type": "string",
+  "status": "resolved | cancelled",
+  "resolution_payload": "object | null",
+  "trace": "object | null"
+}
+```
+
+### Media event payloads
+
+**`media.attached`**
+
+```json
+{
+  "chatId": "string",
+  "mediaId": "string",
+  "messageId": "string | null",
+  "kind": "string"
+}
+```
+
 ## Event envelope
 
 Each SSE event is delivered as a JSON envelope:
 
 ```json
 {
-  "id": "evt_abc123",
+  "id": "xK9mQ2vLpR7wYbNcT3hZa",
   "type": "message.created",
-  "timestamp": 1709312400000,
+  "timestamp": "2024-03-01T18:00:00.000Z",
   "payload": {
     "chatId": "chat_456",
     "messageId": "msg_789",
-    "senderId": "user",
     "role": "user",
-    "content": "Hello!"
+    "senderId": "user:primary",
+    "streamState": "complete",
+    "contentFinal": "Hello!",
+    "createdAt": "2024-03-01T18:00:00.000Z"
   }
 }
 ```
@@ -88,9 +192,9 @@ Each SSE event is delivered as a JSON envelope:
 The SSE wire format uses the `id` field for cursor tracking and `event` for the type:
 
 ```
-id: evt_abc123
+id: xK9mQ2vLpR7wYbNcT3hZa
 event: message.created
-data: {"id":"evt_abc123","type":"message.created","timestamp":1709312400000,"payload":{...}}
+data: {"id":"xK9mQ2vLpR7wYbNcT3hZa","type":"message.created","timestamp":"2024-03-01T18:00:00.000Z","payload":{...}}
 ```
 
 ## JavaScript client example
@@ -127,14 +231,18 @@ The SSE connection respects `server.streamTimeoutSeconds` (default: 60). This co
 Every non-ephemeral event includes a unique ID. To resume after a disconnect, pass the last event ID you received as the `cursor` query parameter. Opengram will replay all events that occurred after that cursor so you do not miss anything.
 
 ```
-GET /api/v1/events/stream?cursor=evt_01HXK3...&token=your_secret
+GET /api/v1/events/stream?cursor=xK9mQ2vLpR7wYbNcT3hZa&token=your_secret
 ```
+
+If the cursor ID is not found in the database (e.g. after a database reset), the server returns a validation error rather than silently starting from the beginning.
+
+During replay, new live events are queued (up to 512). If your client is too far behind and the queue overflows, the server will close the connection -- your client should reconnect without a cursor or with a more recent one.
 
 Ephemeral events (typing indicators, streaming chunks) are not replayable -- they are only delivered to clients connected at the time they occur.
 
 ## Keep-alive
 
-The server sends a comment line (`: keep-alive`) every 15 seconds to prevent proxies and load balancers from closing idle connections.
+The server sends a comment line (`: keepalive`) every 15 seconds to prevent proxies and load balancers from closing idle connections.
 
 ## Response headers
 
@@ -142,6 +250,6 @@ The SSE endpoint returns these headers:
 
 | Header | Value | Purpose |
 | --- | --- | --- |
-| `Content-Type` | `text/event-stream` | Identifies the response as an SSE stream. |
+| `Content-Type` | `text/event-stream; charset=utf-8` | Identifies the response as an SSE stream. |
 | `X-Accel-Buffering` | `no` | Tells Nginx (and similar proxies) not to buffer the response. |
-| `Cache-Control` | `no-cache` | Prevents caching of the event stream. |
+| `Cache-Control` | `no-cache, no-transform` | Prevents caching and transformation of the event stream. |

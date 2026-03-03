@@ -9,6 +9,7 @@ Tailscale is the recommended and simplest path to HTTPS for Opengram. It provide
 
 - [Tailscale](https://tailscale.com/download) installed on the machine running Opengram
 - MagicDNS enabled in your tailnet (enabled by default on new tailnets)
+- HTTPS certificates enabled in the [Tailscale admin console](https://login.tailscale.com/admin/dns) under **DNS > HTTPS Certificates**
 
 ## Determine your hostname
 
@@ -20,6 +21,10 @@ tailscale status
 
 Your hostname will look something like `my-server.tail1234.ts.net`.
 
+<Callout>
+If you run `opengram init` on a machine with Tailscale, the setup wizard automatically detects your hostname and pre-fills the public URL for you.
+</Callout>
+
 ## Option A: Tailscale HTTPS forwarding
 
 The simplest approach -- Tailscale terminates TLS and forwards traffic to Opengram:
@@ -28,7 +33,7 @@ The simplest approach -- Tailscale terminates TLS and forwards traffic to Opengr
 tailscale serve --https=443 http://127.0.0.1:3000
 ```
 
-This makes Opengram available at `https://<hostname>.ts.net` for all devices on your tailnet. Tailscale handles certificate provisioning and renewal automatically.
+This makes Opengram available at `https://<hostname>.ts.net` for all devices on your tailnet. Tailscale handles certificate provisioning and renewal automatically. The serve configuration is persistent across reboots, so you only need to run this command once.
 
 To verify it is working:
 
@@ -60,12 +65,18 @@ Update your `opengram.config.json` to use the Tailscale hostname:
 
 Replace `<hostname>.ts.net` with your actual Tailscale hostname.
 
+Alternatively, you can set the `OPENGRAM_PUBLIC_BASE_URL` environment variable instead of editing the config file. This is useful for Docker deployments:
+
+```bash
+OPENGRAM_PUBLIC_BASE_URL=https://<hostname>.ts.net
+```
+
 ## Restart Opengram
 
 After updating the configuration, restart Opengram for the change to take effect:
 
 ```bash
-sudo systemctl restart opengram-web
+opengram restart
 ```
 
 Or if running with Docker:
@@ -73,3 +84,13 @@ Or if running with Docker:
 ```bash
 docker restart opengram
 ```
+
+## Exposing to the public internet
+
+By default, `tailscale serve` only makes Opengram accessible to devices on your tailnet. If you need public access (for example, to receive webhook callbacks from external services), you can use [Tailscale Funnel](https://tailscale.com/kb/1223/funnel):
+
+```bash
+tailscale funnel --https=443 http://127.0.0.1:3000
+```
+
+Funnel exposes the service to the public internet at `https://<hostname>.ts.net`. Make sure you have an [instance secret](/docs/configuration#security) configured before enabling Funnel to protect your API.

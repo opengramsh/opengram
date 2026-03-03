@@ -21,12 +21,14 @@ Enable push notifications in your configuration:
 
 VAPID (Voluntary Application Server Identification) keys are required for web push. Opengram **automatically generates** a VAPID key pair on first startup when push is enabled. No manual key generation is needed.
 
-The generated keys are stored in the database and reused on subsequent starts.
+The generated keys are stored in your config file (`opengram.config.json`) and reused on subsequent starts.
+
+A VAPID `subject` is also auto-generated from your `publicBaseUrl` (if HTTPS) or the first HTTPS entry in `corsOrigins`. You can override it manually by setting `push.subject` in your config to a URL or `mailto:` address.
 
 ### Requirements
 
 - **HTTPS is required** -- push notifications only work over secure connections. If you are running behind a [reverse proxy](/docs/deployment/reverse-proxy), make sure TLS is terminated there.
-- **VAPID subject** -- the configured subject (typically your email or site URL) cannot be `localhost`. Use a real domain or email address.
+- **VAPID subject** -- the configured subject (typically your email or site URL) cannot contain `localhost`. Apple Web Push will reject tokens with a localhost subject. Use a real domain or `mailto:` address.
 
 ## Notification types
 
@@ -52,7 +54,9 @@ Each push notification contains:
 }
 ```
 
+- The `title` is the agent's display name, falling back to the app name if unavailable.
 - The `body` is truncated to **240 characters** if the message is longer.
+- `messageId` is only present for message notifications (omitted for request notifications).
 - The total payload is capped at **4000 bytes**. If the payload exceeds this, the body is progressively shortened to fit.
 
 ## Subscribing Devices
@@ -68,7 +72,7 @@ The request body includes the push subscription object from the browser's Push A
 To unsubscribe:
 
 ```
-POST /api/v1/push/unsubscribe
+DELETE /api/v1/push/subscribe
 ```
 
 ## Supported Push Services
@@ -103,8 +107,12 @@ POST /api/v1/push/test
 
 This sends a test notification to all subscribed devices. Use it to confirm that VAPID keys, HTTPS, and device subscriptions are all working correctly.
 
+## Stale subscription cleanup
+
+When a push service responds with **404** or **410** (subscription expired or unsubscribed), Opengram automatically removes that subscription from the database. No manual cleanup is needed.
+
 ## API Reference
 
 - [Subscribe to push](/docs/api-reference/subscribePush) -- `POST /api/v1/push/subscribe`
-- [Unsubscribe from push](/docs/api-reference/unsubscribePush) -- `POST /api/v1/push/unsubscribe`
+- [Unsubscribe from push](/docs/api-reference/unsubscribePush) -- `DELETE /api/v1/push/subscribe`
 - [Test push notifications](/docs/api-reference/testPush) -- `POST /api/v1/push/test`

@@ -39,38 +39,125 @@ Define webhooks in the `hooks` array of `opengram.config.json`. Each hook object
 
 ## Supported events
 
+### Messages
+
 | Event | Description |
 | --- | --- |
 | `message.created` | A new message was created in a chat (by a user or an agent). |
+| `message.streaming.complete` | An agent message finished streaming (or was cancelled mid-stream). |
+
+### Requests
+
+| Event | Description |
+| --- | --- |
+| `request.created` | A new interactive request was created. |
 | `request.resolved` | An interactive request was resolved by the user. |
 | `request.cancelled` | An interactive request was cancelled. |
 
+### Chats
+
+| Event | Description |
+| --- | --- |
+| `chat.created` | A new chat was created. |
+| `chat.updated` | A chat's title, tags, or other metadata changed. |
+| `chat.archived` | A chat was archived. |
+| `chat.unarchived` | A chat was unarchived. |
+| `chat.read` | A chat was marked as read. |
+| `chat.unread` | A chat was marked as unread. |
+
+### Media
+
+| Event | Description |
+| --- | --- |
+| `media.attached` | A media file was attached to a chat. |
+
 ## Payload
 
-Each webhook delivery is an HTTP POST with a JSON body. The payload is an event envelope with enriched data, so your handler does not need to make additional API calls.
-
-### Example: `message.created`
+Each webhook delivery is an HTTP POST with a JSON body. Every delivery is wrapped in an event envelope:
 
 ```json
 {
   "id": "evt_abc123",
   "type": "message.created",
-  "timestamp": 1709312400000,
-  "payload": {
-    "chatId": "chat_456",
-    "agentIds": ["assistant"],
-    "messageId": "msg_789",
-    "senderId": "user",
-    "role": "user",
-    "content": "Hello, can you help me?",
-    "modelId": null,
-    "pendingRequestsCount": 0,
-    "trace": null
-  }
+  "timestamp": "2025-03-01T19:00:00.000Z",
+  "payload": { ... }
 }
 ```
 
-The payload fields vary by event type but always include `chatId`, `agentIds`, and `pendingRequestsCount`.
+The `payload` fields vary by event type. For `message.created` and `request.*` events, Opengram enriches the payload with additional data so your handler does not need to make extra API calls. Other events pass through the raw payload as emitted.
+
+### `message.created`
+
+```json
+{
+  "chatId": "chat_456",
+  "agentIds": ["assistant"],
+  "messageId": "msg_789",
+  "senderId": "user",
+  "role": "user",
+  "content": "Hello, can you help me?",
+  "modelId": null,
+  "pendingRequestsCount": 0,
+  "trace": null
+}
+```
+
+### `request.resolved` / `request.cancelled`
+
+```json
+{
+  "chatId": "chat_456",
+  "requestId": "req_123",
+  "type": "confirmation",
+  "status": "resolved",
+  "resolutionPayload": { "confirmed": true },
+  "trace": null
+}
+```
+
+### `message.streaming.complete`
+
+```json
+{
+  "chatId": "chat_456",
+  "messageId": "msg_789",
+  "role": "assistant",
+  "streamState": "complete",
+  "finalText": "Here is my response."
+}
+```
+
+### `request.created`
+
+```json
+{
+  "chatId": "chat_456",
+  "requestId": "req_123",
+  "type": "confirmation",
+  "title": "Deploy to production?"
+}
+```
+
+### `media.attached`
+
+```json
+{
+  "chatId": "chat_456",
+  "mediaId": "media_789",
+  "messageId": "msg_123",
+  "kind": "image"
+}
+```
+
+### `chat.*` events
+
+Chat lifecycle events (`chat.created`, `chat.updated`, `chat.archived`, `chat.unarchived`, `chat.read`, `chat.unread`) contain:
+
+```json
+{
+  "chatId": "chat_456"
+}
+```
 
 ## Signature verification
 

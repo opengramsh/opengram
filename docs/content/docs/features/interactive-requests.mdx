@@ -1,5 +1,5 @@
 ---
-title: Interactive Requests
+title: (Coming Soon) Interactive Requests
 description: Let agents ask users for structured input through choice buttons, text inputs, and multi-field forms.
 ---
 
@@ -7,7 +7,7 @@ Interactive requests allow agents to collect structured input from users. Instea
 
 ## Request Types
 
-There are three request types:
+There are three request types. Each request requires a `type`, `title`, and a `config` object with type-specific configuration. An optional `body` provides additional descriptive text shown below the title.
 
 ### Choice
 
@@ -17,13 +17,42 @@ Presents the user with a set of buttons to pick from.
 {
   "type": "choice",
   "title": "How would you like to proceed?",
-  "options": [
-    { "label": "Approve", "value": "approve" },
-    { "label": "Reject", "value": "reject" },
-    { "label": "Ask for changes", "value": "changes" }
-  ]
+  "body": "Pick one of the options below.",
+  "config": {
+    "options": [
+      { "id": "approve", "label": "Approve", "variant": "primary" },
+      { "id": "reject", "label": "Reject", "variant": "danger" },
+      { "id": "changes", "label": "Ask for changes" }
+    ]
+  }
 }
 ```
+
+Each option requires an `id` (returned in the resolution payload) and a `label` (displayed to the user). An optional `variant` controls the button style: `"primary"`, `"secondary"`, or `"danger"`.
+
+By default the user picks exactly one option. To allow multi-select, set `maxSelections` in the config:
+
+```json
+{
+  "type": "choice",
+  "title": "Which toppings?",
+  "config": {
+    "options": [
+      { "id": "cheese", "label": "Cheese" },
+      { "id": "pepperoni", "label": "Pepperoni" },
+      { "id": "mushrooms", "label": "Mushrooms" }
+    ],
+    "minSelections": 1,
+    "maxSelections": 3
+  }
+}
+```
+
+| Config Property | Default      | Description                                   |
+| --------------- | ------------ | --------------------------------------------- |
+| `options`       | _(required)_ | Array of `{ id, label, variant? }` objects    |
+| `maxSelections` | `1`          | Maximum number of options the user can select |
+| `minSelections` | `0`          | Minimum number of options required            |
 
 ### Text Input
 
@@ -33,9 +62,35 @@ Asks the user for a single free-text response.
 {
   "type": "text_input",
   "title": "What is the project name?",
-  "placeholder": "Enter a name..."
+  "config": {
+    "placeholder": "Enter a name..."
+  }
 }
 ```
+
+The config supports optional validation constraints:
+
+```json
+{
+  "type": "text_input",
+  "title": "Enter a version number",
+  "config": {
+    "placeholder": "e.g. 1.2.3",
+    "validation": {
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    }
+  }
+}
+```
+
+| Config Property        | Description                           |
+| ---------------------- | ------------------------------------- |
+| `placeholder`          | Placeholder text shown in the input   |
+| `validation.minLength` | Minimum character length              |
+| `validation.maxLength` | Maximum character length              |
+| `validation.pattern`   | Regex pattern the response must match |
 
 ### Form
 
@@ -45,11 +100,34 @@ Collects multiple fields at once.
 {
   "type": "form",
   "title": "Deployment details",
-  "fields": [
-    { "name": "environment", "label": "Environment", "type": "select", "options": ["staging", "production"] },
-    { "name": "version", "label": "Version", "type": "text", "placeholder": "e.g. 1.2.3" },
-    { "name": "notify", "label": "Send notification", "type": "checkbox" }
-  ]
+  "config": {
+    "fields": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "select",
+        "options": ["staging", "production"],
+        "required": true
+      },
+      {
+        "name": "version",
+        "label": "Version",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "notes",
+        "label": "Release notes",
+        "type": "textarea"
+      },
+      {
+        "name": "notify",
+        "label": "Send notification",
+        "type": "checkbox"
+      }
+    ],
+    "submitLabel": "Deploy"
+  }
 }
 ```
 
@@ -64,35 +142,69 @@ Collects multiple fields at once.
 
 The request widget floats above the message composer so it stays visible while the user scrolls through the conversation. Users can collapse the widget if they want to continue reading before responding.
 
-If multiple requests are pending, they stack in the widget and the user resolves them one at a time.
+If multiple requests are pending, they stack in the widget and the user can resolve them in any order.
 
-## Form field types
+## Form Field Types
 
-When using the `form` request type, each field in the `fields` array has a `type` property:
+When using the `form` request type, each field in `config.fields` has a `type` property:
 
-| Field Type | Description | Extra Properties |
-|---|---|---|
-| `text` | Single-line text input | `placeholder` |
-| `select` | Dropdown select | `options` (string array) |
-| `checkbox` | Boolean toggle | -- |
+| Field Type    | Description            | Extra Properties                   |
+| ------------- | ---------------------- | ---------------------------------- |
+| `text`        | Single-line text input | —                                  |
+| `textarea`    | Multi-line text input  | —                                  |
+| `select`      | Dropdown select        | `options` (string array, required) |
+| `multiselect` | Multi-select list      | `options` (string array, required) |
+| `checkbox`    | Boolean toggle         | —                                  |
+| `date`        | Date picker            | —                                  |
 
-## Resolution payloads
+All field types support these common properties:
+
+| Property   | Type      | Description                                        |
+| ---------- | --------- | -------------------------------------------------- |
+| `name`     | `string`  | Unique field identifier (required)                 |
+| `label`    | `string`  | Display label                                      |
+| `required` | `boolean` | Whether the field must be filled before submitting |
+
+The form config also supports a `submitLabel` property to customize the submit button text (defaults to "Submit").
+
+## Resolution Payloads
 
 When a request is resolved, the resolution payload varies by type:
 
-| Request Type | Resolution Payload |
-|---|---|
-| `choice` | `{ "selectedOptionIds": ["approve"] }` |
-| `text_input` | `{ "text": "The user's response" }` |
-| `form` | `{ "values": { "environment": "production", "version": "1.2.3", "notify": true } }` |
+| Request Type | Resolution Payload                                                                  |
+| ------------ | ----------------------------------------------------------------------------------- |
+| `choice`     | `{ "selectedOptionIds": ["approve"] }`                                              |
+| `text_input` | `{ "text": "The user's response" }`                                                 |
+| `form`       | `{ "values": { "environment": "production", "version": "1.2.3", "notify": true } }` |
 
 When a request is **cancelled**, the resolution payload is `null` and the status changes to `"cancelled"`.
+
+The resolve endpoint also accepts an optional `resolvedBy` field set to `"user"` (default) or `"backend"`, which controls how the resolution is routed through dispatch.
+
+## Trace
+
+Requests support an optional `trace` field — a freeform JSON object that agents can use to attach tracking metadata. The trace is stored with the request and included in resolution events and dispatch inputs, making it useful for correlating requests back to a specific workflow step.
+
+```json
+{
+  "type": "choice",
+  "title": "Approve deployment?",
+  "config": {
+    "options": [
+      { "id": "yes", "label": "Yes" },
+      { "id": "no", "label": "No" }
+    ]
+  },
+  "trace": { "workflow": "deploy", "step": 3 }
+}
+```
 
 ## API Reference
 
 See the full API details at:
 
-- [Create a request](/docs/api-reference/createChatRequest) -- `POST /api/v1/chats/:chatId/requests`
-- [Resolve a request](/docs/api-reference/resolveRequest) -- `POST /api/v1/chats/:chatId/requests/:requestId/resolve`
-- [Cancel a request](/docs/api-reference/cancelRequest) -- `POST /api/v1/chats/:chatId/requests/:requestId/cancel`
-- [List requests](/docs/api-reference/listChatRequests) -- `GET /api/v1/chats/:chatId/requests`
+- [Create a request](/docs/api-reference/createChatRequest) — `POST /api/v1/chats/:chatId/requests`
+- [List requests](/docs/api-reference/listChatRequests) — `GET /api/v1/chats/:chatId/requests`
+- [Update a request](/docs/api-reference/updateRequest) — `PATCH /api/v1/requests/:requestId`
+- [Resolve a request](/docs/api-reference/resolveRequest) — `POST /api/v1/requests/:requestId/resolve`
+- [Cancel a request](/docs/api-reference/cancelRequest) — `POST /api/v1/requests/:requestId/cancel`

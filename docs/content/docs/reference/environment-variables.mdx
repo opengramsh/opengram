@@ -3,13 +3,10 @@ title: Environment Variables
 description: Complete list of environment variables for configuring Opengram.
 ---
 
-Opengram reads environment variables from the shell environment and from the `opengram.env` file in the config directory. Environment variables take precedence over values in `opengram.config.json` where both apply (e.g. `OPENGRAM_SERVER_PORT` overrides `server.port`).
+Opengram reads environment variables from the shell environment. Environment variables take precedence over values in `opengram.config.json` where both apply (e.g. `OPENGRAM_SERVER_PORT` overrides `server.port`).
 
-### Env file location
-
-- **Direct install**: `/opt/opengram/config/opengram.env`
-- **Manual / CLI**: `~/.opengram/opengram.env` (or `$OPENGRAM_HOME/opengram.env`)
-- **Docker**: passed via `-e` flags or `env_file` in Docker Compose
+- **CLI / systemd / launchd**: set variables in the shell before running `opengram start`, or edit the generated service unit
+- **Docker**: pass via `-e` flags or `env_file` in Docker Compose
 
 ### Boolean values
 
@@ -30,11 +27,11 @@ Boolean environment variables accept `'1'`, `'true'`, or `'yes'` (case-insensiti
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENGRAM_SERVER_PORT` | (from config) | Override the server port defined in `opengram.config.json` |
-| `OPENGRAM_PUBLIC_BASE_URL` | (from config) | Override `server.publicBaseUrl` in the config file |
-| `OPENGRAM_INSTANCE_SECRET` | (from config) | Override `security.instanceSecret` in the config file |
+| `OPENGRAM_SERVER_PORT` | `3000` | Override the server port defined in `opengram.config.json` |
+| `OPENGRAM_PUBLIC_BASE_URL` | `http://localhost:3000` | Override `server.publicBaseUrl` in the config file |
+| `OPENGRAM_INSTANCE_SECRET` | (disabled) | Set a secret to enable write protection. Setting this also automatically enables `security.instanceSecretEnabled` |
 | `OPENGRAM_TRUST_PROXY_HEADERS` | (empty) | Set to `true` to trust forwarded IP headers (`x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`). Required when running behind a reverse proxy |
-| `OPENGRAM_CORS_ORIGINS` | (empty) | Comma-separated list of allowed CORS origins. Overrides `server.corsOrigins` in the config file |
+| `OPENGRAM_CORS_ORIGINS` | `[]` (all origins) | Comma-separated list of allowed CORS origins. When empty or unset, all origins are allowed. Overrides `server.corsOrigins` in the config file |
 
 ## Rate Limiting
 

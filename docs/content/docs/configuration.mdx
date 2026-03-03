@@ -1,50 +1,69 @@
 ---
 title: Configuration
-description: Configure Opengram using the config file, the init wizard, or the admin API.
+description: Configure Opengram using the config file, the init wizard, the admin API, or the web UI.
 ---
 
 Opengram is configured through a single JSON file, `opengram.config.json`. This file controls agents, models, push notifications, security, server behavior, and more.
 
 ## Ways to edit configuration
 
-There are three ways to update the configuration:
+There are four ways to update the configuration:
 
-1. **Edit the file directly** -- open `opengram.config.json` in any text editor and restart Opengram to apply changes.
-2. **Run the init wizard** -- `opengram init` walks you through the most common settings interactively.
-3. **Use the admin API** -- send a `PATCH` request to `/api/v1/config/admin` to update configuration at runtime without a restart.
+1. **Edit the file directly** — open `opengram.config.json` in any text editor and restart Opengram to apply changes.
+2. **Run the init wizard** — `opengram init` walks you through the most common settings interactively.
+3. **Use the admin API** — send a `PATCH` request to `/api/v1/config/admin` to update configuration at runtime without a restart.
+4. **Use the web UI** — open the **Settings** page in the Opengram web interface (`/settings`) to edit agents, models, security, push notifications, and auto-rename settings from your browser. Changes are applied immediately.
 
 <Callout type="info">
-Changes made by editing the JSON file require a restart to take effect. The admin API applies changes immediately.
+  Changes made by editing the JSON file require a restart to take effect. The
+  admin API and the web UI apply changes immediately.
 </Callout>
 
 ## Config file location
 
-After installation, the config file lives at:
+When using the CLI (`opengram init` / `opengram start`), the config file lives at:
 
 ```
-/opt/opengram/config/opengram.config.json
+~/.opengram/opengram.config.json
 ```
 
-If you are running from source, the file is in the project root. When using the CLI, `opengram init` writes the config to `~/.opengram/opengram.config.json` (or the path set by `$OPENGRAM_HOME`).
+You can change the home directory by setting the `OPENGRAM_HOME` environment variable, in which case the config file will be at `$OPENGRAM_HOME/opengram.config.json`.
+
+For other deployment methods, the location depends on your setup:
+
+| Method                     | Default path                                                 |
+| -------------------------- | ------------------------------------------------------------ |
+| **CLI** (`opengram start`) | `~/.opengram/opengram.config.json`                           |
+| **Docker**                 | `/opt/opengram/config/opengram.config.json` (mount a volume) |
+
+You can always override the path explicitly with the `OPENGRAM_CONFIG_PATH` environment variable:
+
+```bash
+export OPENGRAM_CONFIG_PATH=/path/to/opengram.config.json
+```
 
 ## Top-level structure
 
-The configuration file has the following top-level sections:
+The configuration file has the following top-level fields:
 
-| Section | Purpose |
-|---|---|
-| `appName` | Display name for the instance |
-| `agents` | Array of agent definitions |
-| `models` | Array of model definitions |
-| `push` | Web Push notification settings |
-| `security` | Instance secret and access control |
-| `server` | Port, public base URL, dispatch, and streaming settings |
-| `hooks` | Webhook endpoint definitions |
-| `autoRename` | LLM-based chat renaming settings |
+| Field                       | Type            | Default      | Purpose                                                                 |
+| --------------------------- | --------------- | ------------ | ----------------------------------------------------------------------- |
+| `appName`                   | `string`        | `"OpenGram"` | Display name for the instance                                           |
+| `maxUploadBytes`            | `number`        | `50000000`   | Maximum file upload size in bytes (default 50 MB)                       |
+| `allowedMimeTypes`          | `string[]`      | `["*/*"]`    | Allowed MIME types for uploads (supports wildcards)                     |
+| `titleMaxChars`             | `number`        | `48`         | Maximum characters for chat titles                                      |
+| `defaultModelIdForNewChats` | `string`        | —            | Preselected model when creating new chats (must match a `models` entry) |
+| `agents`                    | `AgentConfig[]` | —            | Array of agent definitions                                              |
+| `models`                    | `ModelConfig[]` | —            | Array of model definitions                                              |
+| `push`                      | `object`        | disabled     | Push notification settings                                              |
+| `security`                  | `object`        | disabled     | Instance secret and access control                                      |
+| `server`                    | `object`        | —            | Port, public base URL, CORS, dispatch, and streaming settings           |
+| `hooks`                     | `HookConfig[]`  | `[]`         | Webhook endpoint definitions                                            |
+| `autoRename`                | `object`        | —            | LLM-based chat renaming settings                                        |
 
 ## Agents
 
-The `agents` array defines the AI agents available in your Opengram instance. Each agent has an identifier, a display name, and optionally a default model:
+The `agents` array defines the AI agents available in your Opengram instance:
 
 ```json
 {
@@ -54,19 +73,19 @@ The `agents` array defines the AI agents available in your Opengram instance. Ea
       "name": "Assistant",
       "description": "General-purpose AI assistant",
       "avatarUrl": "/avatars/assistant.png",
-      "defaultModelId": "gpt-4o"
+      "defaultModelId": "gpt-5"
     }
   ]
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | `string` | Unique identifier for the agent |
-| `name` | `string` | Display name shown in the UI |
-| `description` | `string` | Short description of what the agent does |
-| `avatarUrl` | `string` | URL to the agent's avatar image |
-| `defaultModelId` | `string` | ID of the default model (must match an entry in `models`) |
+| Field            | Type     | Required | Description                                               |
+| ---------------- | -------- | -------- | --------------------------------------------------------- |
+| `id`             | `string` | Yes      | Unique identifier for the agent                           |
+| `name`           | `string` | Yes      | Display name shown in the UI                              |
+| `description`    | `string` | Yes      | Short description of what the agent does                  |
+| `avatarUrl`      | `string` | No       | URL to the agent's avatar image                           |
+| `defaultModelId` | `string` | No       | ID of the default model (must match an entry in `models`) |
 
 ## Models
 
@@ -76,25 +95,194 @@ The `models` array defines the language models your agents can use:
 {
   "models": [
     {
-      "id": "gpt-4o",
-      "name": "GPT-4o",
-      "description": "OpenAI GPT-4o",
+      "id": "gpt-5",
+      "name": "GPT-5",
+      "description": "OpenAI GPT-5",
       "metadata": {}
     }
   ]
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | `string` | Unique identifier for the model |
-| `name` | `string` | Display name shown in the UI |
-| `description` | `string` | Short description of the model |
-| `metadata` | `object` | Arbitrary key-value pairs for your agent to consume |
+| Field         | Type     | Required | Description                                         |
+| ------------- | -------- | -------- | --------------------------------------------------- |
+| `id`          | `string` | Yes      | Unique identifier for the model                     |
+| `name`        | `string` | Yes      | Display name shown in the UI                        |
+| `description` | `string` | Yes      | Short description of the model                      |
+| `metadata`    | `object` | No       | Arbitrary key-value pairs for your agent to consume |
+
+## Security
+
+The `security` object controls access to your Opengram instance:
+
+```json
+{
+  "security": {
+    "instanceSecretEnabled": true,
+    "instanceSecret": "og_your-secret-here",
+    "readEndpointsRequireInstanceSecret": false
+  }
+}
+```
+
+| Field                                | Type      | Default | Description                                            |
+| ------------------------------------ | --------- | ------- | ------------------------------------------------------ |
+| `instanceSecretEnabled`              | `boolean` | `false` | Require a bearer token to access the instance          |
+| `instanceSecret`                     | `string`  | `""`    | The secret token value (required when enabled)         |
+| `readEndpointsRequireInstanceSecret` | `boolean` | `false` | Also protect read-only (GET) endpoints with the secret |
+
+## Server
+
+The `server` object controls runtime behavior:
+
+```json
+{
+  "server": {
+    "port": 3000,
+    "publicBaseUrl": "https://chat.example.com",
+    "corsOrigins": ["https://myapp.example.com"],
+    "streamTimeoutSeconds": 60,
+    "idempotencyTtlSeconds": 86400
+  }
+}
+```
+
+| Field                   | Type       | Default                   | Description                                                                 |
+| ----------------------- | ---------- | ------------------------- | --------------------------------------------------------------------------- |
+| `port`                  | `number`   | `3000`                    | HTTP port (1–65535)                                                         |
+| `publicBaseUrl`         | `string`   | `"http://localhost:3000"` | Public URL used for links and push notifications                            |
+| `corsOrigins`           | `string[]` | `[]`                      | Allowed CORS origins (must be valid HTTP/HTTPS URLs)                        |
+| `streamTimeoutSeconds`  | `number`   | `60`                      | Timeout in seconds before auto-cancelling an idle stream                    |
+| `idempotencyTtlSeconds` | `number`   | `86400`                   | How long idempotency keys are cached (default 24 hours)                     |
+| `dispatch`              | `object`   | —                         | Message dispatch and queue settings (see [Dispatch](#serverdispatch) below) |
+
+## Push notifications
+
+Push notification settings. See [Push Notifications](/docs/features/push-notifications) for setup details.
+
+```json
+{
+  "push": {
+    "enabled": true,
+    "vapidPublicKey": "BNb...",
+    "vapidPrivateKey": "x2k...",
+    "subject": "https://chat.example.com"
+  }
+}
+```
+
+| Field                  | Type      | Default | Description                                                                         |
+| ---------------------- | --------- | ------- | ----------------------------------------------------------------------------------- |
+| `push.enabled`         | `boolean` | `false` | Enable web push notifications                                                       |
+| `push.vapidPublicKey`  | `string`  | `""`    | VAPID public key for push subscriptions                                             |
+| `push.vapidPrivateKey` | `string`  | `""`    | VAPID private key for sending push messages                                         |
+| `push.subject`         | `string`  | `""`    | VAPID subject (must be an `https://` URL or `mailto:` address when push is enabled) |
+
+When `push.enabled` is `true`, all three key/subject fields are required. The `subject` field cannot contain `localhost` -- Apple Web Push will reject it.
+
+## Auto-rename
+
+The `autoRename` object enables automatic chat title generation using an LLM:
+
+```json
+{
+  "autoRename": {
+    "enabled": true,
+    "provider": "openrouter",
+    "modelId": "google/gemini-2.5-flash-lite",
+    "apiKey": "your-api-key-here"
+  }
+}
+```
+
+| Field                 | Type      | Default | Description                                                                         |
+| --------------------- | --------- | ------- | ----------------------------------------------------------------------------------- |
+| `autoRename.enabled`  | `boolean` | `false` | Enable automatic chat renaming after the first exchange                             |
+| `autoRename.provider` | `string`  | `""`    | LLM provider: `"anthropic"`, `"openai"`, `"google"`, `"xai"`, or `"openrouter"`     |
+| `autoRename.modelId`  | `string`  | `""`    | Model ID to use for generating titles                                               |
+| `autoRename.apiKey`   | `string`  | —       | API key for the provider. Optional if the corresponding environment variable is set |
+
+When `enabled` is `true`, both `provider` and `modelId` are required. API keys can also be provided through environment variables: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`, `XAI_API_KEY`, or `OPENROUTER_API_KEY`.
+
+## Hooks
+
+Webhook configuration for event-driven integrations. See [Webhooks](/docs/agents/webhooks) for usage details.
+
+```json
+{
+  "hooks": [
+    {
+      "url": "https://api.example.com/webhook",
+      "events": ["message.created", "request.resolved", "request.cancelled"],
+      "signingSecret": "whsec_your_secret",
+      "timeoutMs": 10000,
+      "maxRetries": 5
+    }
+  ]
+}
+```
+
+| Field           | Type                     | Default    | Description                                                                     |
+| --------------- | ------------------------ | ---------- | ------------------------------------------------------------------------------- |
+| `url`           | `string`                 | (required) | The URL Opengram will POST to. Must be a valid URL                              |
+| `events`        | `string[]`               | (required) | Array of event names to subscribe to                                            |
+| `headers`       | `Record<string, string>` | `{}`       | Extra headers to include in every delivery request                              |
+| `signingSecret` | `string`                 | —          | Secret used to compute the HMAC-SHA256 signature sent in `X-OpenGram-Signature` |
+| `timeoutMs`     | `number`                 | `5000`     | Request timeout in milliseconds                                                 |
+| `maxRetries`    | `number`                 | `3`        | Maximum number of retry attempts on failure                                     |
+
+## `server.dispatch`
+
+Controls how chat messages are batched, queued, and delivered to agent workers. See [Dispatch System](/docs/agents/dispatch) for a full walkthrough.
+
+| Field                                 | Type     | Default                | Description                                                                            |
+| ------------------------------------- | -------- | ---------------------- | -------------------------------------------------------------------------------------- |
+| `server.dispatch.mode`                | `string` | `"batched_sequential"` | Dispatch mode: `"immediate"`, `"sequential"`, or `"batched_sequential"`                |
+| `server.dispatch.batchDebounceMs`     | `number` | `600`                  | Milliseconds to wait after the last message before sealing a batch                     |
+| `server.dispatch.typingGraceMs`       | `number` | `2000`                 | Extra grace period (ms) if the user is still typing                                    |
+| `server.dispatch.maxBatchWaitMs`      | `number` | `30000`                | Maximum milliseconds before forcing a batch to dispatch                                |
+| `server.dispatch.schedulerTickMs`     | `number` | `500`                  | Interval (ms) for the batch scheduler's internal tick                                  |
+| `server.dispatch.leaseMs`             | `number` | `30000`                | Lease duration (ms) for claimed dispatches. Workers must heartbeat before this expires |
+| `server.dispatch.heartbeatIntervalMs` | `number` | `5000`                 | Recommended heartbeat interval (ms) for workers                                        |
+| `server.dispatch.claimWaitMs`         | `number` | `10000`                | How long a claim request long-polls when no work is available                          |
+| `server.dispatch.retryBaseMs`         | `number` | `500`                  | Base delay (ms) for exponential backoff on failed dispatches                           |
+| `server.dispatch.retryMaxMs`          | `number` | `30000`                | Maximum delay (ms) for exponential backoff                                             |
+| `server.dispatch.maxAttempts`         | `number` | `8`                    | Maximum number of attempts before a dispatch is permanently failed. Minimum: 1         |
+
+### `server.dispatch.execution`
+
+Controls autoscaling behavior for concurrent workers.
+
+| Field                                        | Type      | Default | Description                                                       |
+| -------------------------------------------- | --------- | ------- | ----------------------------------------------------------------- |
+| `server.dispatch.execution.autoscaleEnabled` | `boolean` | `true`  | Whether autoscaling is active                                     |
+| `server.dispatch.execution.minConcurrency`   | `number`  | `2`     | Minimum number of concurrent workers. Minimum: 1                  |
+| `server.dispatch.execution.maxConcurrency`   | `number`  | `10`    | Maximum number of concurrent workers. Must be >= `minConcurrency` |
+| `server.dispatch.execution.scaleCooldownMs`  | `number`  | `5000`  | Cooldown period (ms) before scaling down                          |
+
+### `server.dispatch.claim`
+
+Controls the claim-many endpoint behavior.
+
+| Field                                  | Type     | Default | Description                                                           |
+| -------------------------------------- | -------- | ------- | --------------------------------------------------------------------- |
+| `server.dispatch.claim.claimManyLimit` | `number` | `10`    | Default number of batches returned by `claim-many`. Hard-capped at 50 |
 
 ## Environment variable overrides
 
-Some configuration values can be overridden by environment variables. For example, `OPENGRAM_SERVER_PORT` overrides `server.port`. See the [Environment Variables reference](/docs/reference/environment-variables) for the full list.
+Some configuration values can be overridden by environment variables:
+
+| Variable                       | Overrides                                                   |
+| ------------------------------ | ----------------------------------------------------------- |
+| `OPENGRAM_HOME`                | Home directory used by the CLI (default: `~/.opengram`)     |
+| `OPENGRAM_CONFIG_PATH`         | Config file location (overrides `OPENGRAM_HOME`-based path) |
+| `OPENGRAM_SERVER_PORT`         | `server.port`                                               |
+| `OPENGRAM_PUBLIC_BASE_URL`     | `server.publicBaseUrl`                                      |
+| `OPENGRAM_INSTANCE_SECRET`     | `security.instanceSecret`                                   |
+| `OPENGRAM_CORS_ORIGINS`        | `server.corsOrigins` (comma-separated)                      |
+| `OPENGRAM_TRUST_PROXY_HEADERS` | Trust forwarded IP headers (`1`, `true`, or `yes`)          |
+
+See the [Environment Variables reference](/docs/reference/environment-variables) for the full list including rate-limiting variables.
 
 ## Example configuration
 
@@ -118,14 +306,14 @@ Here is a minimal configuration with one agent and two models:
       "description": "Anthropic Claude Sonnet"
     },
     {
-      "id": "gpt-4o",
-      "name": "GPT-4o",
-      "description": "OpenAI GPT-4o"
+      "id": "gpt-5",
+      "name": "GPT-5",
+      "description": "OpenAI GPT-5"
     }
   ],
   "server": {
     "port": 3000,
-    "publicBaseUrl": "https://chat.example.com"
+    "publicBaseUrl": "https://opengram.example.com"
   },
   "security": {
     "instanceSecretEnabled": true,
@@ -134,6 +322,10 @@ Here is a minimal configuration with one agent and two models:
 }
 ```
 
-## Full reference
+## Validation rules
 
-For the complete configuration schema including `push`, `hooks`, `autoRename`, and `server.dispatch` settings, see the [Configuration Reference](/docs/reference/configuration).
+- At least **1 agent** and **1 model** must be configured.
+- If `defaultModelIdForNewChats` is set, it must reference a model ID in the `models` array.
+- When `push.enabled` is `true`, all VAPID fields and subject are required.
+- When `security.instanceSecretEnabled` is `true`, `instanceSecret` must be a non-empty string.
+- When `autoRename.enabled` is `true`, both `provider` and `modelId` are required.

@@ -7,7 +7,7 @@ The dispatch system is the bridge between the Opengram UI and your agent. When a
 
 ## Dispatch modes
 
-Configure the mode with the `dispatch.mode` field in `opengram.config.json`. Three modes are available:
+Configure the mode with the `server.dispatch.mode` field in `opengram.config.json`. Three modes are available:
 
 ### immediate
 
@@ -31,11 +31,13 @@ Batching is controlled by three timing parameters:
 
 ```json title="opengram.config.json"
 {
-  "dispatch": {
-    "mode": "batched_sequential",
-    "batchDebounceMs": 600,
-    "typingGraceMs": 2000,
-    "maxBatchWaitMs": 30000
+  "server": {
+    "dispatch": {
+      "mode": "batched_sequential",
+      "batchDebounceMs": 600,
+      "typingGraceMs": 2000,
+      "maxBatchWaitMs": 30000
+    }
   }
 }
 ```
@@ -53,68 +55,19 @@ Your worker receives the input source in the dispatch payload so it can decide h
 
 Your agent worker pulls dispatches from Opengram using a claim-based protocol:
 
-1. **Claim** -- call `POST /api/v1/dispatch/claim` to claim a single dispatch, or `POST /api/v1/dispatch/claim-many` to claim up to N dispatches at once. The response includes the batch payload with all messages, chat context, and agent/model information.
-2. **Heartbeat** -- while processing, call `POST /api/v1/dispatch/{id}/heartbeat` periodically to extend the lease. If the lease expires without a heartbeat, the dispatch is returned to the queue.
+1. **Claim** -- call `POST /api/v1/dispatch/claim` to claim a single dispatch, or `POST /api/v1/dispatch/claim-many` to claim up to N dispatches at once. The response includes the batch payload with all messages, chat context, and an `agentIdHint` indicating which agent configuration applies.
+2. **Heartbeat** -- while processing, call `POST /api/v1/dispatch/{id}/heartbeat` periodically to extend the lease. If the lease expires without a heartbeat, the dispatch is returned to the queue automatically by a background lease sweeper.
 3. **Complete or fail** -- call `POST /api/v1/dispatch/{id}/complete` when done, or `POST /api/v1/dispatch/{id}/fail` if something went wrong.
 
 During processing, your worker can send messages, stream tokens, attach files, and create interactive requests using the standard API endpoints.
 
-### Claim response
+A successful claim returns `200` with the batch payload. When no work is available, the endpoint **long-polls** for up to `claimWaitMs` (default: 10 seconds) before returning `204 No Content`. Your worker should loop and call claim again.
 
-A successful claim returns `200` with the batch payload:
+For the full batch payload schema and a complete claim loop example, see [Building an Agent — The batch payload](/docs/agents/building-an-agent#the-batch-payload).
 
-```json
-{
-  "batchId": "abc123",
-  "chatId": "chat_456",
-  "kind": "user_batch",
-  "agentIdHint": "assistant",
-  "compiledContent": "Hello! Can you help me with something?",
-  "items": [
-    {
-      "inputId": "inp_1",
-      "sourceKind": "user_message",
-      "sourceId": "msg_789",
-      "senderId": "user",
-      "content": "Hello! Can you help me with something?",
-      "mediaIds": [],
-      "attachmentNames": []
-    }
-  ],
-  "attachments": []
-}
-```
+### Lease sweeper
 
-When no work is available, the claim endpoint **long-polls** for up to `claimWaitMs` (default: 10 seconds) before returning `204 No Content`. Your worker should loop and call claim again.
-
-The `kind` field indicates the dispatch source:
-- `"user_batch"` -- triggered by user messages
-- `"request_batch"` -- triggered by a resolved interactive request
-
-### Minimal claim loop (Node.js)
-
-```js
-while (true) {
-  const res = await fetch(`${BASE}/dispatch/claim`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ workerId: "w1", leaseMs: 30000, waitMs: 10000 }),
-  });
-
-  if (res.status === 204) continue;
-
-  const { batchId, chatId, compiledContent } = await res.json();
-
-  // Process the batch, send messages, then complete
-  await fetch(`${BASE}/dispatch/${batchId}/complete`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ workerId: "w1" }),
-  });
-}
-```
-
-See [Building an Agent](/docs/agents/building-an-agent) for a complete walkthrough.
+A background process periodically checks for batches whose lease has expired (the worker stopped heartbeating or crashed). Expired leases are automatically returned to the queue so another worker can claim them. The sweeper runs every `schedulerTickMs` (default: 500ms).
 
 ## Autoscaling
 
@@ -122,19 +75,71 @@ The dispatch system supports autoscaling the number of concurrent workers it exp
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `dispatch.execution.autoscaleEnabled` | `true` | Whether autoscaling is active. |
-| `dispatch.execution.minConcurrency` | 2 | Minimum concurrent workers. |
-| `dispatch.execution.maxConcurrency` | 10 | Maximum concurrent workers. |
-| `dispatch.execution.scaleCooldownMs` | 5000 | Cooldown period (ms) before scaling down. |
+| `execution.autoscaleEnabled` | `true` | Whether autoscaling is active. |
+| `execution.minConcurrency` | 2 | Minimum concurrent workers. |
+| `execution.maxConcurrency` | 10 | Maximum concurrent workers. |
+| `execution.scaleCooldownMs` | 5000 | Cooldown period (ms) before scaling down. |
 
-These settings control how `claim-many` distributes work. When the queue is deep, Opengram signals workers to scale up. When idle, it scales back down after the cooldown period.
+These settings control how `claim-many` distributes work. When the queue is deep, Opengram signals workers to scale up. When idle, it scales back down after the cooldown period. The maximum number of batches returned by a single `claim-many` call is controlled by `claim.claimManyLimit` (default: 10, hard cap: 50).
 
 ## Retry behavior
 
-Failed dispatches are retried with exponential backoff:
+When your worker calls `/fail` with `retryable: true`, the dispatch is retried with exponential backoff:
 
-- **Base delay**: 500ms
-- **Maximum delay**: 30s
-- **Maximum attempts**: 8
+- **Base delay**: `retryBaseMs` (default: 500ms)
+- **Maximum delay**: `retryMaxMs` (default: 30s)
+- **Maximum attempts**: `maxAttempts` (default: 8)
 
-Client errors (4xx from your worker) are not retried. Server errors (5xx) and network failures trigger the retry logic. After all attempts are exhausted, the dispatch is marked as permanently failed.
+Your worker controls whether a failure is retryable via the `retryable` field in the `/fail` request body. You can also override the next retry delay with `retryDelayMs`. If `retryable` is `false`, or all attempts are exhausted, the dispatch is marked as permanently failed and a system message is posted to the chat visible to the user.
+
+## Configuration reference
+
+All dispatch settings live under `server.dispatch` in `opengram.config.json`. Every field is optional and falls back to its default.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `mode` | `"batched_sequential"` | Dispatch mode: `immediate`, `sequential`, or `batched_sequential`. |
+| `batchDebounceMs` | 600 | Wait after last message before sealing a batch. |
+| `typingGraceMs` | 2000 | Extra grace period while the user is typing. |
+| `maxBatchWaitMs` | 30000 | Maximum time before forcing a batch to dispatch. |
+| `schedulerTickMs` | 500 | Polling interval for the batch scheduler and lease sweeper. |
+| `leaseMs` | 30000 | Default lease duration for claimed batches. |
+| `heartbeatIntervalMs` | 5000 | Recommended heartbeat interval. |
+| `claimWaitMs` | 10000 | Long-poll timeout for claim requests. |
+| `retryBaseMs` | 500 | Exponential backoff base delay. |
+| `retryMaxMs` | 30000 | Maximum backoff delay. |
+| `maxAttempts` | 8 | Maximum retry attempts before permanent failure. |
+| `execution.autoscaleEnabled` | `true` | Whether autoscaling is active. |
+| `execution.minConcurrency` | 2 | Minimum concurrent workers. |
+| `execution.maxConcurrency` | 10 | Maximum concurrent workers. |
+| `execution.scaleCooldownMs` | 5000 | Cooldown before scaling down. |
+| `claim.claimManyLimit` | 10 | Max batches per `claim-many` call (hard cap: 50). |
+
+```json title="opengram.config.json"
+{
+  "server": {
+    "dispatch": {
+      "mode": "batched_sequential",
+      "batchDebounceMs": 600,
+      "typingGraceMs": 2000,
+      "maxBatchWaitMs": 30000,
+      "schedulerTickMs": 500,
+      "leaseMs": 30000,
+      "heartbeatIntervalMs": 5000,
+      "claimWaitMs": 10000,
+      "retryBaseMs": 500,
+      "retryMaxMs": 30000,
+      "maxAttempts": 8,
+      "execution": {
+        "autoscaleEnabled": true,
+        "minConcurrency": 2,
+        "maxConcurrency": 10,
+        "scaleCooldownMs": 5000
+      },
+      "claim": {
+        "claimManyLimit": 10
+      }
+    }
+  }
+}
+```

@@ -7,21 +7,23 @@ Opengram supports recording and sending voice notes directly within the chat int
 
 ## Recording
 
-Users record voice notes using the microphone button in the composer. While recording:
+Users record voice notes using the microphone button in the composer. Tapping the button requests microphone access (if not already granted) and starts recording. While recording, the composer switches to a recording UI that shows:
 
-- A **waveform visualization** displays the audio levels in real time
-- A **timer** shows the elapsed recording duration
-- Users can **cancel** the recording or **send** it
+- A **pulsing red indicator** to signal that recording is active
+- A **waveform visualization** displaying audio levels in real time
+- A **timer** showing the elapsed recording duration
+- A **cancel button** (trash icon) to discard the recording
+- A **send button** to stop recording and send the voice note
 
-The recording starts on press and can be stopped by releasing or tapping the send button.
+If microphone permission is denied, a prompt is shown asking the user to check their browser settings.
 
 ## Playback
 
-Voice notes appear as inline audio players in the message bubble. During playback, the waveform visualization is shown so users can see the audio shape and scrub to a specific position.
+Voice notes appear as inline audio players in the message bubble with a play/pause button, a waveform visualization, and a duration label. Users can tap anywhere on the waveform to scrub to a specific position. The waveform bars change color to indicate playback progress.
 
 ## Upload and Storage
 
-Recorded audio is uploaded as a standard media attachment using the file upload API. The audio file is associated with the message just like any other attachment.
+Recorded audio is uploaded as a standard media attachment using the file upload API (`/api/v1/chats/{chatId}/media`). A message is then created referencing the uploaded media. If the message creation fails, the uploaded media is automatically cleaned up. While the upload is in progress, a "Sending voice note..." indicator is shown in the composer.
 
 ## Supported Formats
 
@@ -34,3 +36,7 @@ The recording format depends on the browser's MediaRecorder implementation. Comm
 | Firefox | `audio/ogg; codecs=opus` |
 
 All formats are stored as-is and played back using the browser's native `<audio>` element, so playback works across browsers that support these codecs.
+
+## Browser Compatibility
+
+Voice notes require the [MediaRecorder API](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder) and `getUserMedia`. These are supported in all modern browsers. If the browser does not support these APIs, a friendly error message is shown instead of the recording UI.

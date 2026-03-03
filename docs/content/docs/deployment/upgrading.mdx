@@ -13,37 +13,44 @@ Back up your data before upgrading. The critical files are:
 - `uploads/` directory (uploaded files and media)
 - `opengram.config.json` (your configuration)
 
-See [Backup & Restore](/docs/guides/backup-restore) for detailed instructions.
+See [Backup & Restore](/docs/deployment/backup-restore) for detailed instructions.
+
+## CLI
+
+If you installed Opengram via npm or the install script, run:
+
+```bash
+opengram upgrade
+```
+
+This detects your package manager, installs the latest version, and restarts the service if it is running.
 
 ## Docker
 
-Pull the latest image and restart the container:
-
-```bash
-docker pull opengram/web:latest
-docker restart opengram
-```
-
-Or with Docker Compose:
+With Docker Compose (recommended):
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-Migrations run automatically when the container starts.
-
-## Direct install
-
-Re-run the install script from the updated repository:
+Without Compose, pull the new image and recreate the container:
 
 ```bash
-cd /path/to/opengram
-git pull
-sudo ./install.sh
+docker pull opengram/web:latest
+docker stop opengram
+docker rm opengram
+
+# Re-run with the same flags you used originally
+docker run -d \
+  --name opengram \
+  -p 3000:3000 \
+  -v opengram_data:/opt/opengram/data \
+  -v "$(pwd)/config:/opt/opengram/config" \
+  opengram/web:latest
 ```
 
-The script rebuilds the application, copies files to `/opt/opengram/web/`, runs migrations, and restarts the systemd service.
+Migrations run automatically when the container starts.
 
 ## Manual (from source)
 
@@ -54,7 +61,13 @@ npm install
 npm run build
 ```
 
-Then restart the server. Migrations apply automatically on startup.
+Then restart the server:
+
+```bash
+opengram restart
+```
+
+Migrations apply automatically on startup.
 
 ## Verify the upgrade
 

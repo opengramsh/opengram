@@ -1,0 +1,96 @@
+---
+title: Backup & Restore
+description: How to back up and restore your Opengram data, configuration, and media files.
+---
+
+Opengram stores all data in a SQLite database file and an uploads directory. Backing up is a matter of copying these files.
+
+<Callout type="info">
+Paths below assume the default `~/.opengram` directory. Adjust if using a custom `OPENGRAM_HOME` or Docker.
+</Callout>
+
+## What to back up
+
+| File/Directory | Default location | Description |
+|---|---|---|
+| `opengram.db` | `~/.opengram/data/opengram.db` | SQLite database (chats, messages, events, etc.) |
+| `opengram.db-wal` | `~/.opengram/data/opengram.db-wal` | SQLite write-ahead log (must be included) |
+| `opengram.db-shm` | `~/.opengram/data/opengram.db-shm` | SQLite shared-memory file (include for consistency) |
+| `uploads/` | `~/.opengram/data/uploads/` | Uploaded files and media attachments |
+| `opengram.config.json` | `~/.opengram/opengram.config.json` | Instance configuration |
+
+## SQLite backup
+
+The recommended approach is SQLite's built-in `.backup` command, which creates a consistent snapshot without stopping the server:
+
+```bash
+sqlite3 ~/.opengram/data/opengram.db ".backup /backup/opengram.db"
+```
+
+Alternatively, stop the service and copy the files directly:
+
+```bash
+opengram stop
+
+cp ~/.opengram/data/opengram.db /backup/opengram.db
+cp ~/.opengram/data/opengram.db-wal /backup/opengram.db-wal
+cp ~/.opengram/data/opengram.db-shm /backup/opengram.db-shm
+
+opengram service start
+```
+
+## Media backup
+
+Copy the entire uploads directory:
+
+```bash
+cp -r ~/.opengram/data/uploads/ /backup/uploads/
+```
+
+## Docker volume backup
+
+If using Docker with a named volume:
+
+```bash
+docker stop opengram
+
+docker run --rm \
+  -v opengram_data:/data \
+  -v "$(pwd)/backup:/backup" \
+  alpine tar czf /backup/opengram-data.tar.gz -C /data .
+
+docker start opengram
+```
+
+## Restore
+
+To restore from a backup:
+
+1. Stop the server.
+2. Copy the backed-up files to their original locations.
+3. Start the server.
+
+```bash
+opengram stop
+
+cp /backup/opengram.db ~/.opengram/data/opengram.db
+cp /backup/opengram.db-wal ~/.opengram/data/opengram.db-wal
+cp /backup/opengram.db-shm ~/.opengram/data/opengram.db-shm
+cp -r /backup/uploads/ ~/.opengram/data/uploads/
+cp /backup/opengram.config.json ~/.opengram/opengram.config.json
+
+opengram service start
+```
+
+### Docker restore
+
+```bash
+docker stop opengram
+
+docker run --rm \
+  -v opengram_data:/data \
+  -v "$(pwd)/backup:/backup" \
+  alpine sh -c "cd /data && rm -rf * && tar xzf /backup/opengram-data.tar.gz"
+
+docker start opengram
+```

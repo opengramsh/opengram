@@ -3,11 +3,27 @@ title: OpenClaw Plugin
 description: Connect OpenClaw AI agents to Opengram using the official plugin.
 ---
 
-[OpenClaw](https://openclaw.dev) is an open-source AI agent framework for building tool-using, multi-step agents. The **@opengramsh/openclaw-plugin** plugin connects OpenClaw agents to Opengram, letting them send and receive messages, handle interactive requests, and stream responses through the Opengram chat UI.
+[OpenClaw](https://openclaw.ai) is an open-source AI agent framework for building tool-using, multi-step agents. The **@opengramsh/openclaw-plugin** plugin connects OpenClaw agents to Opengram, letting them send and receive messages, handle interactive requests, and stream responses through the Opengram chat UI.
+
+## Prerequisites
+
+- Node.js >= 20
+- OpenClaw >= 2026.1.0
 
 ## How it works
 
-The plugin registers Opengram as a communication channel for your OpenClaw agent. When a message is dispatched to your agent, OpenClaw receives it through the plugin, runs its reasoning loop, and sends responses back through the Opengram API. The plugin handles claiming dispatches, heartbeating, and completing the dispatch lifecycle automatically.
+The plugin registers Opengram as a communication channel for your OpenClaw agent. When a message is dispatched to your agent, OpenClaw receives it through the plugin, runs its reasoning loop, and streams responses back through the Opengram API. The plugin handles SSE-based event listening, dispatch claiming, heartbeating, and completing the dispatch lifecycle automatically.
+
+## Capabilities
+
+| Feature           | Supported |
+| ----------------- | --------- |
+| Direct chats      | Yes       |
+| Media attachments | Yes       |
+| Block streaming   | Yes       |
+| Native commands   | Soon      |
+| Threads           | No        |
+| Reactions         | No        |
 
 ## Setup via init wizard
 
@@ -18,6 +34,14 @@ If the `openclaw` CLI is available on your system, the Opengram init wizard dete
 
 This writes the necessary configuration to your OpenClaw project so the plugin can connect to Opengram immediately.
 
+After initial setup, you can reconfigure the plugin at any time with the interactive setup wizard:
+
+```bash
+openclaw opengram setup
+```
+
+The wizard tests the connection, configures the instance secret, lets you select which agents to link, and optionally restarts the gateway to apply changes.
+
 ## Manual installation
 
 If you prefer to set up the plugin manually, install it from npm:
@@ -26,7 +50,56 @@ If you prefer to set up the plugin manually, install it from npm:
 npm install @opengramsh/openclaw-plugin
 ```
 
-Then register it in your OpenClaw agent configuration. Refer to the [OpenClaw documentation](https://openclaw.dev/docs/plugins) for details on plugin registration and configuration options.
+Then register the plugin in your `openclaw.json`:
+
+```json
+{
+  "plugins": ["@opengramsh/openclaw-plugin"]
+}
+```
+
+And configure the channel:
+
+```json
+{
+  "channels": {
+    "opengram": {
+      "baseUrl": "http://localhost:3000",
+      "instanceSecret": "your_opengram_instance_secret",
+      "agents": ["my-agent"]
+    }
+  }
+}
+```
+
+Start OpenClaw and the plugin connects via SSE, listening for user messages automatically.
+
+## Configuration
+
+All configuration lives under `channels.opengram` in your OpenClaw config file.
+
+| Key                     | Type       | Default                 | Description                                                         |
+| ----------------------- | ---------- | ----------------------- | ------------------------------------------------------------------- |
+| `baseUrl`               | `string`   | `http://localhost:3000` | Opengram instance URL                                               |
+| `instanceSecret`        | `string`   | —                       | API auth secret. Also reads `OPENGRAM_INSTANCE_SECRET` env var.     |
+| `agents`                | `string[]` | `[]`                    | Linked OpenClaw agent IDs                                           |
+| `dmPolicy`              | `string`   | `"pairing"`             | DM policy: `open`, `pairing`, `allowlist`, or `disabled`            |
+| `allowFrom`             | `string[]` | `[]`                    | User IDs always permitted to message (used with `allowlist` policy) |
+| `showReasoningMessages` | `boolean`  | `false`                 | Show agent reasoning/thinking messages in chat                      |
+| `defaultModelId`        | `string`   | —                       | Default model ID for chats created in Opengram                      |
+| `reconnectDelayMs`      | `number`   | `3000`                  | SSE reconnect delay in ms after connection loss                     |
+
+The plugin also supports an `autoRename` object for automatic chat title generation. See the [Auto Rename](/docs/features/auto-rename) feature docs for details.
+
+## Agent tools
+
+The plugin provides three tools that your OpenClaw agents can use during their reasoning loop:
+
+- **`opengram_chat`** -- Create, update, and list chats.
+- **`opengram_media`** -- Upload media files to a chat.
+- **`opengram_search`** -- Full-text search across conversations.
+
+These tools are registered automatically when the plugin loads -- no extra configuration needed.
 
 ## When to use this plugin
 

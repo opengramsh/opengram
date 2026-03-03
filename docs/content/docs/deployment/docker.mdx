@@ -10,13 +10,18 @@ Docker is the quickest way to deploy Opengram. A single command gives you a runn
 ```bash
 docker run -d \
   --name opengram \
+  --restart unless-stopped \
   -p 3000:3000 \
   -v opengram_data:/opt/opengram/data \
   -v "$(pwd)/config:/opt/opengram/config" \
   opengram/web:latest
 ```
 
-This starts Opengram on port 3000 with persistent storage for both the database and your configuration file.
+This starts Opengram on port 3000 with persistent storage for both the database and your configuration file. The `--restart unless-stopped` flag ensures the container restarts automatically after a reboot.
+
+<Callout type="info">
+  The container runs as a non-root user (`opengram`, uid 10001). If you bind-mount a host directory for data or config, make sure the directory is writable by uid 10001.
+</Callout>
 
 ## Environment variables
 
@@ -27,17 +32,26 @@ The container uses the following environment variables by default:
 | `NODE_ENV` | `production` | Node.js environment mode |
 | `DATABASE_URL` | `/opt/opengram/data/opengram.db` | Path to the SQLite database file |
 | `OPENGRAM_CONFIG_PATH` | `/opt/opengram/config/opengram.config.json` | Path to the configuration file |
+| `HOSTNAME` | `0.0.0.0` | Address the server binds to |
+| `PORT` | `3000` | Port the server listens on inside the container |
 
 You can override any of these with `-e`:
 
 ```bash
 docker run -d \
   --name opengram \
-  -p 3000:3000 \
-  -e DATABASE_URL=/opt/opengram/data/opengram.db \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -e PORT=8080 \
   -v opengram_data:/opt/opengram/data \
   opengram/web:latest
 ```
+
+<Callout type="warn">
+  If you are running Opengram behind a reverse proxy (nginx, Caddy, Traefik, etc.), set `OPENGRAM_TRUST_PROXY_HEADERS=true` so that Opengram reads the real client IP from forwarded headers. See [Reverse Proxy](/docs/deployment/reverse-proxy) for details.
+</Callout>
+
+See the [Environment Variables reference](/docs/reference/environment-variables) for the full list, including server overrides, rate limiting, and API keys.
 
 ## Data persistence
 
@@ -52,33 +66,30 @@ This volume contains:
 - `opengram.db` -- the SQLite database with all chats, messages, and metadata
 - `uploads/` -- uploaded files and media attachments
 
-Back up this volume to preserve all Opengram data.
+Back up this volume to preserve all Opengram data. See [Backup & Restore](/docs/deployment/backup-restore) for instructions.
 
 ## Config mounting
 
-Mount your local config directory to `/opt/opengram/config` so the container can read your `opengram.config.json`:
+The image ships with a default `opengram.config.json`. To customize it, create your own config file locally and mount it into the container:
 
 ```bash
 -v "$(pwd)/config:/opt/opengram/config"
 ```
 
-If no config file exists, run `opengram init` inside the container to generate one:
-
-```bash
-docker exec -it opengram opengram init
-```
+See [Configuration](/docs/configuration) for the full list of options.
 
 ## Resource recommendations
 
-Opengram is lightweight. For reference, the systemd service template uses:
+Opengram is lightweight:
 
-- **Memory**: 256 MB soft limit, 384 MB hard limit
-- **CPU**: Minimal -- a single core is sufficient for most workloads
+- **Memory**: 256--384 MB is sufficient for most workloads
+- **CPU**: A single core handles typical usage
 
-For Docker, you can set equivalent limits:
+You can set resource limits in Docker:
 
 ```bash
 docker run -d --name opengram \
+  --restart unless-stopped \
   --memory=384m \
   -p 3000:3000 \
   -v opengram_data:/opt/opengram/data \
@@ -87,11 +98,11 @@ docker run -d --name opengram \
 
 ## Health check
 
-The image includes a built-in health check that polls `GET /api/v1/health` every 30 seconds with a 5-second timeout. Container orchestrators like Docker Compose and Kubernetes will automatically use this to determine container health.
+The image includes a built-in health check that polls `GET /api/v1/health` every 30 seconds with a 5-second timeout, a 20-second start period, and 3 retries. Container orchestrators like Docker Compose and Kubernetes will automatically use this to determine container health.
 
 ## Entrypoint and migrations
 
-The container entrypoint runs database migrations before starting the server. This means you can safely upgrade to a new image version and migrations will apply automatically on the next startup.
+The container entrypoint runs database migrations before starting the server. This means you can safely upgrade to a new image version and migrations will apply automatically on the next startup. See [Upgrading](/docs/deployment/upgrading) for more details.
 
 ## Docker Compose
 
@@ -108,6 +119,10 @@ services:
     volumes:
       - opengram_data:/opt/opengram/data
       - ./config:/opt/opengram/config
+    environment:
+      - OPENGRAM_TRUST_PROXY_HEADERS=true  # set to true if behind a reverse proxy
+    # env_file:
+    #   - ./opengram.env  # alternative: load env vars from a file
 
 volumes:
   opengram_data:

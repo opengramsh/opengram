@@ -5,23 +5,49 @@ description: Get Opengram running and create your first chat in five minutes.
 
 This guide takes you from zero to a working Opengram instance in a few minutes.
 
+## Prerequisites
+
+- **Linux or macOS**
+- **Node.js 20+** -- install it from [nodejs.org](https://nodejs.org/) or with a version manager like [fnm](https://github.com/Schniz/fnm) or [nvm](https://github.com/nvm-sh/nvm)
+
 ## 1. Install Opengram
 
-Pick whichever method suits your environment:
+### Option A: Install script (recommended)
 
-```bash title="Docker"
-docker run -d --name opengram -p 3000:3000 -v opengram_data:/opt/opengram/data opengram/web:latest
+```bash
+curl -fsSL https://opengram.sh/install | sh
 ```
 
-```bash title="Direct install"
-sudo ./install.sh
+The script will:
+
+1. Verify that Node.js 20+ is installed.
+2. Detect your package manager (pnpm, bun, or npm).
+3. Install the `opengram` CLI globally.
+4. Launch the setup wizard (`opengram init`).
+
+> If you prefer to skip the wizard during install, pass `--no-prompt`:
+>
+> ```bash
+> curl -fsSL https://opengram.sh/install | sh -s -- --no-prompt
+> ```
+>
+> You can run `opengram init` later to configure.
+
+### Option B: Install via npm
+
+```bash
+npm install -g @opengramsh/opengram
 ```
 
-See [Installation](/docs/installation) for full details on each method.
+Then run the setup wizard:
 
-## 2. Run the init wizard
+```bash
+opengram init
+```
 
-The init wizard walks you through first-time configuration:
+## 2. Setup wizard
+
+The install script automatically runs `opengram init`. If you skipped it or want to change your settings, you can re-run it at any time:
 
 ```bash
 opengram init
@@ -30,19 +56,26 @@ opengram init
 The wizard will prompt you for:
 
 - **Port** -- the port Opengram listens on (default: `3000`).
-- **Base URL** -- the public URL where Opengram is accessible (e.g. `https://chat.example.com`).
-- **Instance secret** -- a secret key used to authenticate API requests from your agents.
-- **Auto-rename** -- whether to automatically rename chats using an LLM, and which model to use.
-- **OpenClaw plugin** -- optionally enable the OpenClaw agent plugin for quick testing.
-- **Systemd service** -- on Linux, whether to install and enable a systemd service.
+- **Public base URL** -- the URL where Opengram is accessible (e.g. `https://chat.example.com`). Auto-detects [Tailscale](https://tailscale.com/) if available.
+- **Instance secret** -- a secret key used to authenticate API requests from your agents. Can be auto-generated, custom, or disabled.
+- **Auto-rename** -- whether to automatically rename chats using an LLM. Supports Anthropic, OpenAI, Google Gemini, xAI, and OpenRouter.
+- **OpenClaw plugin** -- if the `openclaw` CLI is detected, optionally install and connect the OpenClaw agent plugin.
+- **Systemd service** (Linux) / **launchd service** (macOS) -- whether to install and enable a system service for automatic startup.
 
-The wizard writes its output to `~/.opengram/opengram.config.json` (or `$OPENGRAM_HOME/opengram.config.json`). You can re-run it at any time or edit the file directly.
+The wizard writes its output to `~/.opengram/opengram.config.json` (or `$OPENGRAM_HOME/opengram.config.json`). You can edit the file directly at any time.
 
-## 3. Verify your setup
+## 3. Start the server
 
-Confirm that Opengram is running:
+If the wizard installed a system service (systemd on Linux or launchd on macOS), Opengram is already running. Otherwise, start it manually:
 
 ```bash
+opengram start
+```
+
+Verify that everything is working:
+
+```bash
+# Update the URL below to match the one you set for your opengram instance
 curl -fsS http://localhost:3000/api/v1/health
 # → {"status":"ok"}
 ```
@@ -51,17 +84,25 @@ curl -fsS http://localhost:3000/api/v1/health
 
 Open your browser and navigate to the URL you configured (or `http://localhost:3000` if using defaults). You should see the Opengram chat interface.
 
-## 5. Create your first chat
+## 5. 🦞 Connect your OpenClaw agents (optional)
 
-Click the new-chat button in the UI to start a conversation. If you configured an agent, messages you send will be dispatched to it automatically.
+If you use [Openclaw](https://openclaw.ai), you can connect your agents to Opengram with our plugin. If the `openclaw` CLI was detected during `opengram init`, this is already configured -- otherwise, install the plugin manually:
 
-## 6. Connect an agent
+```bash
+npm install -g @opengramsh/openclaw-plugin
+openclaw opengram setup
+```
+
+The setup command will ask for your Opengram base URL and instance secret, then configure OpenClaw to send and receive messages through the Opengram chat UI automatically.
+
+See [OpenClaw Plugin](/docs/agents/openclaw-plugin) for more details.
+
+## 6. Connect your other agents
 
 To connect your own AI agent, you will use the Opengram REST API. Your agent will:
 
 1. Poll for or receive dispatched messages.
 2. Send responses back (including streamed tokens).
-3. Optionally request user input with interactive widgets.
 
 Here is a minimal example that claims a dispatch and sends a reply:
 
@@ -88,7 +129,11 @@ if (res.status === 204) {
   await fetch(`${BASE}/chats/${chatId}/messages`, {
     method: "POST",
     headers: HEADERS,
-    body: JSON.stringify({ role: "agent", agentId: "assistant", content: `Echo: ${compiledContent}` }),
+    body: JSON.stringify({
+      role: "agent",
+      senderId: "assistant",
+      content: `Echo: ${compiledContent}`,
+    }),
   });
 
   // Complete the dispatch
@@ -100,4 +145,23 @@ if (res.status === 204) {
 }
 ```
 
-See [Building an Agent](/docs/agents/building-an-agent) for a complete walkthrough including streaming, heartbeats, and interactive requests.
+See [Building an Agent](/docs/agents/building-an-agent) for a complete walkthrough including streaming and heartbeats.
+
+## Directory layout
+
+After setup, Opengram stores everything under `~/.opengram/` (or the path set by `$OPENGRAM_HOME`):
+
+```
+~/.opengram/
+  opengram.config.json   # Configuration
+  data/
+    opengram.db          # SQLite database
+    uploads/             # Uploaded files
+```
+
+- **`opengram.config.json`** is the main configuration file written by the setup wizard. See [Configuration](/docs/configuration) for details.
+- **`data/`** holds all persistent state -- the SQLite database and uploaded files. Back up this directory to preserve everything.
+
+## Database migrations
+
+Migrations run automatically when the server starts. No manual migration step is needed -- on upgrades, new migrations are applied on the next startup.

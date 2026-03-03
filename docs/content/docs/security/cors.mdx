@@ -5,9 +5,15 @@ description: Configure Cross-Origin Resource Sharing to control which domains ca
 
 CORS (Cross-Origin Resource Sharing) controls which web origins are permitted to make requests to the Opengram API from a browser. This is relevant when your frontend is served from a different domain than the API.
 
+CORS rules apply to all `/api/*` routes only. Other routes (static assets, pages) are not affected.
+
 ## Default Behavior
 
 When no CORS origins are configured, Opengram allows requests from **all origins**. This is permissive by default to simplify initial setup.
+
+<Callout type="warn">
+  For production deployments, always configure explicit origins to prevent unauthorized cross-origin access to your API.
+</Callout>
 
 ## Configuring Allowed Origins
 
@@ -28,15 +34,17 @@ Add a `corsOrigins` array to the `server` section of `opengram.config.json`:
 
 ### Environment Variable
 
-Alternatively, set the `OPENGRAM_CORS_ORIGINS` environment variable with a comma-separated list:
+You can also set the `OPENGRAM_CORS_ORIGINS` environment variable with a comma-separated list:
 
 ```bash
 OPENGRAM_CORS_ORIGINS=https://app.example.com,https://admin.example.com
 ```
 
+When set, the environment variable **completely replaces** the `corsOrigins` array from the config file — the two are not merged.
+
 ## Origin Format
 
-Each origin must be a valid `http` or `https` URL consisting of only the scheme, hostname, and optional port. Do not include paths, query strings, or fragments.
+Each origin must be a valid `http` or `https` URL consisting of only the scheme, hostname, and optional port. Do not include paths, query strings, or fragments. Wildcards (e.g. `*`) are not supported — each origin must be an exact match.
 
 Valid examples:
 - `https://app.example.com`

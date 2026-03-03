@@ -1,9 +1,9 @@
 ---
 title: Auto-Rename
-description: Automatically generate descriptive chat titles using an LLM after the first user message.
+description: Automatically generate descriptive chat titles using an LLM after the first agent reply.
 ---
 
-Opengram can automatically generate descriptive titles for chats using an LLM. When a user sends their first message in a chat that still has the default title, the auto-rename feature calls the configured LLM to produce a short, relevant title based on the conversation content.
+Opengram can automatically generate descriptive titles for chats using an LLM. When an agent completes a reply in a chat that still has the default title, the auto-rename feature calls the configured LLM to produce a short, relevant title based on the conversation content.
 
 ## Supported Providers
 
@@ -17,22 +17,18 @@ Opengram can automatically generate descriptive titles for chats using an LLM. W
 
 ## Setup
 
-The easiest way to configure auto-rename is through the init wizard:
+There are three ways to configure auto-rename:
 
-```bash
-opengram init
-```
-
-The wizard will prompt you to select a provider, enter an API key, and choose a model.
-
-Alternatively, configure it directly in your configuration file:
+1. **Init wizard** — run `opengram init` and follow the prompts to select a provider, enter an API key, and choose a model.
+2. **Web UI** — open the **Settings** page in the Opengram web interface (`/settings`) and configure auto-rename from the browser.
+3. **Config file** — edit `opengram.config.json` directly:
 
 ```json
 {
   "autoRename": {
     "enabled": true,
     "provider": "anthropic",
-    "modelId": "claude-haiku-4-0",
+    "modelId": "claude-haiku-4-5",
     "apiKey": "sk-ant-..."
   }
 }
@@ -49,11 +45,11 @@ If both are set, the config file value takes precedence.
 
 ## How it works
 
-1. A user sends a message in a chat that still has the default title (e.g. "New Chat").
-2. Opengram checks that the chat has at least **6 messages** and the user's messages total at least **30 characters** of content.
-3. Opengram sends the **last 6 messages** (each truncated to 300 characters) to the configured LLM.
-4. The LLM returns a short title (3--7 words), which is trimmed to the `titleMaxChars` limit (default: **48 characters**).
-5. The chat title is updated automatically.
+1. An agent completes a reply in a chat that still has the default title (e.g. "New Chat").
+2. Opengram checks that user messages total at least **30 characters** of content.
+3. Opengram sends up to the **first 6 messages** (each truncated to 300 characters) to the configured LLM.
+4. The LLM returns a short title (3--7 words), trimmed to **48 characters**.
+5. The chat title is updated and marked as auto-renamed.
 
 Auto-rename only triggers once per chat -- when the title source is still `default`. If a user or agent has already set a custom title, auto-rename is skipped.
 
@@ -63,5 +59,5 @@ Auto-rename only triggers once per chat -- when the title source is still `defau
 |---|---|---|
 | `enabled` | boolean | Whether auto-rename is active |
 | `provider` | string | One of `anthropic`, `openai`, `google`, `xai`, `openrouter` |
-| `modelId` | string | The model ID to use (e.g. `claude-haiku-4-0`, `gpt-4o-mini`) |
+| `modelId` | string | The model ID to use (e.g. `claude-haiku-4-5`, `gpt-5-mini`) |
 | `apiKey` | string | API key for the provider (optional if set via environment variable) |

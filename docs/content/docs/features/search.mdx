@@ -31,32 +31,50 @@ Tapping a result navigates directly to that chat or to the specific message with
 The search endpoint is available for agents and integrations:
 
 ```
-GET /api/v1/search?query=hello&scope=all&limit=20
+GET /api/v1/search?q=hello&scope=titles&limit=20
 ```
 
 ### Parameters
 
 | Parameter | Type | Default | Max | Description |
 |---|---|---|---|---|
-| `query` | string | required | -- | The search query |
-| `scope` | string | `all` | -- | One of `titles`, `messages`, or `all` |
+| `q` | string | required | -- | The search query |
+| `scope` | string | `titles` | -- | One of `titles`, `messages`, or `all` |
 | `limit` | number | `50` | `100` | Maximum number of results per page |
 | `cursor` | string | -- | -- | Cursor for pagination (from previous response) |
 
 See the full API details at [Search API reference](/docs/api-reference/search).
 
-## How FTS5 Works
+## How Search Works
 
-Opengram automatically maintains an FTS5 index alongside the main database tables. When messages are created or chats are renamed, the index is updated. Searches use FTS5's ranking algorithm to return the most relevant results first.
+Opengram uses two different strategies depending on the scope:
 
-No additional setup is required -- the FTS5 index is created automatically when Opengram starts.
+- **Title search** (`titles` scope) uses SQL `LIKE` for substring matching. A query like `proj` matches any chat whose title contains that substring (e.g. "My Project", "project-alpha").
+- **Message search** (`messages` scope) uses SQLite FTS5 for full-text word matching. An FTS5 virtual table is maintained automatically via database triggers -- whenever messages are created, updated, or deleted, the index stays in sync.
 
-### Query syntax
+When the scope is `all`, both strategies run and results are merged by timestamp.
 
-FTS5 supports several query operators:
+No additional setup is required -- the FTS5 index and triggers are created automatically when Opengram starts.
 
-| Syntax | Example | Description |
-|---|---|---|
-| Space-separated terms | `hello world` | Matches documents containing both terms (implicit AND) |
-| Quoted phrases | `"hello world"` | Matches the exact phrase |
-| Prefix wildcard | `hello*` | Matches any term starting with `hello` |
+### Query behavior
+
+User input is automatically processed before searching -- you don't need to use any special syntax.
+
+| Input | What happens |
+|---|---|
+| `hello` | Matches messages containing any word starting with `hello` (e.g. "hello", "helloworld") |
+| `hello world` | Matches messages containing both terms (implicit AND). The last term is prefix-matched. |
+| `deploy prod` | Matches messages with "deploy" AND any word starting with "prod" |
+
+The last term always gets a prefix wildcard, which makes search work well for typeahead / search-as-you-type.
+
+<Callout type="info">
+  For title search, the query is matched as a plain substring anywhere in the title. For message search, each word is matched at word boundaries using FTS5.
+</Callout>
+
+### Result snippets
+
+Search results include a `snippet` field:
+
+- **Chat matches** return the full chat title as the snippet.
+- **Message matches** return a ~20-word excerpt around the matched terms, with matches wrapped in `<mark>` HTML tags for highlighting.

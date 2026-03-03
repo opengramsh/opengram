@@ -1,19 +1,15 @@
 ---
 title: Chat Interface
-description: A mobile-first, responsive chat UI with streaming messages, inbox management, and per-chat model selection.
+description: A mobile-first, responsive chat UI with inbox management.
 ---
 
-Opengram provides a full-featured chat interface designed to feel native on any device. It ships as a Progressive Web App (PWA) that you can install on your home screen for an app-like experience.
+Opengram provides a full-featured chat interface designed to feel native on any device (admittedly within the existing limits of PWAs). It runs on Desktop and also ships as a Progressive Web App (PWA) for mobile devices that you can install on your home screen for an app-like experience.
 
 ## Mobile-First Responsive Design
 
 The interface adapts seamlessly between mobile and desktop viewports. On mobile, it renders as a full-screen view with touch-friendly controls. On desktop, it uses a sidebar layout with the chat list on the left and the active conversation on the right.
 
-Because Opengram is a PWA, users can install it directly from the browser. Once installed, it launches in standalone mode without the browser chrome.
-
-## Streaming Messages
-
-Messages from agents stream in token-by-token with a typing indicator, so users see responses as they are generated rather than waiting for the full reply. Agents control this through the [streaming API](/docs/api-reference/appendStreamingChunk).
+Because Opengram ships as a PWA, users can install it on their mobile devices directly from the browser. Once installed, it launches in standalone mode without the browser chrome.
 
 ## Chat List and Inbox
 
@@ -31,10 +27,4 @@ Users can manage their inbox with several actions:
 - **Archive** a chat to hide it from the default view
 - **Mark as read / unread** to control the unread indicator manually
 
-Archived chats are still accessible through the archive filter and can be unarchived at any time.
-
-## Model Selector
-
-Each chat can be assigned a different model. When multiple models are configured for an agent, a model selector appears in the chat header. This lets users choose which LLM handles their conversation without leaving the chat.
-
-The available models are defined in the agent's configuration. See [Agent Configuration](/docs/agents/configuration) for details.
+Archived chats are still accessible through the "Archived" tab and can be unarchived at any time.
