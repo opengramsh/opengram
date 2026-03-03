@@ -325,6 +325,7 @@ export default function NewChatPage() {
         uploadComposerFiles={uploadComposerFiles}
         pendingAttachments={pendingAttachments}
         removePendingAttachment={removePendingAttachment}
+        retryUpload={() => {}}
         cameraInputRef={cameraInputRef}
         photosInputRef={photosInputRef}
         filesInputRef={filesInputRef}

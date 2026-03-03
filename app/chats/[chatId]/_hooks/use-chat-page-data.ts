@@ -13,6 +13,7 @@ import type {
   ConfigResponse,
   MediaFilter,
   MediaItem,
+  MediaKind,
   MediaResponse,
   Message,
   MessagesResponse,
@@ -25,6 +26,8 @@ import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
 import { useChatRequestActions } from '@/app/chats/[chatId]/_hooks/use-chat-request-actions';
 import { useChatSettingsActions } from '@/app/chats/[chatId]/_hooks/use-chat-settings-actions';
 import { sortMessagesForFeed, upsertFeedMessage } from '@/src/lib/chat';
+
+const UPLOAD_TIMEOUT_MS = 60_000;
 
 type UseChatPageDataArgs = {
   chatId?: string;
@@ -86,6 +89,8 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
   const feedRef = useRef<StickToBottomContext | null>(null);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const hasOptimisticChatRef = useRef(Boolean(initialChat));
+  const uploadControllersRef = useRef(new Map<string, AbortController>());
+
   const swipeRef = useRef({
     active: false,
     startX: 0,
@@ -414,6 +419,40 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
     }
   }, [chat, composerText, isSending, pendingAttachments, refreshMedia, scrollToBottom]);
 
+  const startUpload = useCallback((entry: PendingAttachment, chatId: string, forcedKind?: MediaKind) => {
+    const controller = new AbortController();
+    uploadControllersRef.current.set(entry.localId, controller);
+
+    const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+    const formData = new FormData();
+    formData.append('file', entry.file, entry.file.name);
+    if (forcedKind) {
+      formData.append('kind', forcedKind);
+    }
+
+    apiFetch(`/api/v1/chats/${chatId}/media`, { method: 'POST', body: formData, signal: controller.signal })
+      .then(async (uploadResponse) => {
+        if (!uploadResponse.ok) throw new Error('Failed to upload media');
+        const mediaItem = (await uploadResponse.json()) as MediaItem;
+        setPendingAttachments((prev) =>
+          prev.map((a) => (a.localId === entry.localId ? { ...a, status: 'ready' as const, mediaItem } : a)),
+        );
+      })
+      .catch((err) => {
+        // Aborted uploads (user removal or unmount) are silently ignored
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        toast.error(`Failed to upload ${entry.filename}.`);
+        setPendingAttachments((prev) =>
+          prev.map((a) => (a.localId === entry.localId ? { ...a, status: 'error' as const } : a)),
+        );
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        uploadControllersRef.current.delete(entry.localId);
+      });
+  }, []);
+
   const uploadComposerFiles = useCallback(async (fileList: FileList | null, forcedKind?: 'image' | 'file') => {
     if (!chat || !fileList || fileList.length === 0) {
       return;
@@ -442,38 +481,46 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
 
     // Upload each file in parallel in the background
     for (const entry of newEntries) {
-      const formData = new FormData();
-      formData.append('file', entry.file, entry.file.name);
-      if (forcedKind) {
-        formData.append('kind', forcedKind);
-      }
-
-      apiFetch(`/api/v1/chats/${chat.id}/media`, { method: 'POST', body: formData })
-        .then(async (uploadResponse) => {
-          if (!uploadResponse.ok) throw new Error('Failed to upload media');
-          const mediaItem = (await uploadResponse.json()) as MediaItem;
-          setPendingAttachments((prev) =>
-            prev.map((a) => (a.localId === entry.localId ? { ...a, status: 'ready' as const, mediaItem } : a)),
-          );
-        })
-        .catch(() => {
-          toast.error(`Failed to upload ${entry.filename}.`);
-          // Remove failed attachment and revoke its URL
-          setPendingAttachments((prev) => {
-            const failed = prev.find((a) => a.localId === entry.localId);
-            if (failed?.localPreviewUrl) URL.revokeObjectURL(failed.localPreviewUrl);
-            return prev.filter((a) => a.localId !== entry.localId);
-          });
-        });
+      startUpload(entry, chat.id, forcedKind);
     }
-  }, [chat]);
+  }, [chat, startUpload]);
 
   const removePendingAttachment = useCallback((localId: string) => {
+    // Abort any in-flight upload for this attachment
+    const controller = uploadControllersRef.current.get(localId);
+    if (controller) {
+      controller.abort();
+      uploadControllersRef.current.delete(localId);
+    }
+
     setPendingAttachments((prev) => {
       const removed = prev.find((a) => a.localId === localId);
       if (removed?.localPreviewUrl) URL.revokeObjectURL(removed.localPreviewUrl);
       return prev.filter((a) => a.localId !== localId);
     });
+  }, []);
+
+  const retryUpload = useCallback((localId: string) => {
+    if (!chat) return;
+    setPendingAttachments((prev) => {
+      const entry = prev.find((a) => a.localId === localId);
+      if (!entry || entry.status !== 'error') return prev;
+      // Re-run the upload
+      const updated = prev.map((a) => (a.localId === localId ? { ...a, status: 'uploading' as const } : a));
+      startUpload(entry, chat.id, entry.kind);
+      return updated;
+    });
+  }, [chat, startUpload]);
+
+  // Abort all in-flight uploads on unmount
+  useEffect(() => {
+    const controllers = uploadControllersRef.current;
+    return () => {
+      for (const controller of controllers.values()) {
+        controller.abort();
+      }
+      controllers.clear();
+    };
   }, []);
 
   const getChatId = useCallback(async () => chat?.id ?? null, [chat]);
@@ -518,6 +565,7 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
     allAttachmentsReady,
     pendingAttachments,
     removePendingAttachment,
+    retryUpload,
     isMediaGalleryOpen,
     mediaFilter,
     filteredGalleryMedia,

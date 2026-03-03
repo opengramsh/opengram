@@ -242,6 +242,7 @@ describe('KAI-237: composer height CSS variable integration', () => {
         uploadComposerFiles={async () => {}}
         pendingAttachments={[]}
         removePendingAttachment={() => {}}
+        retryUpload={() => {}}
         cameraInputRef={{ current: null }}
         photosInputRef={{ current: null }}
         filesInputRef={{ current: null }}

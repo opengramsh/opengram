@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, unlinkSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, posix, resolve, sep } from 'node:path';
 
 import type Database from 'better-sqlite3';
@@ -255,20 +256,20 @@ export async function createMedia(input: CreateMediaInput) {
   const db = getDb();
   ensureChatAndMessage(db, input.chatId, input.messageId);
 
-  mkdirSync(join(resolveDataRoot(), 'uploads', input.chatId), { recursive: true });
+  await mkdir(join(resolveDataRoot(), 'uploads', input.chatId), { recursive: true });
   if (absoluteThumbnailPath) {
-    mkdirSync(join(resolveDataRoot(), 'uploads', input.chatId, 'thumbnails'), { recursive: true });
+    await mkdir(join(resolveDataRoot(), 'uploads', input.chatId, 'thumbnails'), { recursive: true });
   }
 
   let fileWritten = false;
   let thumbnailWritten = false;
 
   try {
-    writeFileSync(absolutePath, input.fileBytes);
+    await writeFile(absolutePath, input.fileBytes);
     fileWritten = true;
 
     if (thumbnailBuffer && absoluteThumbnailPath) {
-      writeFileSync(absoluteThumbnailPath, thumbnailBuffer);
+      await writeFile(absoluteThumbnailPath, thumbnailBuffer);
       thumbnailWritten = true;
     }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { type RefObject, useEffect, useLayoutEffect, useRef } from 'react';
-import { ArrowUp, Camera, FileText, Images, Mic, Plus, Trash2, X } from 'lucide-react';
+import { ArrowUp, Camera, FileText, Images, Mic, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 
 import { isTouchDevice } from '@/src/lib/utils';
 import { formatDuration } from '@/app/chats/[chatId]/_lib/chat-utils';
@@ -37,6 +37,7 @@ type ChatComposerProps = {
   uploadComposerFiles: (files: FileList | null, forcedKind?: 'image' | 'file') => Promise<void>;
   pendingAttachments: PendingAttachment[];
   removePendingAttachment: (localId: string) => void;
+  retryUpload: (localId: string) => void;
   cameraInputRef: RefObject<HTMLInputElement | null>;
   photosInputRef: RefObject<HTMLInputElement | null>;
   filesInputRef: RefObject<HTMLInputElement | null>;
@@ -65,6 +66,7 @@ export function ChatComposer({
   uploadComposerFiles,
   pendingAttachments,
   removePendingAttachment,
+  retryUpload,
   cameraInputRef,
   photosInputRef,
   filesInputRef,
@@ -191,6 +193,15 @@ export function ChatComposer({
                   <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   </div>
+                )}
+                {att.status === 'error' && (
+                  <button
+                    type="button"
+                    onClick={() => retryUpload(att.localId)}
+                    className="absolute inset-0 flex items-center justify-center rounded-lg bg-destructive/60"
+                  >
+                    <RotateCcw size={16} className="text-white" />
+                  </button>
                 )}
                 <button
                   type="button"

@@ -110,6 +110,7 @@ function ChatComposerSection() {
       uploadComposerFiles={chat.uploadComposerFiles}
       pendingAttachments={chat.pendingAttachments}
       removePendingAttachment={chat.removePendingAttachment}
+      retryUpload={chat.retryUpload}
       onModelChange={async () => {}}
       keyboardOffset={chat.keyboardOffset}
     />
