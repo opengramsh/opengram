@@ -291,7 +291,10 @@ function validateConfig(config: OpengramConfig): OpengramConfig {
     }
     if (config.push.subject.includes("localhost")) {
       console.warn(
-        "[push] Warning: VAPID subject contains 'localhost' — Apple Web Push will reject tokens. Update push.subject in config.",
+        "[push] Warning: VAPID subject contains 'localhost' — Apple Web Push (and some other providers) will reject push tokens.\n" +
+        "  → Set \"server\".\"publicBaseUrl\" to your HTTPS URL in config/opengram.config.json\n" +
+        "    (or set the OPENGRAM_PUBLIC_BASE_URL environment variable) and restart the server.\n" +
+        "  → The subject will be auto-repaired on the next startup once a valid URL is configured.",
       );
     }
   }
@@ -679,25 +682,52 @@ export function saveRawOpengramConfig(
   configCache = null;
 }
 
+function derivePushSubject(config: OpengramConfig): string {
+  if (config.server.publicBaseUrl.startsWith("https://")) {
+    return config.server.publicBaseUrl;
+  }
+
+  const httpsOrigin = config.server.corsOrigins.find((o) =>
+    o.startsWith("https://"),
+  );
+  return httpsOrigin ?? "mailto:opengram@localhost";
+}
+
 export function ensurePushProvisioned(configPath?: string): void {
   const config = loadOpengramConfig(configPath);
+  const resolvedPath = resolveConfigPath(configPath);
 
-  if (config.push.vapidPublicKey || config.push.vapidPrivateKey) {
+  // Keys already exist — check if subject needs repair
+  if (config.push.vapidPublicKey && config.push.vapidPrivateKey) {
+    if (config.push.subject.includes("localhost")) {
+      const newSubject = derivePushSubject(config);
+      if (!newSubject.includes("localhost") && newSubject !== config.push.subject) {
+        let current: Record<string, unknown> = {};
+        if (existsSync(resolvedPath)) {
+          const raw = readFileSync(resolvedPath, "utf8");
+          const parsed = JSON.parse(raw) as unknown;
+          if (isRecord(parsed)) {
+            current = parsed;
+          }
+        }
+
+        const existingPush = isRecord(current.push) ? current.push : {};
+        current.push = { ...existingPush, subject: newSubject };
+
+        writeFileSync(resolvedPath, JSON.stringify(current, null, 2) + "\n", "utf8");
+        configCache = null;
+
+        console.log(
+          `[push] Repaired VAPID subject: ${config.push.subject} → ${newSubject}`,
+        );
+      }
+    }
     return;
   }
 
   const keys = generateVapidKeys();
-  let subject: string;
-  if (config.server.publicBaseUrl.startsWith("https://")) {
-    subject = config.server.publicBaseUrl;
-  } else {
-    const httpsOrigin = config.server.corsOrigins.find((o) =>
-      o.startsWith("https://"),
-    );
-    subject = httpsOrigin ?? "mailto:opengram@localhost";
-  }
+  const subject = derivePushSubject(config);
 
-  const resolvedPath = resolveConfigPath(configPath);
   let current: Record<string, unknown> = {};
   if (existsSync(resolvedPath)) {
     const raw = readFileSync(resolvedPath, "utf8");

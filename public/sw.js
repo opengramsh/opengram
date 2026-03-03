@@ -43,6 +43,43 @@ function getActiveChatId() {
   });
 }
 
+function getBearerToken() {
+  return new Promise(function (resolve) {
+    try {
+      var request = self.indexedDB.open('opengram-state', 1);
+      request.onupgradeneeded = function () {
+        var db = request.result;
+        if (!db.objectStoreNames.contains('ui-state')) {
+          db.createObjectStore('ui-state');
+        }
+      };
+      request.onsuccess = function () {
+        try {
+          var db = request.result;
+          var tx = db.transaction('ui-state', 'readonly');
+          var store = tx.objectStore('ui-state');
+          var getReq = store.get('bearerToken');
+          getReq.onsuccess = function () {
+            db.close();
+            resolve(typeof getReq.result === 'string' ? getReq.result : null);
+          };
+          getReq.onerror = function () {
+            db.close();
+            resolve(null);
+          };
+        } catch {
+          resolve(null);
+        }
+      };
+      request.onerror = function () {
+        resolve(null);
+      };
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 var isIos = /iPad|iPhone|iPod/.test(self.navigator.userAgent);
 
 self.addEventListener('push', (event) => {
@@ -94,9 +131,14 @@ self.addEventListener('pushsubscriptionchange', (event) => {
     try {
       const options = event.oldSubscription ? event.oldSubscription.options : {};
       const newSubscription = await self.registration.pushManager.subscribe(options);
+      const headers = { 'content-type': 'application/json' };
+      const token = await getBearerToken();
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
       await fetch('/api/v1/push/subscribe', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(newSubscription.toJSON()),
       });
     } catch (err) {

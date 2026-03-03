@@ -1,4 +1,4 @@
-import { apiFetch } from '@/src/lib/api-fetch';
+import { apiFetch, getApiSecret } from '@/src/lib/api-fetch';
 
 export type PushConfigResponse = {
   enabled: boolean;
@@ -27,6 +27,61 @@ function urlBase64ToUint8Array(base64String: string) {
   }
 
   return outputArray;
+}
+
+function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function openIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('opengram-state', 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('ui-state')) {
+        db.createObjectStore('ui-state');
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function storeBearerTokenForSw(): Promise<void> {
+  const token = getApiSecret();
+  if (!token) return;
+  try {
+    const db = await openIdb();
+    const tx = db.transaction('ui-state', 'readwrite');
+    tx.objectStore('ui-state').put(token, 'bearerToken');
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    // IndexedDB may be unavailable; non-fatal.
+  }
+}
+
+async function clearBearerTokenForSw(): Promise<void> {
+  try {
+    const db = await openIdb();
+    const tx = db.transaction('ui-state', 'readwrite');
+    tx.objectStore('ui-state').delete('bearerToken');
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    // Non-fatal.
+  }
 }
 
 export function getPushPermissionState(): PushPermissionState {
@@ -104,13 +159,28 @@ export async function enablePushNotifications(vapidPublicKey: string) {
     throw new Error('Service Worker registration failed.');
   }
 
-  const existing = await registration.pushManager.getSubscription();
+  let existing = await registration.pushManager.getSubscription();
+
+  // Detect VAPID key mismatch — unsubscribe stale subscription so we can re-subscribe
+  if (existing) {
+    const existingKey = existing.options?.applicationServerKey;
+    if (existingKey) {
+      const existingKeyB64 = arrayBufferToBase64Url(existingKey);
+      if (existingKeyB64 !== vapidPublicKey) {
+        console.warn('[push] VAPID key mismatch detected — re-subscribing with current key.');
+        await existing.unsubscribe();
+        existing = null;
+      }
+    }
+  }
+
   const subscription = existing ?? await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
   });
 
   await sendSubscriptionToServer(subscription);
+  await storeBearerTokenForSw();
   return subscription;
 }
 
@@ -135,6 +205,7 @@ export async function disablePushNotifications() {
     body: JSON.stringify({ endpoint: subscription.endpoint }),
   });
 
+  await clearBearerTokenForSw();
   return subscription.unsubscribe();
 }
 

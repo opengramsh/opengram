@@ -24,6 +24,9 @@ function loadServiceWorker(selfObject: Record<string, unknown>) {
   if (!('setTimeout' in selfObject)) {
     selfObject.setTimeout = setTimeout;
   }
+  if (!('navigator' in selfObject)) {
+    selfObject.navigator = { userAgent: '' };
+  }
   const swPath = join(import.meta.dirname, '..', '..', 'public', 'sw.js');
   const source = readFileSync(swPath, 'utf8');
   vm.runInNewContext(source, { self: selfObject, URL, Promise, queueMicrotask });

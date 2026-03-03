@@ -313,7 +313,7 @@ async function sendPayloadToAll(payload: PushNotificationPayload) {
     } catch (error) {
       failed += 1;
       const statusCode = isRecord(error) && typeof error.statusCode === 'number' ? error.statusCode : null;
-      if (statusCode === 404 || statusCode === 410) {
+      if (statusCode === 401 || statusCode === 403 || statusCode === 404 || statusCode === 410) {
         const dbInner = getDb();
         removeSubscriptionByEndpoint(dbInner, record.endpoint);
         removed += 1;

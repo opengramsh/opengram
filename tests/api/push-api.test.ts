@@ -336,6 +336,81 @@ describe('push API', () => {
     });
   });
 
+  it('prunes subscriptions that return 401 (VAPID key mismatch)', async () => {
+    db.prepare(
+      [
+        'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run(
+      '111111111111111111111',
+      'https://fcm.googleapis.com/sub/ok',
+      'k1',
+      'a1',
+      null,
+      Date.now(),
+      '222222222222222222222',
+      'https://fcm.googleapis.com/sub/bad-key',
+      'k2',
+      'a2',
+      null,
+      Date.now(),
+    );
+
+    sendWebPushNotificationMock
+      .mockResolvedValueOnce({ statusCode: 201 })
+      .mockRejectedValueOnce({ statusCode: 401 });
+
+    const response = await app.request('/api/v1/push/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Test', body: 'Body' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      sent: 1,
+      failed: 1,
+      removed: 1,
+    });
+
+    const remaining = db
+      .prepare('SELECT endpoint FROM push_subscriptions ORDER BY endpoint ASC')
+      .all() as Array<{ endpoint: string }>;
+    expect(remaining).toEqual([{ endpoint: 'https://fcm.googleapis.com/sub/ok' }]);
+  });
+
+  it('prunes subscriptions that return 403 (permanent VAPID rejection)', async () => {
+    db.prepare(
+      [
+        'INSERT INTO push_subscriptions (id, endpoint, keys_p256dh, keys_auth, user_agent, created_at)',
+        'VALUES (?, ?, ?, ?, ?, ?)',
+      ].join(' '),
+    ).run('111111111111111111111', 'https://fcm.googleapis.com/sub/forbidden', 'k1', 'a1', null, Date.now());
+
+    sendWebPushNotificationMock.mockRejectedValueOnce({ statusCode: 403 });
+
+    const response = await app.request('/api/v1/push/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Test', body: 'Body' }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      sent: 0,
+      failed: 1,
+      removed: 1,
+    });
+
+    const remaining = db
+      .prepare('SELECT COUNT(*) AS count FROM push_subscriptions')
+      .get() as { count: number };
+    expect(remaining.count).toBe(0);
+  });
+
   it('rejects protocol-relative URL values and keeps chat deep-link', async () => {
     db.prepare(
       [
