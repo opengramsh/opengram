@@ -628,6 +628,31 @@ export function saveOpengramConfig(
 
   // Validate by running through the full load pipeline on the merged result
   const merged = mergeConfig(structuredClone(defaultConfig), current);
+
+  // Auto-create stub models for agent defaultModelId references
+  // when agents are pushed without explicit model management.
+  if (updates.agents !== undefined && updates.models === undefined) {
+    const existingModelIds = new Set(merged.models.map((m) => m.id));
+    const stubModels: ModelConfig[] = [];
+
+    for (const agent of merged.agents) {
+      if (agent.defaultModelId && !existingModelIds.has(agent.defaultModelId)) {
+        existingModelIds.add(agent.defaultModelId);
+        stubModels.push({
+          id: agent.defaultModelId,
+          name: agent.defaultModelId,
+          description: '',
+        });
+      }
+    }
+
+    if (stubModels.length > 0) {
+      const currentModels = Array.isArray(current.models) ? current.models as ModelConfig[] : [];
+      current.models = [...currentModels, ...stubModels];
+      merged.models = [...merged.models, ...stubModels];
+    }
+  }
+
   validateConfig(merged);
 
   // Write back as pretty JSON
