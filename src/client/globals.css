@@ -144,3 +144,18 @@ body {
   to { background-position: 0% center; }
 }
 
+/* Fix: links invisible in user message bubbles (blue on blue) */
+.bg-primary [data-streamdown="link"] {
+  color: white;
+}
+
+/* Fix: link safety modal inherits wrong text color from user messages */
+[data-streamdown="link-safety-modal"] {
+  color: var(--foreground);
+}
+
+/* Fix: pointer cursor on clickable link buttons */
+button[data-streamdown="link"] {
+  cursor: pointer;
+}
+
