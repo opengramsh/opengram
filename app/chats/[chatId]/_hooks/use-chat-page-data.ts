@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 import { apiFetch } from '@/src/lib/api-fetch';
 import { getFrontendConfigCache, setFrontendConfigCache } from '@/src/lib/frontend-config-cache';
-import { buildInlineMessageMedia, mediaSortAsc, normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
+import { buildInlineMessageMedia, mediaSortAsc } from '@/app/chats/[chatId]/_lib/chat-utils';
 import type {
   Agent,
   Chat,
@@ -20,7 +20,6 @@ import type {
   PendingAttachment,
   RequestItem,
   RequestsResponse,
-  TagSuggestion,
 } from '@/app/chats/[chatId]/_lib/types';
 import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
 import { useChatRequestActions } from '@/app/chats/[chatId]/_hooks/use-chat-request-actions';
@@ -73,13 +72,9 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all');
   const [viewerMediaId, setViewerMediaId] = useState<string | null>(null);
   const [previewFileId, setPreviewFileId] = useState<string | null>(null);
-  const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
-  const [tagInput, setTagInput] = useState('');
-  const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
-  const [isLoadingTagSuggestions, setIsLoadingTagSuggestions] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [typingTitle, setTypingTitle] = useState<string | null>(null);
 
@@ -88,7 +83,6 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const photosInputRef = useRef<HTMLInputElement | null>(null);
   const filesInputRef = useRef<HTMLInputElement | null>(null);
-  const tagSuggestionsTimerRef = useRef<number | null>(null);
   const feedRef = useRef<StickToBottomContext | null>(null);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const hasOptimisticChatRef = useRef(Boolean(initialChat));
@@ -482,27 +476,6 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
     });
   }, []);
 
-  const { patchChatSettings } = settings;
-
-  const addTagToChat = useCallback(async (rawTag: string) => {
-    const normalized = normalizeTagInput(rawTag);
-    if (!chat || !normalized || chat.tags.includes(normalized)) {
-      return;
-    }
-
-    setTagInput('');
-    setTagSuggestions([]);
-    await patchChatSettings({ tags: [...chat.tags, normalized] });
-  }, [chat, patchChatSettings]);
-
-  const removeTagFromChat = useCallback(async (tag: string) => {
-    if (!chat) {
-      return;
-    }
-
-    await patchChatSettings({ tags: chat.tags.filter((item) => item !== tag) });
-  }, [chat, patchChatSettings]);
-
   const getChatId = useCallback(async () => chat?.id ?? null, [chat]);
   const recorder = useChatRecorder({
     getChatId,
@@ -552,7 +525,6 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
     galleryListMedia,
     viewerMedia,
     previewFile,
-    isChatSettingsOpen,
     isChatMenuOpen,
     isCameraOpen,
     isEditingTitle,
@@ -563,15 +535,9 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
     photosInputRef,
     filesInputRef,
     isUpdatingChatSettings: settings.isUpdatingChatSettings,
-    tagInput,
-    tagSuggestions,
-    isLoadingTagSuggestions,
-    tagSuggestionsTimerRef,
     knownMessageIdsRef,
     swipeRef,
     loadData,
-    setTagSuggestions,
-    setIsLoadingTagSuggestions,
     typingTitle,
     setTypingTitle,
     setKeyboardOffset,
@@ -588,10 +554,8 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
     setMediaFilter,
     setViewerMediaId,
     setPreviewFileId,
-    setIsChatSettingsOpen,
     setIsChatMenuOpen,
     setIsCameraOpen,
-    setTagInput,
     setIsRequestWidgetOpen: requests.setIsRequestWidgetOpen,
     refreshMessages,
     refreshPendingRequests,
@@ -606,8 +570,6 @@ export function useChatPageData({ chatId, initialChat = null, scrollToMessageId,
     sendMessage,
     uploadComposerFiles,
     patchChatSettings: settings.patchChatSettings,
-    addTagToChat,
-    removeTagFromChat,
     archiveCurrentChat: settings.archiveCurrentChat,
     unarchiveCurrentChat: settings.unarchiveCurrentChat,
     ...recorder,

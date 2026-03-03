@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react';
 
 import { setActiveChatId } from '@/app/chats/[chatId]/_lib/active-chat-idb';
-import { normalizeTagInput } from '@/app/chats/[chatId]/_lib/chat-utils';
 import { apiFetch } from '@/src/lib/api-fetch';
 import { subscribeToKeyboardLayout } from '@/src/lib/keyboard-layout';
 import type { ChatPageData } from '@/app/chats/[chatId]/_hooks/use-chat-page-data';
@@ -34,7 +33,6 @@ export function useChatPageEffects(data: ChatPageData) {
     chatId,
     composerText,
     goBack,
-    isChatSettingsOpen,
     isEditingTitle,
     isSending,
     knownMessageIdsRef,
@@ -46,16 +44,12 @@ export function useChatPageEffects(data: ChatPageData) {
     resetRecordingState,
     scrollToBottom,
     feedRef,
-    setIsLoadingTagSuggestions,
     setKeyboardOffset,
     setMessages,
     setChat,
     setTypingTitle,
     setPendingReply,
-    setTagSuggestions,
     swipeRef,
-    tagInput,
-    tagSuggestionsTimerRef,
     titleInputRef,
   } = data;
 
@@ -155,52 +149,6 @@ export function useChatPageEffects(data: ChatPageData) {
         }
       });
   }, [chat, chatId, setChat]);
-
-  useEffect(() => {
-    if (!isChatSettingsOpen || !chat) {
-      setTagSuggestions([]);
-      return;
-    }
-
-    const query = normalizeTagInput(tagInput);
-    if (!query) {
-      setTagSuggestions([]);
-      return;
-    }
-
-    if (tagSuggestionsTimerRef.current) {
-      window.clearTimeout(tagSuggestionsTimerRef.current);
-      tagSuggestionsTimerRef.current = null;
-    }
-
-    tagSuggestionsTimerRef.current = window.setTimeout(() => {
-      setIsLoadingTagSuggestions(true);
-      apiFetch(`/api/v1/tags/suggestions?q=${encodeURIComponent(query)}&limit=8`, { cache: 'no-store' })
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error('Failed to load tag suggestions');
-          }
-
-          const payload = (await response.json()) as { data?: Array<{ name: string; usage_count: number }> };
-          const knownTags = new Set(chat.tags);
-          const nextSuggestions = (payload.data ?? []).filter((item) => !knownTags.has(item.name));
-          setTagSuggestions(nextSuggestions);
-        })
-        .catch(() => {
-          setTagSuggestions([]);
-        })
-        .finally(() => {
-          setIsLoadingTagSuggestions(false);
-        });
-    }, 180);
-
-    return () => {
-      if (tagSuggestionsTimerRef.current) {
-        window.clearTimeout(tagSuggestionsTimerRef.current);
-        tagSuggestionsTimerRef.current = null;
-      }
-    };
-  }, [chat, isChatSettingsOpen, setIsLoadingTagSuggestions, setTagSuggestions, tagInput, tagSuggestionsTimerRef]);
 
   useEffect(() => {
     knownMessageIdsRef.current = new Set(messages.map((message) => message.id));
@@ -552,10 +500,7 @@ export function useChatPageEffects(data: ChatPageData) {
       if (titleTypingIntervalRef.current) {
         clearInterval(titleTypingIntervalRef.current);
       }
-      if (tagSuggestionsTimerRef.current) {
-        window.clearTimeout(tagSuggestionsTimerRef.current);
-      }
       resetRecordingState();
     };
-  }, [resetRecordingState, tagSuggestionsTimerRef]);
+  }, [resetRecordingState]);
 }

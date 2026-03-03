@@ -6,7 +6,6 @@ import { ChatMediaGallery } from '@/app/chats/[chatId]/_components/chat-media-ga
 import { ChatMenu } from '@/app/chats/[chatId]/_components/chat-menu';
 import { ChatMessages } from '@/app/chats/[chatId]/_components/chat-messages';
 import { ChatRequestWidget } from '@/app/chats/[chatId]/_components/chat-request-widget';
-import { ChatSettings } from '@/app/chats/[chatId]/_components/chat-settings';
 import { CameraCapture } from '@/app/chats/[chatId]/_components/camera-capture';
 import { FilePreviewSection } from '@/app/chats/[chatId]/_components/file-preview-section';
 import { useChatPageContext } from '@/app/chats/[chatId]/_components/chat-page-provider';
@@ -19,7 +18,6 @@ export function ChatPageSections() {
       <ChatRequestWidgetSection />
       <ChatComposerSection />
       <ChatMediaGallerySection />
-      <ChatSettingsSection />
       <ChatMenuSection />
       <CameraCaptureSection />
       <FilePreviewSectionWrapper />
@@ -133,30 +131,6 @@ function ChatMediaGallerySection() {
       viewerMedia={chat.viewerMedia}
       setViewerMediaId={chat.setViewerMediaId}
       setPreviewFileId={chat.setPreviewFileId}
-    />
-  );
-}
-
-function ChatSettingsSection() {
-  const chat = useChatPageContext();
-
-  return (
-    <ChatSettings
-      isChatSettingsOpen={chat.isChatSettingsOpen}
-      chat={chat.chat}
-      models={[]}
-      primaryAgent={chat.primaryAgent}
-      isUpdatingChatSettings={chat.isUpdatingChatSettings}
-      tagInput={chat.tagInput}
-      tagSuggestions={chat.tagSuggestions}
-      isLoadingTagSuggestions={chat.isLoadingTagSuggestions}
-      setIsChatSettingsOpen={chat.setIsChatSettingsOpen}
-      patchChatSettings={chat.patchChatSettings}
-      setTagInput={chat.setTagInput}
-      addTagToChat={chat.addTagToChat}
-      removeTagFromChat={chat.removeTagFromChat}
-      archiveCurrentChat={chat.archiveCurrentChat}
-      unarchiveCurrentChat={chat.unarchiveCurrentChat}
     />
   );
 }

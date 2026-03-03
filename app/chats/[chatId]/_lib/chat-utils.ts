@@ -50,10 +50,6 @@ export function mediaIdsFromTrace(message: Message): string[] {
   return [];
 }
 
-export function normalizeTagInput(value: string) {
-  return value.trim();
-}
-
 export function formatBytes(bytes: number) {
   if (bytes < 1024) {
     return `${bytes} B`;
