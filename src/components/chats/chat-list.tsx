@@ -110,7 +110,7 @@ export function ChatList({
               <ChatRow
                 key={chat.id}
                 chat={chat}
-                agentName={agent?.name ?? chat.title}
+                agentName={agent?.name ?? 'Unknown Agent'}
                 actionLabel={rowActionLabel}
                 isActive={activeChatId === chat.id}
                 isStreaming={streamingChatIds?.has(chat.id) ?? false}
