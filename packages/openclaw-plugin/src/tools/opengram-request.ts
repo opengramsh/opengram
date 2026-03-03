@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 
-import { getOpenGramClient } from "../chat-manager.js";
+import { getOpenGramClient, stripChannelPrefix } from "../chat-manager.js";
 import type { AgentTool } from "../types.js";
 
 const ChoiceConfig = Type.Object(
@@ -70,11 +70,10 @@ export const opengramRequestTool: AgentTool = {
     "Create a structured request in OpenGram that requires user action. " +
     "Use this instead of asking questions in plain text. Requests appear as " +
     "tappable UI widgets in the mobile app. Types: choice (buttons), " +
-    "text_input (text field), form (multiple fields). " +
-    "The chatId is available from the From field in your conversation context (format: opengram:<chatId>).",
+    "text_input (text field), form (multiple fields).",
   parameters: Type.Object({
     chatId: Type.String({
-      description: "The OpenGram chat ID (extract from the From field: opengram:<chatId>).",
+      description: "The OpenGram chat ID (from the From field in your context).",
     }),
     type: Type.Union(
       [Type.Literal("choice"), Type.Literal("text_input"), Type.Literal("form")],
@@ -94,7 +93,9 @@ export const opengramRequestTool: AgentTool = {
   async execute(_toolCallId, params) {
     const client = getOpenGramClient();
 
-    const request = await client.createRequest(params.chatId, {
+    const chatId = stripChannelPrefix(params.chatId);
+
+    const request = await client.createRequest(chatId, {
       type: params.type,
       title: params.title,
       body: params.body,

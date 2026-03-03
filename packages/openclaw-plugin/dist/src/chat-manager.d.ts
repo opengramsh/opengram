@@ -7,6 +7,7 @@ export declare function resolveAgentForChat(chatId: string, cfg?: OpenClawConfig
     info(msg: string): void;
     warn(msg: string): void;
 }): Promise<string>;
+export declare function stripChannelPrefix(raw: string): string;
 export declare function resolveChatIdFromTarget(target: string): string;
 export declare function trackActiveChat(chatId: string): void;
 export declare function invalidateChatCache(chatId: string): void;

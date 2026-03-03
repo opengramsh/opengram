@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 
-import { getConfig, getOpenGramClient, trackActiveChat } from "../chat-manager.js";
+import { getConfig, getOpenGramClient, stripChannelPrefix, trackActiveChat } from "../chat-manager.js";
 import type { AgentTool } from "../types.js";
 
 export const opengramChatTool: AgentTool = {
@@ -8,7 +8,6 @@ export const opengramChatTool: AgentTool = {
   label: "OpenGram Chat",
   description:
     "Manage OpenGram chats — create new chats, update metadata, or list existing chats. " +
-    "The chatId is available from the From field in your conversation context (format: opengram:<chatId>). " +
     "Creating a chat requires modelId — the tool will error without it.",
   parameters: Type.Object({
     action: Type.Union(
@@ -16,7 +15,7 @@ export const opengramChatTool: AgentTool = {
       { description: "Action to perform" },
     ),
     chatId: Type.Optional(
-      Type.String({ description: "Chat ID (required for update). Extract from From field: opengram:<chatId>." }),
+      Type.String({ description: "Chat ID (required for update; from the From field in your context)." }),
     ),
     agentId: Type.Optional(
       Type.String({ description: "Agent ID for new chat (defaults to first configured agent)" }),
@@ -68,13 +67,14 @@ export const opengramChatTool: AgentTool = {
             details: { error: "chatId required" },
           };
         }
-        const updated = await client.updateChat(params.chatId, {
+        const chatId = stripChannelPrefix(params.chatId);
+        const updated = await client.updateChat(chatId, {
           title: params.title,
           tags: params.tags,
           pinned: params.pinned,
         });
         return {
-          content: [{ type: "text" as const, text: `Chat ${params.chatId} updated` }],
+          content: [{ type: "text" as const, text: `Chat ${chatId} updated` }],
           details: updated,
         };
       }

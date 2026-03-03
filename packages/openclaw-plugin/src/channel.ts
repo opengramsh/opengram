@@ -98,10 +98,10 @@ export const opengramPlugin: ChannelPlugin<ResolvedOpenGramAccount> = {
       if (!getOpenGramSection(cfg!)?.enabled) return [];
       return [
         "This conversation is via OpenGram. Key info:\n" +
-          "- Chat ID: extract from the From field in your context (format: opengram:<chatId>). All OpenGram tools require this.\n" +
+          "- Chat ID: use the From field value as-is for chatId parameters (the opengram: prefix is stripped automatically).\n" +
           "- Structured requests: use opengram_request (choice/text_input/form) instead of plain-text questions. They render as tappable UI widgets.\n" +
           "- Inbound media: if the user sent files, their paths are in MediaPath/MediaPaths in your context.\n" +
-          "- Outbound media: use opengram_media with a local file path to upload files to the chat.",
+          "- Outbound media: use opengram_media with a local file path to upload files to the chat. It automatically creates a visible message.",
       ];
     },
   },

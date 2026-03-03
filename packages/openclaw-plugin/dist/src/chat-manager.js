@@ -51,8 +51,11 @@ export async function resolveAgentForChat(chatId, cfg, log) {
     log?.warn(`[opengram] resolveAgentForChat(${chatId}): no agent found via API, using config fallback "${fallback}"`);
     return fallback;
 }
+export function stripChannelPrefix(raw) {
+    return raw.startsWith("opengram:") ? raw.slice("opengram:".length) : raw;
+}
 export function resolveChatIdFromTarget(target) {
-    return target;
+    return stripChannelPrefix(target);
 }
 export function trackActiveChat(chatId) {
     activeChatIds.add(chatId);

@@ -65,8 +65,12 @@ export async function resolveAgentForChat(
   return fallback;
 }
 
+export function stripChannelPrefix(raw: string): string {
+  return raw.startsWith("opengram:") ? raw.slice("opengram:".length) : raw;
+}
+
 export function resolveChatIdFromTarget(target: string): string {
-  return target;
+  return stripChannelPrefix(target);
 }
 
 export function trackActiveChat(chatId: string): void {
