@@ -10,6 +10,7 @@ import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
 import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
 import type { PendingAttachment, MediaKind } from '@/app/chats/[chatId]/_lib/types';
 import { apiFetch } from '@/src/lib/api-fetch';
+import { subscribeToKeyboardLayout } from '@/src/lib/keyboard-layout';
 import { Button } from '@/src/components/ui/button';
 import { FACEHASH_COLORS } from '@/src/lib/utils';
 import {
@@ -43,6 +44,13 @@ export default function NewChatPage() {
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  useEffect(() => {
+    return subscribeToKeyboardLayout(window, document, ({ keyboardOffset: offset }) => {
+      setKeyboardOffset(offset);
+    });
+  }, []);
 
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const photosInputRef = useRef<HTMLInputElement | null>(null);
@@ -303,7 +311,7 @@ export default function NewChatPage() {
       </main>
 
       <ChatComposer
-        keyboardOffset={0}
+        keyboardOffset={keyboardOffset}
         composerText={message}
         setComposerText={setMessage}
         isSending={isCreating}
