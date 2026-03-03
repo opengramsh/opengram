@@ -103,27 +103,34 @@ const patchAdminRoute = createRoute({
 });
 
 config.openapi(patchAdminRoute, (c) => {
-  const body = c.req.valid('json');
-  if (body.rawConfig !== undefined) {
-    if (typeof body.rawConfig !== 'object' || body.rawConfig === null || Array.isArray(body.rawConfig)) {
-      throw validationError('rawConfig must be a JSON object');
-    }
-    saveRawOpengramConfig(body.rawConfig as Record<string, unknown>);
-  } else {
-    const securityUpdate = typeof body.security === 'object' && body.security !== null && !Array.isArray(body.security)
-      ? (body.security as Record<string, unknown>)
-      : undefined;
-    const autoRenameUpdate = body.autoRename === null
-      ? null
-      : typeof body.autoRename === 'object' && body.autoRename !== null && !Array.isArray(body.autoRename)
-        ? (body.autoRename as Record<string, unknown>)
+  try {
+    const body = c.req.valid('json');
+    if (body.rawConfig !== undefined) {
+      if (typeof body.rawConfig !== 'object' || body.rawConfig === null || Array.isArray(body.rawConfig)) {
+        throw validationError('rawConfig must be a JSON object');
+      }
+      saveRawOpengramConfig(body.rawConfig as Record<string, unknown>);
+    } else {
+      const securityUpdate = typeof body.security === 'object' && body.security !== null && !Array.isArray(body.security)
+        ? (body.security as Record<string, unknown>)
         : undefined;
-    saveOpengramConfig({
-      agents: Array.isArray(body.agents) ? (body.agents as AgentConfig[]) : undefined,
-      models: Array.isArray(body.models) ? (body.models as ModelConfig[]) : undefined,
-      security: securityUpdate,
-      autoRename: autoRenameUpdate as Parameters<typeof saveOpengramConfig>[0]['autoRename'],
-    });
+      const autoRenameUpdate = body.autoRename === null
+        ? null
+        : typeof body.autoRename === 'object' && body.autoRename !== null && !Array.isArray(body.autoRename)
+          ? (body.autoRename as Record<string, unknown>)
+          : undefined;
+      saveOpengramConfig({
+        agents: Array.isArray(body.agents) ? (body.agents as AgentConfig[]) : undefined,
+        models: Array.isArray(body.models) ? (body.models as ModelConfig[]) : undefined,
+        security: securityUpdate,
+        autoRename: autoRenameUpdate as Parameters<typeof saveOpengramConfig>[0]['autoRename'],
+      });
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Config validation error:')) {
+      throw validationError(err.message);
+    }
+    throw err;
   }
   return c.json({ ok: true as const });
 });
