@@ -435,7 +435,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
     p.note(
       `Tailscale detected: ${tsHostname}\n` +
         `To make Opengram available on your tailnet, run:\n` +
-        `  sudo tailscale serve --https=8443 http://127.0.0.1:${portNum}\n\n` +
+        `  sudo tailscale serve --bg --https=8443 http://127.0.0.1:${portNum}\n\n` +
         `Opengram will then be available at:\n` +
         `  https://${tsHostname}:8443\n\n` +
         `The port 8443 can be changed to any available port.`,
@@ -448,7 +448,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
         `a private network with automatic HTTPS, no port forwarding needed.\n\n` +
         `Install Tailscale: https://tailscale.com\n\n` +
         `Once installed, run:\n` +
-        `  sudo tailscale serve --https=8443 http://127.0.0.1:${portNum}\n\n` +
+        `  sudo tailscale serve --bg --https=8443 http://127.0.0.1:${portNum}\n\n` +
         `Opengram will then be available at:\n` +
         `  https://<your-hostname>.ts.net:8443\n\n` +
         `The port 8443 can be changed to any available port.`,

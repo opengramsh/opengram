@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'node:child_process';
+import { execSync, execFileSync } from "node:child_process";
 import {
   existsSync,
   readFileSync,
@@ -7,39 +7,39 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
-} from 'node:fs';
-import path from 'node:path';
-import { homedir } from 'node:os';
+} from "node:fs";
+import path from "node:path";
+import { homedir } from "node:os";
 
-import * as p from '@clack/prompts';
+import * as p from "@clack/prompts";
 
 // ── Service file paths (mirrors cli-service.ts) ──────────────────────
-const PLIST_LABEL = 'sh.opengram.server';
+const PLIST_LABEL = "sh.opengram.server";
 const PLIST_PATH = path.join(
   homedir(),
-  'Library',
-  'LaunchAgents',
+  "Library",
+  "LaunchAgents",
   `${PLIST_LABEL}.plist`,
 );
 const UNIT_PATH = path.join(
   homedir(),
-  '.config',
-  'systemd',
-  'user',
-  'opengram.service',
+  ".config",
+  "systemd",
+  "user",
+  "opengram.service",
 );
 
 // ── Types ─────────────────────────────────────────────────────────────
 
 type UninstallItem =
-  | 'service'
-  | 'database'
-  | 'uploads'
-  | 'config'
-  | 'logs'
-  | 'env-vars'
-  | 'openclaw-plugin'
-  | 'self';
+  | "service"
+  | "database"
+  | "uploads"
+  | "config"
+  | "logs"
+  | "env-vars"
+  | "openclaw-plugin"
+  | "self";
 
 interface EnvVarMatch {
   filePath: string;
@@ -71,8 +71,8 @@ interface UninstallOpts {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   const val = bytes / 1024 ** i;
   return `${val < 10 ? val.toFixed(1) : Math.round(val)} ${units[i]}`;
@@ -80,31 +80,31 @@ function formatBytes(bytes: number): string {
 
 function isServiceRunning(): boolean {
   try {
-    if (process.platform === 'darwin') {
-      execSync('launchctl list sh.opengram.server', {
-        stdio: ['ignore', 'pipe', 'ignore'],
+    if (process.platform === "darwin") {
+      execSync("launchctl list sh.opengram.server", {
+        stdio: ["ignore", "pipe", "ignore"],
       });
       return true;
     }
-    const result = execSync('systemctl --user is-active opengram', {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
+    const result = execSync("systemctl --user is-active opengram", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
-    return result === 'active';
+    return result === "active";
   } catch {
     return false;
   }
 }
 
 function isServiceInstalled(): boolean {
-  if (process.platform === 'darwin') return existsSync(PLIST_PATH);
+  if (process.platform === "darwin") return existsSync(PLIST_PATH);
   return existsSync(UNIT_PATH);
 }
 
 function isGlobalPackageInstalled(pm: string, name: string): boolean {
   try {
     execSync(`${pm} list -g --depth=0 ${name}`, {
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ["ignore", "pipe", "ignore"],
     });
     return true;
   } catch {
@@ -146,8 +146,8 @@ function dirStats(dir: string): { count: number; size: number } {
 
 function dbFileSize(home: string): number {
   let total = 0;
-  for (const ext of ['', '-shm', '-wal']) {
-    const f = path.join(home, 'data', `opengram.db${ext}`);
+  for (const ext of ["", "-shm", "-wal"]) {
+    const f = path.join(home, "data", `opengram.db${ext}`);
     try {
       total += statSync(f).size;
     } catch {
@@ -160,7 +160,7 @@ function dbFileSize(home: string): number {
 // ── OpenClaw config cleanup ───────────────────────────────────────────
 
 function resolveOpenClawStateDir(): string {
-  return process.env.OPENCLAW_STATE_DIR ?? path.join(homedir(), '.openclaw');
+  return process.env.OPENCLAW_STATE_DIR ?? path.join(homedir(), ".openclaw");
 }
 
 function resolveOpenClawConfigPath(): string | null {
@@ -169,13 +169,13 @@ function resolveOpenClawConfigPath(): string | null {
       ? process.env.OPENCLAW_CONFIG_PATH
       : null;
   }
-  const candidate = path.join(resolveOpenClawStateDir(), 'openclaw.json');
+  const candidate = path.join(resolveOpenClawStateDir(), "openclaw.json");
   return existsSync(candidate) ? candidate : null;
 }
 
 function isOpenClawOnPath(): boolean {
   try {
-    execSync('which openclaw', { stdio: ['ignore', 'pipe', 'ignore'] });
+    execSync("which openclaw", { stdio: ["ignore", "pipe", "ignore"] });
     return true;
   } catch {
     return false;
@@ -191,49 +191,54 @@ function cleanOpenClawConfig(): void {
   if (!configPath) return;
 
   try {
-    const raw = readFileSync(configPath, 'utf8');
+    const raw = readFileSync(configPath, "utf8");
     const cfg = JSON.parse(raw) as Record<string, any>;
 
     // channels.opengram
-    if (cfg.channels && typeof cfg.channels === 'object') {
+    if (cfg.channels && typeof cfg.channels === "object") {
       delete cfg.channels.opengram;
     }
 
     // plugins.allow — remove @opengramsh/openclaw-plugin
     if (cfg.plugins && Array.isArray(cfg.plugins.allow)) {
       cfg.plugins.allow = cfg.plugins.allow.filter(
-        (p: string) => p !== '@opengramsh/openclaw-plugin',
+        (p: string) => p !== "@opengramsh/openclaw-plugin",
       );
     }
 
     // plugins.load.paths — remove entries containing "openclaw-plugin"
     if (cfg.plugins?.load && Array.isArray(cfg.plugins.load.paths)) {
       cfg.plugins.load.paths = cfg.plugins.load.paths.filter(
-        (p: string) => !p.includes('openclaw-plugin'),
+        (p: string) => !p.includes("openclaw-plugin"),
       );
     }
 
     // plugins.entries
-    if (cfg.plugins?.entries && typeof cfg.plugins.entries === 'object') {
-      delete cfg.plugins.entries['@opengramsh/openclaw-plugin'];
+    if (cfg.plugins?.entries && typeof cfg.plugins.entries === "object") {
+      delete cfg.plugins.entries["@opengramsh/openclaw-plugin"];
     }
 
     // session.resetByChannel.opengram
-    if (cfg.session?.resetByChannel && typeof cfg.session.resetByChannel === 'object') {
+    if (
+      cfg.session?.resetByChannel &&
+      typeof cfg.session.resetByChannel === "object"
+    ) {
       delete cfg.session.resetByChannel.opengram;
     }
 
-    writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
+    writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\n", "utf8");
   } catch {
     // Non-fatal — warn but don't block uninstall
-    p.log.warn('Could not clean up openclaw.json. You may need to edit it manually.');
+    p.log.warn(
+      "Could not clean up openclaw.json. You may need to edit it manually.",
+    );
   }
 
   // Remove pairing credentials file
   const allowFromPath = path.join(
     resolveOpenClawStateDir(),
-    'credentials',
-    'opengram-allowFrom.json',
+    "credentials",
+    "opengram-allowFrom.json",
   );
   try {
     if (existsSync(allowFromPath)) unlinkSync(allowFromPath);
@@ -245,12 +250,12 @@ function cleanOpenClawConfig(): void {
 // ── Env var detection ─────────────────────────────────────────────────
 
 const SHELL_CONFIG_FILES = [
-  '.bashrc',
-  '.zshrc',
-  '.profile',
-  '.bash_profile',
-  '.zprofile',
-  '.config/fish/config.fish',
+  ".bashrc",
+  ".zshrc",
+  ".profile",
+  ".bash_profile",
+  ".zprofile",
+  ".config/fish/config.fish",
 ];
 
 function detectEnvVarFiles(): EnvVarMatch[] {
@@ -264,13 +269,13 @@ function detectEnvVarFiles(): EnvVarMatch[] {
 
     let content: string;
     try {
-      content = readFileSync(filePath, 'utf8');
+      content = readFileSync(filePath, "utf8");
     } catch {
       continue;
     }
 
     const matchedLines: { lineNumber: number; content: string }[] = [];
-    const lines = content.split('\n');
+    const lines = content.split("\n");
     for (let i = 0; i < lines.length; i++) {
       if (re.test(lines[i])) {
         matchedLines.push({ lineNumber: i + 1, content: lines[i] });
@@ -288,8 +293,8 @@ function detectEnvVarFiles(): EnvVarMatch[] {
 function commentOutEnvVarLines(matches: EnvVarMatch[]): void {
   for (const { filePath, lines: matchedLines } of matches) {
     try {
-      const content = readFileSync(filePath, 'utf8');
-      const lines = content.split('\n');
+      const content = readFileSync(filePath, "utf8");
+      const lines = content.split("\n");
       const lineNumbers = new Set(matchedLines.map((l) => l.lineNumber));
 
       for (let i = 0; i < lines.length; i++) {
@@ -298,9 +303,11 @@ function commentOutEnvVarLines(matches: EnvVarMatch[]): void {
         }
       }
 
-      writeFileSync(filePath, lines.join('\n'), 'utf8');
+      writeFileSync(filePath, lines.join("\n"), "utf8");
     } catch {
-      p.log.warn(`Could not update ${filePath}. You may need to edit it manually.`);
+      p.log.warn(
+        `Could not update ${filePath}. You may need to edit it manually.`,
+      );
     }
   }
 }
@@ -309,10 +316,10 @@ function commentOutEnvVarLines(matches: EnvVarMatch[]): void {
 
 function readServerPort(home: string): number {
   try {
-    const configPath = path.join(home, 'opengram.config.json');
-    const raw = readFileSync(configPath, 'utf8');
+    const configPath = path.join(home, "opengram.config.json");
+    const raw = readFileSync(configPath, "utf8");
     const cfg = JSON.parse(raw) as Record<string, any>;
-    if (typeof cfg.server?.port === 'number') return cfg.server.port;
+    if (typeof cfg.server?.port === "number") return cfg.server.port;
   } catch {
     // fall through to default
   }
@@ -321,10 +328,10 @@ function readServerPort(home: string): number {
 
 function detectTailscaleServe(serverPort: number): number | null {
   try {
-    const output = execFileSync('tailscale', ['serve', 'status', '--json'], {
-      encoding: 'utf8',
+    const output = execFileSync("tailscale", ["serve", "status", "--json"], {
+      encoding: "utf8",
       timeout: 5000,
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ["ignore", "pipe", "ignore"],
     });
     const status = JSON.parse(output) as Record<string, any>;
     const web = status.Web as Record<string, any> | undefined;
@@ -333,12 +340,14 @@ function detectTailscaleServe(serverPort: number): number | null {
     const target = `http://127.0.0.1:${serverPort}`;
     for (const [portKey, entry] of Object.entries(web)) {
       const pathHandlers = (entry as any)?.Handlers;
-      if (typeof pathHandlers !== 'object' || pathHandlers === null) continue;
-      for (const handler of Object.values(pathHandlers as Record<string, any>)) {
+      if (typeof pathHandlers !== "object" || pathHandlers === null) continue;
+      for (const handler of Object.values(
+        pathHandlers as Record<string, any>,
+      )) {
         if (
-          typeof handler === 'object' &&
+          typeof handler === "object" &&
           handler !== null &&
-          typeof (handler as any).Proxy === 'string' &&
+          typeof (handler as any).Proxy === "string" &&
           (handler as any).Proxy.includes(target)
         ) {
           // Extract port number from key like "hostname.ts.net:443"
@@ -357,8 +366,8 @@ function detectTailscaleServe(serverPort: number): number | null {
 
 function detect(home: string, pm: string): DetectedState {
   const homeExists = existsSync(home);
-  const databaseExists = existsSync(path.join(home, 'data', 'opengram.db'));
-  const uploadsDir = path.join(home, 'data', 'uploads');
+  const databaseExists = existsSync(path.join(home, "data", "opengram.db"));
+  const uploadsDir = path.join(home, "data", "uploads");
   const uploadsExist = existsSync(uploadsDir);
   const uploads = uploadsExist ? dirStats(uploadsDir) : { count: 0, size: 0 };
 
@@ -370,17 +379,17 @@ function detect(home: string, pm: string): DetectedState {
     serviceInstalled: isServiceInstalled(),
     serviceRunning: isServiceRunning(),
     databaseExists,
-    databaseSize: databaseExists ? formatBytes(dbFileSize(home)) : '0 B',
+    databaseSize: databaseExists ? formatBytes(dbFileSize(home)) : "0 B",
     uploadsExist,
     uploadsCount: uploads.count,
     uploadsSize: formatBytes(uploads.size),
-    configExists: existsSync(path.join(home, 'opengram.config.json')),
-    logsExist: existsSync(path.join(home, 'logs')),
+    configExists: existsSync(path.join(home, "opengram.config.json")),
+    logsExist: existsSync(path.join(home, "logs")),
     envVarFiles: detectEnvVarFiles(),
     tailscaleServePort: detectTailscaleServe(serverPort),
     openclawPluginInstalled: isGlobalPackageInstalled(
       pm,
-      '@opengramsh/openclaw-plugin',
+      "@opengramsh/openclaw-plugin",
     ),
   };
 }
@@ -392,85 +401,96 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
   const pm = opts.detectPkgManager();
   const state = detect(home, pm);
 
-  p.intro('OpenGram Uninstall');
+  p.intro("OpenGram Uninstall");
 
   // Build options from detected state
   const options: { value: UninstallItem; label: string; hint?: string }[] = [];
 
   if (state.serviceInstalled) {
     options.push({
-      value: 'service',
-      label: 'Background service',
-      hint: state.serviceRunning ? 'currently running' : 'installed, not running',
+      value: "service",
+      label: "Background service",
+      hint: state.serviceRunning
+        ? "currently running"
+        : "installed, not running",
     });
   }
 
   if (state.databaseExists) {
     options.push({
-      value: 'database',
+      value: "database",
       label: `Database — all chats and messages (${state.databaseSize})`,
     });
   }
 
   if (state.uploadsExist) {
     options.push({
-      value: 'uploads',
+      value: "uploads",
       label: `Uploaded files (${state.uploadsCount} files, ${state.uploadsSize})`,
     });
   }
 
   if (state.configExists) {
     options.push({
-      value: 'config',
-      label: 'Configuration (opengram.config.json)',
+      value: "config",
+      label: "Configuration (opengram.config.json)",
     });
   }
 
   if (state.logsExist) {
     options.push({
-      value: 'logs',
-      label: 'Logs (~/.opengram/logs)',
+      value: "logs",
+      label: "Logs (~/.opengram/logs)",
     });
   }
 
   if (state.envVarFiles.length > 0) {
-    const totalLines = state.envVarFiles.reduce((sum, m) => sum + m.lines.length, 0);
-    const fileNames = state.envVarFiles.map((m) => path.basename(m.filePath)).join(', ');
+    const totalLines = state.envVarFiles.reduce(
+      (sum, m) => sum + m.lines.length,
+      0,
+    );
+    const fileNames = state.envVarFiles
+      .map((m) => path.basename(m.filePath))
+      .join(", ");
     options.push({
-      value: 'env-vars',
-      label: `Environment variables (${totalLines} line${totalLines === 1 ? '' : 's'} in ${fileNames})`,
+      value: "env-vars",
+      label: `Environment variables (${totalLines} line${totalLines === 1 ? "" : "s"} in ${fileNames})`,
     });
   }
 
   if (state.openclawPluginInstalled) {
     options.push({
-      value: 'openclaw-plugin',
-      label: 'OpenClaw plugin (@opengramsh/openclaw-plugin)',
+      value: "openclaw-plugin",
+      label: "OpenClaw plugin (@opengramsh/openclaw-plugin)",
     });
   }
 
   // Self-uninstall is always last
   options.push({
-    value: 'self',
-    label: 'Opengram CLI (@opengramsh/opengram)',
+    value: "self",
+    label: "Opengram CLI (@opengramsh/opengram)",
   });
 
-  if (options.length === 1 && options[0].value === 'self' && !state.homeExists) {
-    p.log.info('Nothing to uninstall.');
-    p.outro('');
+  if (
+    options.length === 1 &&
+    options[0].value === "self" &&
+    !state.homeExists
+  ) {
+    p.log.info("Nothing to uninstall.");
+    p.outro("");
     return;
   }
 
   // Multiselect — pre-select everything so the user opts out of what to keep
   const selected = await p.multiselect<UninstallItem>({
-    message: 'What would you like to remove? (press space to toggle)',
+    message: "What would you like to remove? (press space to toggle)",
     options,
     initialValues: options.map((o) => o.value),
     required: true,
   });
 
   if (p.isCancel(selected)) {
-    p.cancel('Uninstall cancelled.');
+    p.cancel("Uninstall cancelled.");
     return;
   }
 
@@ -478,90 +498,108 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
 
   // Build summary lines
   const summaryLines: string[] = [];
-  if (sel.has('service')) summaryLines.push('Stop and remove the background service');
-  if (sel.has('database')) summaryLines.push(`Database (${state.databaseSize})`);
-  if (sel.has('uploads'))
-    summaryLines.push(`Uploaded files (${state.uploadsCount} files, ${state.uploadsSize})`);
-  if (sel.has('config')) summaryLines.push('Configuration');
-  if (sel.has('logs')) summaryLines.push('Logs');
-  if (sel.has('env-vars')) summaryLines.push('Comment out OPENGRAM_* env vars from shell configs');
-  if (sel.has('openclaw-plugin'))
-    summaryLines.push('Uninstall @opengramsh/openclaw-plugin and remove OpenClaw config');
-  if (sel.has('self')) summaryLines.push('Uninstall @opengramsh/opengram');
+  if (sel.has("service"))
+    summaryLines.push("Stop and remove the background service");
+  if (sel.has("database"))
+    summaryLines.push(`Database (${state.databaseSize})`);
+  if (sel.has("uploads"))
+    summaryLines.push(
+      `Uploaded files (${state.uploadsCount} files, ${state.uploadsSize})`,
+    );
+  if (sel.has("config")) summaryLines.push("Configuration");
+  if (sel.has("logs")) summaryLines.push("Logs");
+  if (sel.has("env-vars"))
+    summaryLines.push("Comment out OPENGRAM_* env vars from shell configs");
+  if (sel.has("openclaw-plugin"))
+    summaryLines.push(
+      "Uninstall @opengramsh/openclaw-plugin and remove OpenClaw config",
+    );
+  if (sel.has("self")) summaryLines.push("Uninstall @opengramsh/opengram");
 
-  p.note(summaryLines.map((l) => `• ${l}`).join('\n'), 'The following will be permanently deleted');
+  p.note(
+    summaryLines.map((l) => `• ${l}`).join("\n"),
+    "The following will be permanently deleted",
+  );
 
   const proceed = await p.confirm({
-    message: 'Proceed?',
+    message: "Proceed?",
     initialValue: false,
   });
 
   if (p.isCancel(proceed) || !proceed) {
-    p.cancel('Uninstall cancelled.');
+    p.cancel("Uninstall cancelled.");
     return;
   }
 
   // Determine if we should clean up the entire home dir
-  const allDataItems: UninstallItem[] = ['database', 'uploads', 'config', 'logs'];
+  const allDataItems: UninstallItem[] = [
+    "database",
+    "uploads",
+    "config",
+    "logs",
+  ];
   const removeHome =
-    state.homeExists && allDataItems.every((item) => !options.some((o) => o.value === item) || sel.has(item));
+    state.homeExists &&
+    allDataItems.every(
+      (item) => !options.some((o) => o.value === item) || sel.has(item),
+    );
 
   // Execute
   await p.tasks([
     {
-      title: 'Stopping and removing background service',
-      enabled: sel.has('service'),
+      title: "Stopping and removing background service",
+      enabled: sel.has("service"),
       task: async () => {
-        const { uninstallService } = await import('./cli-service.js');
+        const { uninstallService } = await import("./cli-service.js");
         await uninstallService();
-        return 'Service removed';
+        return "Service removed";
       },
     },
     {
-      title: 'Deleting database',
-      enabled: sel.has('database'),
+      title: "Deleting database",
+      enabled: sel.has("database"),
       task: () => {
-        for (const ext of ['', '-shm', '-wal']) {
-          const f = path.join(home, 'data', `opengram.db${ext}`);
+        for (const ext of ["", "-shm", "-wal"]) {
+          const f = path.join(home, "data", `opengram.db${ext}`);
           if (existsSync(f)) unlinkSync(f);
         }
-        return 'Database deleted';
+        return "Database deleted";
       },
     },
     {
-      title: 'Deleting uploaded files',
-      enabled: sel.has('uploads'),
+      title: "Deleting uploaded files",
+      enabled: sel.has("uploads"),
       task: () => {
-        rmSync(path.join(home, 'data', 'uploads'), {
+        rmSync(path.join(home, "data", "uploads"), {
           recursive: true,
           force: true,
         });
-        return 'Uploads deleted';
+        return "Uploads deleted";
       },
     },
     {
-      title: 'Deleting configuration',
-      enabled: sel.has('config'),
+      title: "Deleting configuration",
+      enabled: sel.has("config"),
       task: () => {
-        const configPath = path.join(home, 'opengram.config.json');
+        const configPath = path.join(home, "opengram.config.json");
         if (existsSync(configPath)) unlinkSync(configPath);
-        return 'Config deleted';
+        return "Config deleted";
       },
     },
     {
-      title: 'Deleting logs',
-      enabled: sel.has('logs'),
+      title: "Deleting logs",
+      enabled: sel.has("logs"),
       task: () => {
-        rmSync(path.join(home, 'logs'), { recursive: true, force: true });
-        return 'Logs deleted';
+        rmSync(path.join(home, "logs"), { recursive: true, force: true });
+        return "Logs deleted";
       },
     },
     {
-      title: 'Commenting out OPENGRAM_* env vars',
-      enabled: sel.has('env-vars'),
+      title: "Commenting out OPENGRAM_* env vars",
+      enabled: sel.has("env-vars"),
       task: () => {
         commentOutEnvVarLines(state.envVarFiles);
-        return 'Environment variables commented out';
+        return "Environment variables commented out";
       },
     },
     {
@@ -569,54 +607,56 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
       enabled: removeHome,
       task: () => {
         rmSync(home, { recursive: true, force: true });
-        return 'Home directory removed';
+        return "Home directory removed";
       },
     },
     {
-      title: 'Uninstalling OpenClaw plugin and cleaning config',
-      enabled: sel.has('openclaw-plugin'),
+      title: "Uninstalling OpenClaw plugin and cleaning config",
+      enabled: sel.has("openclaw-plugin"),
       task: () => {
         cleanOpenClawConfig();
         execSync(`${pm} uninstall -g @opengramsh/openclaw-plugin`, {
-          stdio: ['ignore', 'pipe', 'ignore'],
+          stdio: ["ignore", "pipe", "ignore"],
         });
-        return 'Plugin uninstalled, config cleaned';
+        return "Plugin uninstalled, config cleaned";
       },
     },
     {
-      title: 'Uninstalling Opengram CLI',
-      enabled: sel.has('self'),
+      title: "Uninstalling Opengram CLI",
+      enabled: sel.has("self"),
       task: () => {
         execSync(`${pm} uninstall -g @opengramsh/opengram`, {
-          stdio: ['ignore', 'pipe', 'ignore'],
+          stdio: ["ignore", "pipe", "ignore"],
         });
-        return 'Opengram uninstalled';
+        return "Opengram uninstalled";
       },
     },
   ]);
 
   // Hint to reload shell config after env var removal
-  if (sel.has('env-vars')) {
+  if (sel.has("env-vars")) {
     const shellFiles = state.envVarFiles.map((m) => path.basename(m.filePath));
-    const sourceCmd = shellFiles.map((f) => `source ~/${f}`).join(' && ');
+    const sourceCmd = shellFiles.map((f) => `source ~/${f}`).join(" && ");
     p.log.info(`Reload your shell config to apply changes:\n  ${sourceCmd}`);
   }
 
   // Offer to restart the OpenClaw gateway so it picks up config changes
-  if (sel.has('openclaw-plugin') && isOpenClawOnPath()) {
+  if (sel.has("openclaw-plugin") && isOpenClawOnPath()) {
     const restart = await p.confirm({
-      message: 'Restart OpenClaw gateway to apply config changes?',
+      message: "Restart OpenClaw gateway to apply config changes?",
       initialValue: true,
     });
 
     if (!p.isCancel(restart) && restart) {
       try {
-        execSync('openclaw service restart', { stdio: 'inherit' });
+        execSync("openclaw service restart", { stdio: "inherit" });
       } catch {
-        p.log.warn('Could not restart the OpenClaw gateway. Run `openclaw service restart` manually.');
+        p.log.warn(
+          "Could not restart the OpenClaw gateway. Run `openclaw service restart` manually.",
+        );
       }
     } else {
-      p.log.info('Run `openclaw service restart` to apply the config changes.');
+      p.log.info("Run `openclaw service restart` to apply the config changes.");
     }
   }
 
@@ -629,5 +669,5 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
     );
   }
 
-  p.outro('Opengram has been uninstalled. Goodbye!');
+  p.outro("Opengram has been uninstalled. Goodbye!");
 }

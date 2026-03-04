@@ -22,7 +22,8 @@ tailscale status
 Your hostname will look something like `my-server.tail1234.ts.net`.
 
 <Callout>
-If you run `opengram init` on a machine with Tailscale, the setup wizard automatically detects your hostname and pre-fills the public URL for you.
+  If you run `opengram init` on a machine with Tailscale, the setup wizard
+  automatically detects your hostname and pre-fills the public URL for you.
 </Callout>
 
 ## Option A: Tailscale HTTPS forwarding
@@ -30,7 +31,7 @@ If you run `opengram init` on a machine with Tailscale, the setup wizard automat
 The simplest approach -- Tailscale terminates TLS and forwards traffic to Opengram:
 
 ```bash
-tailscale serve --https=443 http://127.0.0.1:3000
+tailscale serve --bg --https=443 http://127.0.0.1:3000
 ```
 
 This makes Opengram available at `https://<hostname>.ts.net` for all devices on your tailnet. Tailscale handles certificate provisioning and renewal automatically. The serve configuration is persistent across reboots, so you only need to run this command once.
