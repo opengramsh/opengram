@@ -42,7 +42,7 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const navigate = useNavigate();
   const displayTitle = typingTitle != null ? typingTitle : (chat?.title || 'Chat');
-  const subtitle = primaryAgent?.name ?? (chat ? 'Unknown Agent' : null);
+  const subtitle = primaryAgent?.name ?? null;
 
   return (
     <header className="facehash-hover-group sticky top-0 z-30 h-[68px] md:h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
