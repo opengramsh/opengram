@@ -43,52 +43,6 @@ function getTailscaleHostname(): string | undefined {
   }
 }
 
-/** Parse `tailscale serve status --json` → set of HTTPS ports in use. */
-function getTailscaleServedPorts(): Set<number> {
-  try {
-    const raw = execSync('tailscale serve status --json', {
-      timeout: 5000,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).toString('utf8');
-
-    const status = JSON.parse(raw) as Record<string, unknown>;
-
-    // The TCP map keys are "https:<port>" entries
-    const ports = new Set<number>();
-    const tcp = (status as { TCP?: Record<string, unknown> }).TCP;
-    if (tcp && typeof tcp === 'object') {
-      for (const key of Object.keys(tcp)) {
-        const match = key.match(/^(\d+)$/);
-        if (match) ports.add(Number(match[1]));
-      }
-    }
-    return ports;
-  } catch {
-    return new Set();
-  }
-}
-
-/** Pick first available port from preferred list. */
-function pickTailscalePort(usedPorts: Set<number>): number {
-  for (const port of [8443, 8444, 10443]) {
-    if (!usedPorts.has(port)) return port;
-  }
-  return 8443; // fallback
-}
-
-/** Run `tailscale serve --https=<port> http://127.0.0.1:<appPort>`. Returns true on success. */
-function runTailscaleServe(tsPort: number, appPort: number): boolean {
-  try {
-    execSync(`tailscale serve --https=${tsPort} http://127.0.0.1:${appPort}`, {
-      timeout: 15000,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function generateSecret(): string {
   return 'og_' + randomBytes(24).toString('base64url');
 }
@@ -146,86 +100,9 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
 
   const portNum = Number(port);
 
-  // 2. Network access — Tailscale detection + HTTPS setup
+  // 2. Detect Tailscale (used in summary)
   const tsHostname = getTailscaleHostname();
-  let publicUrl = `http://localhost:${portNum}`;
-
-  if (!tsHostname) {
-    // Branch A: no Tailscale
-    p.note(
-      `Opengram is currently only accessible on this machine (localhost).\n` +
-      `To access it from other devices, we recommend Tailscale — it creates\n` +
-      `a private network with automatic HTTPS, no port forwarding needed.\n\n` +
-      `  → Install Tailscale: https://tailscale.com/download\n` +
-      `  → Then re-run \`opengram init\` to complete the setup.\n\n` +
-      `You can also set a public URL later in opengram.config.json:\n` +
-      `  { "server": { "publicBaseUrl": "https://your-url" } }`,
-      'Network',
-    );
-  } else {
-    // Branch B: Tailscale detected
-    const tsChoice = await p.select({
-      message: `Tailscale detected: ${tsHostname}\n  Set up HTTPS access via Tailscale?`,
-      options: [
-        { value: 'default', label: 'Yes, use default port', hint: 'recommended' },
-        { value: 'custom', label: 'Yes, use a custom port' },
-        { value: 'no', label: "No, I'll set it up later" },
-      ],
-    });
-    if (p.isCancel(tsChoice)) { p.outro('Setup cancelled.'); return; }
-
-    if (tsChoice === 'default' || tsChoice === 'custom') {
-      let tsPort: number;
-
-      if (tsChoice === 'custom') {
-        const customPort = await p.text({
-          message: 'HTTPS port for Tailscale',
-          placeholder: '8443',
-          validate: (val) => {
-            const n = Number(val);
-            if (!Number.isInteger(n) || n < 1 || n > 65535) {
-              return 'Port must be between 1 and 65535';
-            }
-            const used = getTailscaleServedPorts();
-            if (used.has(n)) {
-              return `Port ${n} is already used by tailscale serve`;
-            }
-          },
-        });
-        if (p.isCancel(customPort)) { p.outro('Setup cancelled.'); return; }
-        tsPort = Number(customPort);
-      } else {
-        const usedPorts = getTailscaleServedPorts();
-        tsPort = pickTailscalePort(usedPorts);
-      }
-
-      const serveSpinner = p.spinner();
-      serveSpinner.start(`Running tailscale serve --https=${tsPort} ...`);
-
-      const ok = runTailscaleServe(tsPort, portNum);
-      if (ok) {
-        const portSuffix = tsPort === 443 ? '' : `:${tsPort}`;
-        publicUrl = `https://${tsHostname}${portSuffix}`;
-        serveSpinner.stop(`Tailscale HTTPS forwarding configured.\n  Opengram is available at ${publicUrl}`);
-      } else {
-        serveSpinner.stop(
-          `Failed to run tailscale serve. You can set it up manually:\n` +
-          `  tailscale serve --https=${tsPort} http://127.0.0.1:${portNum}`,
-        );
-      }
-    } else {
-      // "No, I'll set it up later"
-      const usedPorts = getTailscaleServedPorts();
-      const suggestedPort = pickTailscalePort(usedPorts);
-      p.note(
-        `To set up HTTPS later, run:\n` +
-        `  tailscale serve --https=${suggestedPort} http://127.0.0.1:${portNum}\n\n` +
-        `Then update opengram.config.json:\n` +
-        `  { "server": { "publicBaseUrl": "https://${tsHostname}:${suggestedPort}" } }`,
-        'Network',
-      );
-    }
-  }
+  const publicUrl = `http://localhost:${portNum}`;
 
   // 3. Instance secret
   const secretChoice = await p.select({
@@ -456,17 +333,43 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
   }
 
   // 8. Print summary
-  const lines: string[] = [
+  const summaryLines: string[] = [
     `Config:    ${configPath}`,
     `Data:      ${path.join(home, 'data')}`,
     `Database:  ${path.join(home, 'data', 'opengram.db')}`,
-    `Server:    ${publicUrl}`,
+    `Local:     http://localhost:${portNum}`,
   ];
   if (instanceSecretEnabled) {
-    lines.push(`Secret:    ${instanceSecret}`);
+    summaryLines.push(`Secret:    ${instanceSecret}`);
   }
 
-  p.note(lines.join('\n'), 'Summary');
+  p.note(summaryLines.join('\n'), 'Summary');
+
+  // Network guidance
+  if (tsHostname) {
+    p.note(
+      `Tailscale detected: ${tsHostname}\n` +
+      `To make Opengram available on your tailnet, run:\n` +
+      `  sudo tailscale serve --https=8443 http://127.0.0.1:${portNum}\n\n` +
+      `Opengram will then be available at:\n` +
+      `  https://${tsHostname}:8443\n\n` +
+      `The port 8443 can be changed to any available port.`,
+      'Network',
+    );
+  } else {
+    p.note(
+      `Opengram is currently only accessible on this machine (localhost).\n` +
+      `To access it from other devices, we recommend Tailscale — it creates\n` +
+      `a private network with automatic HTTPS, no port forwarding needed.\n\n` +
+      `Install Tailscale: https://tailscale.com\n\n` +
+      `Once installed, run:\n` +
+      `  sudo tailscale serve --https=8443 http://127.0.0.1:${portNum}\n\n` +
+      `Opengram will then be available at:\n` +
+      `  https://<your-hostname>.ts.net:8443\n\n` +
+      `The port 8443 can be changed to any available port.`,
+      'Network',
+    );
+  }
 
   if (process.platform === 'linux' || process.platform === 'darwin') {
     p.outro('Setup complete!');
