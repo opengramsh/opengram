@@ -266,52 +266,19 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
     }
   }
 
-  // 5. OpenClaw detection
+  // 5. OpenClaw detection — ask now, but run setup after the server starts (step 8)
+  let connectOpenClaw = false;
   if (isOpenClawInstalled()) {
     p.note(
       `OpenClaw CLI detected on PATH.\n` +
         `Opengram ships with an OpenClaw plugin that allows you to easily connect your OpenClaw agents to Opengram.`,
       "Integrations",
     );
-    const connectOpenClaw = await p.confirm({
+    const answer = await p.confirm({
       message: "Connect OpenGram to OpenClaw?",
       initialValue: true,
     });
-    if (!p.isCancel(connectOpenClaw) && connectOpenClaw) {
-      const pluginSpinner = p.spinner();
-      pluginSpinner.start("Installing @opengramsh/openclaw-plugin...");
-      try {
-        const execAsync = promisify(exec);
-        await execAsync("npm install -g @opengramsh/openclaw-plugin", {
-          timeout: 600000,
-        });
-        pluginSpinner.stop("Plugin installed.");
-      } catch {
-        pluginSpinner.stop(
-          "Plugin install failed — you can install it later with:\n  npm i -g @opengramsh/openclaw-plugin",
-        );
-      }
-
-      // Chain into the standalone setup wizard with pre-filled values.
-      // Uses `opengram-openclaw` (the plugin's own bin) rather than
-      // `openclaw opengram` — this avoids the chicken-and-egg problem
-      // where the plugin must already be loaded in OpenClaw for the
-      // subcommand to exist.
-      try {
-        const setupArgs = ["setup", "--base-url", publicUrl];
-        if (instanceSecretEnabled) {
-          setupArgs.push("--instance-secret", instanceSecret);
-        } else {
-          setupArgs.push("--no-instance-secret");
-        }
-        execFileSync("opengram-openclaw", setupArgs, { stdio: "inherit" });
-      } catch {
-        p.note(
-          "OpenClaw setup did not complete.\nYou can run `opengram-openclaw setup` later.",
-          "Note",
-        );
-      }
-    }
+    connectOpenClaw = !p.isCancel(answer) && !!answer;
   }
 
   // 6. Generate config — merge wizard-managed keys into existing config
@@ -418,7 +385,45 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
     }
   }
 
-  // 8. Print summary
+  // 8. OpenClaw plugin — runs after the server is started so the agent
+  //    push to /api/v1/config/admin can reach the running instance.
+  if (connectOpenClaw) {
+    const pluginSpinner = p.spinner();
+    pluginSpinner.start("Installing @opengramsh/openclaw-plugin...");
+    try {
+      const execAsync = promisify(exec);
+      await execAsync("npm install -g @opengramsh/openclaw-plugin", {
+        timeout: 600000,
+      });
+      pluginSpinner.stop("Plugin installed.");
+    } catch {
+      pluginSpinner.stop(
+        "Plugin install failed — you can install it later with:\n  npm i -g @opengramsh/openclaw-plugin",
+      );
+    }
+
+    // Chain into the standalone setup wizard with pre-filled values.
+    // Uses `opengram-openclaw` (the plugin's own bin) rather than
+    // `openclaw opengram` — this avoids the chicken-and-egg problem
+    // where the plugin must already be loaded in OpenClaw for the
+    // subcommand to exist.
+    try {
+      const setupArgs = ["setup", "--base-url", publicUrl];
+      if (instanceSecretEnabled) {
+        setupArgs.push("--instance-secret", instanceSecret);
+      } else {
+        setupArgs.push("--no-instance-secret");
+      }
+      execFileSync("opengram-openclaw", setupArgs, { stdio: "inherit" });
+    } catch {
+      p.note(
+        "OpenClaw setup did not complete.\nYou can run `opengram-openclaw setup` later.",
+        "Note",
+      );
+    }
+  }
+
+  // 9. Print summary
   const summaryLines: string[] = [
     `Config:    ${configPath}`,
     `Data:      ${path.join(home, "data")}`,
