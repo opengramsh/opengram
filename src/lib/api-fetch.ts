@@ -23,7 +23,20 @@ function readFromBootstrap(): string | null {
 
 export function getApiSecret(): string | null {
   if (cachedSecret === undefined) {
-    cachedSecret = readFromStorage() || readFromBootstrap() || null;
+    const bootstrap = readFromBootstrap();
+    const stored = readFromStorage();
+
+    // Prefer bootstrap (server-injected, always current) over localStorage (may be stale)
+    cachedSecret = bootstrap || stored || null;
+
+    // Sync localStorage when bootstrap provides a different value
+    if (bootstrap && bootstrap !== stored) {
+      try {
+        window.localStorage.setItem(STORAGE_KEY, bootstrap);
+      } catch {
+        // localStorage can be blocked
+      }
+    }
   }
 
   return cachedSecret;
