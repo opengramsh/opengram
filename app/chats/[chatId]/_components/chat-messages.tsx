@@ -210,7 +210,6 @@ export function ChatMessages({
     <Conversation
       contextRef={feedRef}
       className="flex-1"
-      style={{ paddingBottom: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
       initial={scrollToMessageId ? false : 'smooth'}
     >
       <ConversationContent>
@@ -409,6 +408,12 @@ export function ChatMessages({
             </div>
           </div>
         )}
+
+        <div
+          className="shrink-0 pointer-events-none"
+          style={{ height: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
+          aria-hidden="true"
+        />
       </ConversationContent>
 
       <ConversationScrollButton />

@@ -273,7 +273,7 @@ describe('KAI-237: composer height CSS variable integration', () => {
       />,
     );
 
-    const scrollContainer = container.querySelector('[role="log"]');
-    expect(scrollContainer?.getAttribute('style')).toContain('var(--composer-height');
+    const spacer = container.querySelector('[aria-hidden="true"]');
+    expect(spacer?.getAttribute('style')).toContain('var(--composer-height');
   });
 });
