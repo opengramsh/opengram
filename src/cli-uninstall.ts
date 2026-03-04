@@ -459,10 +459,11 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
     return;
   }
 
-  // Multiselect
+  // Multiselect — pre-select everything so the user opts out of what to keep
   const selected = await p.multiselect<UninstallItem>({
-    message: 'What would you like to remove?',
+    message: 'What would you like to remove? (press space to toggle)',
     options,
+    initialValues: options.map((o) => o.value),
     required: true,
   });
 

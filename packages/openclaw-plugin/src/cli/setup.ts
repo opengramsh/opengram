@@ -327,7 +327,7 @@ async function promptAgents(
       : agentList.map((a) => a.id);
 
   const selected = await prompter.multiselect<string>({
-    message: "Which agents should receive messages from OpenGram?",
+    message: "Which agents should receive messages from OpenGram? (press space to toggle)",
     options,
     initialValues: defaultSelection,
   });
