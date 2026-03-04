@@ -1,4 +1,4 @@
-import { exec, execFileSync } from "node:child_process";
+import { exec, execFileSync, execSync } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
