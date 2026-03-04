@@ -67,7 +67,12 @@ function getVersion(pkgRoot: string): string {
   }
 }
 
-export async function runInitWizard(opts: WizardOpts): Promise<void> {
+export type WizardResult = {
+  /** Whether the server needs to be started by the caller. */
+  startServer: boolean;
+};
+
+export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   const home = opts.resolveHome();
 
   p.intro(`OpenGram v${getVersion(opts.pkgRoot)} Setup`);
@@ -81,7 +86,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     });
     if (p.isCancel(overwrite) || !overwrite) {
       p.outro("Setup cancelled.");
-      return;
+      return { startServer: false };
     }
   }
 
@@ -99,7 +104,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
   });
   if (p.isCancel(port)) {
     p.outro("Setup cancelled.");
-    return;
+    return { startServer: false };
   }
 
   const portNum = Number(port);
@@ -133,7 +138,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
   });
   if (p.isCancel(secretChoice)) {
     p.outro("Setup cancelled.");
-    return;
+    return { startServer: false };
   }
 
   let instanceSecret = "";
@@ -151,7 +156,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     });
     if (p.isCancel(customSecret)) {
       p.outro("Setup cancelled.");
-      return;
+      return { startServer: false };
     }
     instanceSecret = customSecret;
     instanceSecretEnabled = true;
@@ -195,7 +200,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     });
     if (p.isCancel(providerChoice)) {
       p.outro("Setup cancelled.");
-      return;
+      return { startServer: false };
     }
 
     const selectedProvider = getProviderById(providerChoice as string)!;
@@ -212,7 +217,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
       });
       if (p.isCancel(useEnv)) {
         p.outro("Setup cancelled.");
-        return;
+        return { startServer: false };
       }
       if (!useEnv) {
         const customKey = await p.text({
@@ -221,7 +226,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
         });
         if (p.isCancel(customKey)) {
           p.outro("Setup cancelled.");
-          return;
+          return { startServer: false };
         }
         chosenApiKey = customKey || undefined;
       }
@@ -233,7 +238,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
       });
       if (p.isCancel(customKey)) {
         p.outro("Setup cancelled.");
-        return;
+        return { startServer: false };
       }
       chosenApiKey = customKey || undefined;
     }
@@ -247,7 +252,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     });
     if (p.isCancel(modelChoice)) {
       p.outro("Setup cancelled.");
-      return;
+      return { startServer: false };
     }
 
     autoRenameConfig = {
@@ -378,6 +383,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
   p.note(configPath, "Config written");
 
   // 7. Background service (Linux + macOS)
+  let serviceStarted = false;
   if (process.platform === "linux" || process.platform === "darwin") {
     const isLinux = process.platform === "linux";
     const installSvc = await p.confirm({
@@ -398,17 +404,13 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
       const ok = await installService(home);
       if (ok) {
         svcSpinner.stop("Service installed and started.");
+        serviceStarted = true;
       } else {
         svcSpinner.stop(
           "Service installation failed. You can run `opengram service install` later.",
         );
       }
     }
-  } else {
-    p.note(
-      "Run `opengram start` to start the server.\nFor auto-start, consider using a process manager like pm2.",
-      "Startup",
-    );
   }
 
   // 8. Print summary
@@ -450,9 +452,11 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     );
   }
 
-  if (process.platform === "linux" || process.platform === "darwin") {
-    p.outro("Setup complete!");
-  } else {
-    p.outro("Run `opengram start` to start the server.");
+  if (serviceStarted) {
+    p.outro("Setup complete! Opengram is running.");
+    return { startServer: false };
   }
+
+  p.outro("Setup complete! Starting Opengram...");
+  return { startServer: true };
 }

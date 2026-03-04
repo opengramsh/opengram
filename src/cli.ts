@@ -91,7 +91,10 @@ async function cmdStart(args: string[]) {
 
 async function cmdInit() {
   const { runInitWizard } = await import('./init-wizard.js');
-  await runInitWizard({ pkgRoot, resolveHome });
+  const result = await runInitWizard({ pkgRoot, resolveHome });
+  if (result.startServer) {
+    await cmdStart([]);
+  }
 }
 
 async function cmdService(action: string | undefined) {

@@ -55,34 +55,36 @@ opengram init
 
 The wizard will prompt you for:
 
-- **Port** -- the port Opengram listens on (default: `3000`).
-- **Public base URL** -- the URL where Opengram is accessible (e.g. `https://chat.example.com`). Auto-detects [Tailscale](https://tailscale.com/) if available.
+- **Port** -- the port Opengram listens on. Auto-detects an available port (tries `3000`, `3001`, `3333`).
 - **Instance secret** -- a secret key used to authenticate API requests from your agents. Can be auto-generated, custom, or disabled.
 - **Auto-rename** -- whether to automatically rename chats using an LLM. Supports Anthropic, OpenAI, Google Gemini, xAI, and OpenRouter.
 - **OpenClaw plugin** -- if the `openclaw` CLI is detected, optionally install and connect the OpenClaw agent plugin.
-- **Systemd service** (Linux) / **launchd service** (macOS) -- whether to install and enable a system service for automatic startup.
+- **Background service** (Linux / macOS) -- whether to install a systemd or launchd service for automatic startup.
 
-The wizard writes its output to `~/.opengram/opengram.config.json` (or `$OPENGRAM_HOME/opengram.config.json`). You can edit the file directly at any time.
+At the end, the wizard shows a **Network** section with instructions for making Opengram accessible from other devices using [Tailscale](https://tailscale.com/). If Tailscale is already installed, it detects your hostname and shows the exact command to run.
+
+The wizard writes its output to `~/.opengram/opengram.config.json` (or `$OPENGRAM_HOME/opengram.config.json`). You can edit the file directly at any time. Re-running `opengram init` merges changes into the existing config without overwriting other settings.
 
 ## 3. Start the server
 
-If the wizard installed a system service (systemd on Linux or launchd on macOS), Opengram is already running. Otherwise, start it manually:
+The wizard automatically starts Opengram at the end -- either via the background service (if you opted in) or directly in the foreground.
+
+To verify that everything is working:
+
+```bash
+curl -fsS http://localhost:3000/api/v1/health
+# → {"status":"ok"}
+```
+
+If you need to start Opengram again later, use:
 
 ```bash
 opengram start
 ```
 
-Verify that everything is working:
-
-```bash
-# Update the URL below to match the one you set for your opengram instance
-curl -fsS http://localhost:3000/api/v1/health
-# → {"status":"ok"}
-```
-
 ## 4. Access the UI
 
-Open your browser and navigate to the URL you configured (or `http://localhost:3000` if using defaults). You should see the Opengram chat interface.
+Open your browser and navigate to `http://localhost:3000` (or the port you chose). You should see the Opengram chat interface.
 
 ## 5. 🦞 Connect your OpenClaw agents (optional)
 
