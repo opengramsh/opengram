@@ -168,7 +168,18 @@ app.use(
 );
 
 // Static files (manifest, icons, etc.)
-app.use("/*", serveStatic({ root: "./dist/client" }));
+app.use(
+  "/*",
+  serveStatic({
+    root: "./dist/client",
+    // Always render app entry HTML via SPA fallback so bootstrap secrets are
+    // injected at request time and never stale per-client.
+    rewriteRequestPath: (requestPath) =>
+      requestPath === "/" || requestPath === "/index.html"
+        ? "/__opengram_spa_entry__.html"
+        : requestPath,
+  }),
+);
 
 // SPA fallback: serve index.html with bootstrap injection
 let spaHtmlTemplate: string | null = null;
@@ -190,6 +201,7 @@ app.get("/*", (c) => {
   };
   const json = JSON.stringify(bootstrap).replace(/<\//g, "<\\/");
   const script = `<script>window.__OPENGRAM_BOOTSTRAP__=${json};</script>`;
+  c.header("Cache-Control", "no-store");
   return c.html(getSpaHtml().replace("</head>", `${script}</head>`));
 });
 
