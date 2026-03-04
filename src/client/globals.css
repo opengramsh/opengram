@@ -159,3 +159,8 @@ button[data-streamdown="link"] {
   cursor: pointer;
 }
 
+/* Fix: code blocks should scroll horizontally for long lines */
+[data-streamdown="code-block-body"] {
+  overflow-x: auto;
+}
+
