@@ -55,7 +55,6 @@ const createChatRoute = createRoute({
 chats.openapi(createChatRoute, async (c) => {
   const body = c.req.valid('json');
   const idempotencyKey = getIdempotencyKey(c.req.raw);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- executeWithIdempotency returns a raw Response; incompatible with zod-openapi's TypedResponse
   return await executeWithIdempotency(idempotencyKey, body, 201, () => createChat(body)) as any;
 });
 
@@ -372,7 +371,6 @@ chats.openapi(createChatRequestRoute, async (c) => {
   const { chatId } = c.req.valid('param');
   const body = c.req.valid('json') as CreateRequestInput;
   const idempotencyKey = getIdempotencyKey(c.req.raw);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- executeWithIdempotency returns a raw Response; incompatible with zod-openapi's TypedResponse
   return await executeWithIdempotency(idempotencyKey, { chatId, body }, 201, () => createRequest(chatId, body)) as any;
 });
 

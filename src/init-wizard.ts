@@ -163,7 +163,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   }
 
   // 4. Auto-rename
-  const { RENAME_PROVIDERS, getProviderById, resolveApiKey, getEnvVarName } =
+  const { RENAME_PROVIDERS, getProviderById, getEnvVarName } =
     await import("./services/auto-rename-service.js");
 
   p.note(

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 
 import { Badge } from "@/src/components/ui/badge";
@@ -29,7 +29,7 @@ export function AutoRenameCard({
   config: ConfigResponse;
   onConfigChange: () => void;
 }) {
-  const providers = config.autoRenameProviders ?? [];
+  const providers = useMemo(() => config.autoRenameProviders ?? [], [config.autoRenameProviders]);
   const existing = config.autoRename;
 
   const [enabled, setEnabled] = useState(existing?.enabled ?? false);
@@ -81,7 +81,7 @@ export function AutoRenameCard({
   }, [existing?.enabled, existing?.provider, existing?.modelId, providers]);
 
   const selectedProvider = providers.find((p) => p.id === provider);
-  const models = selectedProvider?.cheapModels ?? [];
+  const models = useMemo(() => selectedProvider?.cheapModels ?? [], [selectedProvider?.cheapModels]);
 
   // When provider changes, auto-select first model if current isn't in new list (skip if custom)
   useEffect(() => {
