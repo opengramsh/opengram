@@ -1,4 +1,5 @@
-import { execFileSync, execSync } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { randomBytes } from "node:crypto";
@@ -280,9 +281,9 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
       const pluginSpinner = p.spinner();
       pluginSpinner.start("Installing @opengramsh/openclaw-plugin...");
       try {
-        execSync("npm install -g @opengramsh/openclaw-plugin", {
-          stdio: ["ignore", "pipe", "ignore"],
-          timeout: 120000,
+        const execAsync = promisify(exec);
+        await execAsync("npm install -g @opengramsh/openclaw-plugin", {
+          timeout: 600000,
         });
         pluginSpinner.stop("Plugin installed.");
       } catch {
