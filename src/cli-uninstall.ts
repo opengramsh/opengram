@@ -649,14 +649,14 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
 
     if (!p.isCancel(restart) && restart) {
       try {
-        execSync("openclaw service restart", { stdio: "inherit" });
+        execSync("openclaw gateway restart", { stdio: "inherit" });
       } catch {
         p.log.warn(
-          "Could not restart the OpenClaw gateway. Run `openclaw service restart` manually.",
+          "Could not restart the OpenClaw gateway. Run `openclaw gateway restart` manually.",
         );
       }
     } else {
-      p.log.info("Run `openclaw service restart` to apply the config changes.");
+      p.log.info("Run `openclaw gateway restart` to apply the config changes.");
     }
   }
 
