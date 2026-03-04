@@ -6,6 +6,12 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 
 import * as p from "@clack/prompts";
+import pc from "picocolors";
+
+/** Wrap text in an OSC 8 hyperlink so it's clickable in supported terminals. */
+function termLink(text: string, url: string = text): string {
+  return `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
+}
 
 type WizardOpts = {
   pkgRoot: string;
@@ -109,7 +115,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   }
 
   const portNum = Number(port);
-  p.log.info(`Your Opengram instance will run on http://localhost:${portNum}`);
+  p.log.info(`Your Opengram instance will run on ${termLink(`http://localhost:${portNum}`)}`);
 
   // 2. Detect Tailscale (used in summary)
   const tsHostname = getTailscaleHostname();
@@ -435,6 +441,12 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
 
   p.note(summaryLines.join("\n"), "Summary");
 
+  const localUrl = `http://localhost:${portNum}`;
+  console.log(
+    `  ${pc.green("➜")}  ${pc.bold("Local:")}   ${termLink(pc.bold(pc.cyan(localUrl)), localUrl)}`,
+  );
+  console.log();
+
   // Network guidance
   if (tsHostname) {
     p.note(
@@ -462,10 +474,10 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   }
 
   if (serviceStarted) {
-    p.outro("Setup complete! Opengram is running.");
+    p.outro(`Setup complete! Opengram is running at ${termLink(pc.bold(pc.cyan(`http://localhost:${portNum}`)), `http://localhost:${portNum}`)}`);
     return { startServer: false };
   }
 
-  p.outro("Setup complete! Starting Opengram...");
+  p.outro(`Setup complete! Starting Opengram at ${termLink(pc.bold(pc.cyan(`http://localhost:${portNum}`)), `http://localhost:${portNum}`)}`);
   return { startServer: true };
 }
