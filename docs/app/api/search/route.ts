@@ -15,7 +15,10 @@ export const { GET } = createSearchAPI('advanced', {
       description: page.data.description,
       url: page.url,
       id: page.url,
-      structuredData: page.data.structuredData,
+      structuredData: page.data.structuredData ?? {
+        headings: [],
+        contents: [],
+      },
     })),
   ],
 });
