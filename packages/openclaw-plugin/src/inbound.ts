@@ -251,7 +251,7 @@ async function checkDmPolicy(
   let effectiveAllowlist: string[];
   try {
     const core = getOpenGramRuntime();
-    const storeEntries = await core.channel.pairing.readAllowFromStore("opengram");
+    const storeEntries = await core.channel.pairing.readAllowFromStore({ channel: "opengram", accountId: account.accountId });
     effectiveAllowlist = [...storeEntries, ...account.config.allowFrom];
   } catch {
     // Runtime not available (e.g. test context with injected dispatch) — config only.
@@ -268,6 +268,7 @@ async function checkDmPolicy(
       const { code } = await core.channel.pairing.upsertPairingRequest({
         channel: "opengram",
         id: senderId,
+        accountId: account.accountId,
       });
       const pairingReply = core.channel.pairing.buildPairingReply({
         channel: "opengram",
