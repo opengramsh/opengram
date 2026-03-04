@@ -41,10 +41,11 @@ Install with a single command:
 curl -fsSL https://opengram.sh/install | sh
 ```
 
-Or install with npm:
+Or install with npm and run the interactive setup wizard:
 
 ```bash
 npm install -g @opengramsh/opengram
+opengram init
 ```
 
 Or run with Docker:
@@ -53,38 +54,26 @@ Or run with Docker:
 docker run -d -p 3000:3000 -v opengram_data:/opt/opengram/data ghcr.io/opengramsh/opengram:latest
 ```
 
-Then run the interactive setup wizard (not needed for Docker):
-
-```bash
-opengram init
-```
-
 See the [full deployment guide](https://opengram.sh/docs) for Tailscale TLS, reverse proxy, and production configuration.
 
 ## 🦞 OpenClaw Integration
 
-Opengram ships an [OpenClaw](https://openclaw.ai) plugin so your openclaw agents can read, write, and search Opengram chats out of the box. The `opengram init` wizard auto-detects OpenClaw and installs the plugin for you.
+Opengram ships an [OpenClaw](https://openclaw.ai) plugin so your OpenClaw agents can read, write, and search Opengram chats out of the box. If you're installing Opengram on the same machine as OpenClaw, `opengram init` will auto-detect it and install the plugin for you.
 
-If you want to add the plugin separately:
+To add the plugin separately, use the install script:
 
 ```bash
 curl -fsSL https://opengram.sh/openclaw/install | sh
 ```
 
-Or manually:
+Or install manually with npm:
 
 ```bash
 npm install -g @opengramsh/openclaw-plugin
 opengram-openclaw setup
 ```
 
-The plugin provides to the openclaw agents a SKILL file and the following tools:
-
-| Tool | Description |
-| --- | --- |
-| `opengram_chat` | Create chats and send messages |
-| `opengram_media` | Upload and attach files, images, and voice notes |
-| `opengram_search` | Search across chats, messages, and tags |
+See the [OpenClaw plugin docs](https://opengram.sh/docs/openclaw-plugin) for configuration and usage.
 
 Opengram is runtime-agnostic -- any framework that can make HTTP calls works. OpenClaw is just the batteries-included option.
 
