@@ -367,24 +367,60 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
     }
   }
 
-  // 6. Generate config
-  const config: Record<string, unknown> = {};
+  // 6. Generate config — merge wizard-managed keys into existing config
+  let config: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    try {
+      config = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    } catch {
+      // Corrupted file — start fresh
+    }
+  }
 
-  // Only write non-default values
-  const serverConfig: Record<string, unknown> = {};
-  if (portNum !== 3000) serverConfig.port = portNum;
-  if (!publicUrl.startsWith('http://localhost:')) serverConfig.publicBaseUrl = publicUrl;
-  if (Object.keys(serverConfig).length > 0) config.server = serverConfig;
+  // Server settings — merge into existing server block
+  const existingServer = (typeof config.server === 'object' && config.server !== null
+    ? config.server : {}) as Record<string, unknown>;
+  if (portNum !== 3000) {
+    existingServer.port = portNum;
+  } else {
+    delete existingServer.port;
+  }
+  if (!publicUrl.startsWith('http://localhost:')) {
+    existingServer.publicBaseUrl = publicUrl;
+  } else {
+    delete existingServer.publicBaseUrl;
+  }
+  if (Object.keys(existingServer).length > 0) {
+    config.server = existingServer;
+  } else {
+    delete config.server;
+  }
 
+  // Security settings
   if (instanceSecretEnabled) {
     config.security = {
+      ...((typeof config.security === 'object' && config.security !== null
+        ? config.security : {}) as Record<string, unknown>),
       instanceSecretEnabled: true,
       instanceSecret,
     };
+  } else {
+    // User chose "no secret" — update but preserve other security keys
+    const existingSecurity = (typeof config.security === 'object' && config.security !== null
+      ? config.security : {}) as Record<string, unknown>;
+    delete existingSecurity.instanceSecretEnabled;
+    delete existingSecurity.instanceSecret;
+    if (Object.keys(existingSecurity).length > 0) {
+      config.security = existingSecurity;
+    } else {
+      delete config.security;
+    }
   }
 
   if (autoRenameConfig) {
     config.autoRename = autoRenameConfig;
+  } else {
+    delete config.autoRename;
   }
 
   // Write config
