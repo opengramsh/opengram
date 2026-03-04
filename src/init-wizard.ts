@@ -89,8 +89,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<void> {
   const defaultPort = await findAvailablePort([3000, 3001, 3333]);
   const port = await p.text({
     message: "Server port",
-    placeholder: String(defaultPort),
-    defaultValue: String(defaultPort),
+    initialValue: String(defaultPort),
     validate: (val) => {
       const n = Number(val);
       if (!Number.isInteger(n) || n < 1 || n > 65535) {

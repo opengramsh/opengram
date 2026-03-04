@@ -4,10 +4,12 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// Resolve package root from CLI location: dist/cli/cli.js -> package root
+// Resolve package root: dist/cli/cli.js → ../../, src/cli.ts → ../
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const pkgRoot = path.resolve(__dirname, '..', '..');
+const pkgRoot = existsSync(path.join(__dirname, '..', 'package.json'))
+  ? path.resolve(__dirname, '..')      // running from src/
+  : path.resolve(__dirname, '..', '..'); // running from dist/cli/
 
 function getVersion(): string {
   try {
