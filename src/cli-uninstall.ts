@@ -101,9 +101,9 @@ function isServiceInstalled(): boolean {
   return existsSync(UNIT_PATH);
 }
 
-function isNpmPackageInstalled(name: string): boolean {
+function isGlobalPackageInstalled(pm: string, name: string): boolean {
   try {
-    execSync(`npm list -g --depth=0 ${name}`, {
+    execSync(`${pm} list -g --depth=0 ${name}`, {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
     return true;
@@ -330,17 +330,18 @@ function detectTailscaleServe(serverPort: number): number | null {
     const web = status.Web as Record<string, any> | undefined;
     if (!web) return null;
 
-    const target = `127.0.0.1:${serverPort}`;
-    for (const [portKey, handlers] of Object.entries(web)) {
-      if (typeof handlers !== 'object' || handlers === null) continue;
-      for (const handler of Object.values(handlers as Record<string, any>)) {
+    const target = `http://127.0.0.1:${serverPort}`;
+    for (const [portKey, entry] of Object.entries(web)) {
+      const pathHandlers = (entry as any)?.Handlers;
+      if (typeof pathHandlers !== 'object' || pathHandlers === null) continue;
+      for (const handler of Object.values(pathHandlers as Record<string, any>)) {
         if (
           typeof handler === 'object' &&
           handler !== null &&
           typeof (handler as any).Proxy === 'string' &&
           (handler as any).Proxy.includes(target)
         ) {
-          // Extract port number from key like "https:8443"
+          // Extract port number from key like "hostname.ts.net:443"
           const match = portKey.match(/:(\d+)$/);
           return match ? parseInt(match[1], 10) : null;
         }
@@ -354,7 +355,7 @@ function detectTailscaleServe(serverPort: number): number | null {
 
 // ── Detection ─────────────────────────────────────────────────────────
 
-function detect(home: string): DetectedState {
+function detect(home: string, pm: string): DetectedState {
   const homeExists = existsSync(home);
   const databaseExists = existsSync(path.join(home, 'data', 'opengram.db'));
   const uploadsDir = path.join(home, 'data', 'uploads');
@@ -377,7 +378,8 @@ function detect(home: string): DetectedState {
     logsExist: existsSync(path.join(home, 'logs')),
     envVarFiles: detectEnvVarFiles(),
     tailscaleServePort: detectTailscaleServe(serverPort),
-    openclawPluginInstalled: isNpmPackageInstalled(
+    openclawPluginInstalled: isGlobalPackageInstalled(
+      pm,
       '@opengramsh/openclaw-plugin',
     ),
   };
@@ -388,7 +390,7 @@ function detect(home: string): DetectedState {
 export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
   const home = opts.resolveHome();
   const pm = opts.detectPkgManager();
-  const state = detect(home);
+  const state = detect(home, pm);
 
   p.intro('OpenGram Uninstall');
 
