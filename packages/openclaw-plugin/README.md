@@ -11,21 +11,36 @@ This plugin connects OpenClaw agents to OpenGram, enabling bidirectional messagi
 
 ## Installation
 
+### Option A: Install script (recommended)
+
 ```bash
-npm install @opengramsh/openclaw-plugin
+curl -fsSL https://opengram.sh/openclaw/install | sh
 ```
 
-Add the plugin to your OpenClaw configuration (openclaw.json):
+The script installs the plugin and runs the interactive setup wizard.
 
-```json
-{
-  "plugins": ["@opengramsh/openclaw-plugin"],
-}
+### Option B: npm install
+
+```bash
+npm install -g @opengramsh/openclaw-plugin
+opengram-openclaw setup
 ```
 
-## Quick Start
+The `opengram-openclaw setup` command patches your `openclaw.json` automatically (adding the plugin to `plugins.load.paths` and `plugins.allow`), then walks you through the connection setup.
 
-The fastest way to get started is the interactive setup wizard:
+### Option C: via `opengram init`
+
+If the `openclaw` CLI is on your system, the `opengram init` wizard detects it and offers to install the plugin with pre-filled connection settings.
+
+## Reconfiguring
+
+After initial setup, you can reconfigure at any time:
+
+```bash
+opengram-openclaw setup
+```
+
+Or, if the plugin is already loaded in OpenClaw:
 
 ```bash
 openclaw opengram setup
@@ -38,28 +53,34 @@ The wizard will:
 4. Auto-approve `user:primary` for pairing so messages flow with zero friction.
 5. Optionally restart the gateway to apply changes.
 
-### Manual setup
+## Manual configuration
 
-1. **Install** the plugin in your OpenClaw project.
-2. **Configure** the channel in openclaw.json:
+If you prefer to skip the wizard, configure `openclaw.json` directly:
+
 ```json
 {
+  "plugins": {
+    "allow": ["@opengramsh/openclaw-plugin"],
+    "load": {
+      "paths": ["/path/to/node_modules/@opengramsh/openclaw-plugin"]
+    },
+    "entries": {
+      "@opengramsh/openclaw-plugin": { "enabled": true }
+    }
+  },
   "channels": {
     "opengram": {
-      "baseUrl": "http://localhost:3000", //replace with your opengram instance URL
-      "agents": ["my-agent"], //replace with the IDs of agents you want to talk to in opengram
+      "baseUrl": "http://localhost:3000",
+      "agents": ["my-agent"],
       "dmPolicy": "pairing",
-      "allowFrom": [
-        "user:primary"
-      ],
-      "instanceSecret": "your_opengram_instance_secret" //replace with your secret
+      "allowFrom": ["user:primary"],
+      "instanceSecret": "your_opengram_instance_secret"
     }
   }
 }
 ```
-3. **Start OpenClaw** — the plugin connects via SSE and begins listening for user messages.
 
-When a user sends a message in OpenGram, the plugin dispatches it to the appropriate OpenClaw agent. Agent replies are streamed back to OpenGram in real-time.
+Start OpenClaw and the plugin connects via SSE, listening for user messages automatically.
 
 ## Configuration Reference
 
@@ -88,7 +109,7 @@ All configuration lives under `channels.opengram` in your OpenClaw config file.
 - **Outbound** (`outbound.ts`) — Sends agent text and media messages to OpenGram.
 - **Streaming** (`streaming.ts`) — Delta-based streaming. Tracks per-dispatch state, sends only new text as chunks, and finalizes or cancels streams.
 - **Chat Manager** (`chat-manager.ts`) — Manages chat-to-agent mappings, active chat tracking, and client state.
-- **CLI** (`cli/`) — Interactive setup wizard (`openclaw opengram setup`) for guided configuration, connection testing, and agent linking.
+- **CLI** (`cli/`) — Interactive setup wizard available as `opengram-openclaw setup` (standalone) or `openclaw opengram setup` (when plugin is loaded).
 - **Agent Tools** — 3 channel-scoped tools available to agents:
   - `opengram_chat` — Create, update, and list chats
   - `opengram_media` — Upload media files to a chat

@@ -25,43 +25,60 @@ The plugin registers Opengram as a communication channel for your OpenClaw agent
 | Threads           | No        |
 | Reactions         | No        |
 
-## Setup via init wizard
+## Installation
 
-If the `openclaw` CLI is available on your system, the Opengram init wizard detects it automatically during `opengram init`. When detected, the wizard offers to configure the OpenClaw plugin and pre-fills the connection settings:
+### Option A: Install script (recommended)
 
-- **Base URL** -- the URL of your Opengram instance.
-- **Instance secret** -- the secret used to authenticate API requests.
+```bash
+curl -fsSL https://opengram.sh/openclaw/install | sh
+```
 
-This writes the necessary configuration to your OpenClaw project so the plugin can connect to Opengram immediately.
+The script installs the plugin and runs the interactive setup wizard, which configures everything for you.
 
-After initial setup, you can reconfigure the plugin at any time with the interactive setup wizard:
+### Option B: npm install
+
+```bash
+npm install -g @opengramsh/openclaw-plugin
+opengram-openclaw setup
+```
+
+The `opengram-openclaw setup` command patches your `openclaw.json` automatically (adding the plugin to `plugins.load.paths` and `plugins.allow`), then walks you through the connection setup.
+
+### Option C: via `opengram init`
+
+If the `openclaw` CLI is available on your system, the Opengram init wizard detects it automatically during `opengram init`. When detected, the wizard offers to install the plugin and run the setup wizard with pre-filled connection settings.
+
+### Reconfiguring
+
+After initial setup, you can reconfigure the plugin at any time:
+
+```bash
+opengram-openclaw setup
+```
+
+Or, if the plugin is already loaded in OpenClaw:
 
 ```bash
 openclaw opengram setup
 ```
 
-The wizard tests the connection, configures the instance secret, lets you select which agents to link, and optionally restarts the gateway to apply changes.
+Both commands run the same interactive wizard -- they test the connection, configure the instance secret, let you select which agents to link, and optionally restart the gateway to apply changes.
 
-## Manual installation
+## Manual configuration
 
-If you prefer to set up the plugin manually, install it from npm:
-
-```bash
-npm install @opengramsh/openclaw-plugin
-```
-
-Then register the plugin in your `openclaw.json`:
+If you prefer to skip the wizard entirely, add the plugin to your `openclaw.json` manually:
 
 ```json
 {
-  "plugins": ["@opengramsh/openclaw-plugin"]
-}
-```
-
-And configure the channel:
-
-```json
-{
+  "plugins": {
+    "allow": ["@opengramsh/openclaw-plugin"],
+    "load": {
+      "paths": ["/path/to/node_modules/@opengramsh/openclaw-plugin"]
+    },
+    "entries": {
+      "@opengramsh/openclaw-plugin": { "enabled": true }
+    }
+  },
   "channels": {
     "opengram": {
       "baseUrl": "http://localhost:3000",

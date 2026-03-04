@@ -291,18 +291,22 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
         );
       }
 
-      // Chain into the OpenClaw setup wizard with pre-filled values
+      // Chain into the standalone setup wizard with pre-filled values.
+      // Uses `opengram-openclaw` (the plugin's own bin) rather than
+      // `openclaw opengram` — this avoids the chicken-and-egg problem
+      // where the plugin must already be loaded in OpenClaw for the
+      // subcommand to exist.
       try {
-        const setupArgs = ["opengram", "setup", "--base-url", publicUrl];
+        const setupArgs = ["setup", "--base-url", publicUrl];
         if (instanceSecretEnabled) {
           setupArgs.push("--instance-secret", instanceSecret);
         } else {
           setupArgs.push("--no-instance-secret");
         }
-        execFileSync("openclaw", setupArgs, { stdio: "inherit" });
+        execFileSync("opengram-openclaw", setupArgs, { stdio: "inherit" });
       } catch {
         p.note(
-          "OpenClaw setup did not complete.\nYou can run `openclaw opengram setup` later.",
+          "OpenClaw setup did not complete.\nYou can run `opengram-openclaw setup` later.",
           "Note",
         );
       }

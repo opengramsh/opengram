@@ -19,7 +19,7 @@ The wizard prompts for:
 - **Base URL** -- the public URL used for push notifications and webhooks
 - **Instance secret** -- generates a secure `og_`-prefixed token for API authentication
 - **Auto-rename** -- configure automatic chat title generation with an LLM provider
-- **OpenClaw plugin** -- optionally set up the OpenClaw agent plugin
+- **OpenClaw plugin** -- if the `openclaw` CLI is detected, optionally install and configure the OpenClaw agent plugin via `opengram-openclaw setup`
 - **background service** -- optionally install a system service for automatic startup (Linux systemd and macOS launchd)
 
 Configuration is written to `~/.opengram/opengram.config.json` (or `$OPENGRAM_HOME/opengram.config.json`). The wizard auto-detects the Tailscale hostname (if available) and suggests it as the default base URL.

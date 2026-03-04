@@ -88,14 +88,20 @@ Open your browser and navigate to `http://localhost:3000` (or the port you chose
 
 ## 5. 🦞 Connect your OpenClaw agents (optional)
 
-If you use [Openclaw](https://openclaw.ai), you can connect your agents to Opengram with our plugin. If the `openclaw` CLI was detected during `opengram init`, this is already configured -- otherwise, install the plugin manually:
+If you use [OpenClaw](https://openclaw.ai), you can connect your agents to Opengram with our plugin. If the `openclaw` CLI was detected during `opengram init`, this is already configured -- otherwise, install the plugin:
+
+```bash
+curl -fsSL https://opengram.sh/openclaw/install | sh
+```
+
+Or manually:
 
 ```bash
 npm install -g @opengramsh/openclaw-plugin
-openclaw opengram setup
+opengram-openclaw setup
 ```
 
-The setup command will ask for your Opengram base URL and instance secret, then configure OpenClaw to send and receive messages through the Opengram chat UI automatically.
+The setup wizard will ask for your Opengram base URL and instance secret, then configure OpenClaw to send and receive messages through the Opengram chat UI automatically.
 
 See [OpenClaw Plugin](/docs/agents/openclaw-plugin) for more details.
 

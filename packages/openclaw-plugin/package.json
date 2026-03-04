@@ -22,6 +22,9 @@
     "pwa"
   ],
   "type": "module",
+  "bin": {
+    "opengram-openclaw": "./dist/bin/opengram-openclaw.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -52,6 +55,7 @@
     "openclaw": ">=2026.1.0"
   },
   "dependencies": {
+    "@clack/prompts": "^0.9.1",
     "@sinclair/typebox": "^0.34.41",
     "eventsource": "^3.0.7",
     "mime-types": "^2.1.35",
@@ -69,7 +73,9 @@
       "docsLabel": "opengram",
       "blurb": "Mobile-first PWA for AI agent chat + task management.",
       "order": 20,
-      "aliases": ["og"]
+      "aliases": [
+        "og"
+      ]
     },
     "install": {
       "npmSpec": "@opengramsh/openclaw-plugin",

@@ -65,10 +65,17 @@ See the [full deployment guide](https://opengram.sh/docs) for Tailscale TLS, rev
 
 Opengram ships an [OpenClaw](https://openclaw.ai) plugin so your openclaw agents can read, write, and search Opengram chats out of the box. The `opengram init` wizard auto-detects OpenClaw and installs the plugin for you.
 
-If you want to add the plugin manually:
+If you want to add the plugin separately:
 
 ```bash
-npm install @opengramsh/openclaw-plugin
+curl -fsSL https://opengram.sh/openclaw/install | sh
+```
+
+Or manually:
+
+```bash
+npm install -g @opengramsh/openclaw-plugin
+opengram-openclaw setup
 ```
 
 The plugin provides to the openclaw agents a SKILL file and the following tools:
