@@ -97,4 +97,4 @@ fi
 
 printf "${BOLD}Running setup wizard...${RESET}\n"
 echo ""
-opengram-openclaw setup
+opengram-openclaw setup < /dev/tty

@@ -89,4 +89,4 @@ fi
 
 printf "${BOLD}Running setup wizard...${RESET}\n"
 echo ""
-opengram init
+opengram init < /dev/tty
