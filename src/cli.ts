@@ -36,6 +36,7 @@ Commands:
   stop                  Stop the background service
   restart               Restart the background service
   upgrade               Upgrade to the latest version
+  uninstall             Interactive uninstall wizard
   service <action>      Manage background service
     install             Install, enable, and start the service
     uninstall           Stop, disable, and remove the service
@@ -192,6 +193,12 @@ async function main() {
     case 'upgrade':
       await cmdUpgrade();
       break;
+
+    case 'uninstall': {
+      const { runUninstallWizard } = await import('./cli-uninstall.js');
+      await runUninstallWizard({ resolveHome, detectPkgManager });
+      break;
+    }
 
     case 'service':
       await cmdService(args[1]);
