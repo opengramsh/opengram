@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import {
   existsSync,
   readFileSync,
@@ -37,8 +37,14 @@ type UninstallItem =
   | 'uploads'
   | 'config'
   | 'logs'
+  | 'env-vars'
   | 'openclaw-plugin'
   | 'self';
+
+interface EnvVarMatch {
+  filePath: string;
+  lines: { lineNumber: number; content: string }[];
+}
 
 interface DetectedState {
   home: string;
@@ -52,6 +58,8 @@ interface DetectedState {
   uploadsSize: string;
   configExists: boolean;
   logsExist: boolean;
+  envVarFiles: EnvVarMatch[];
+  tailscaleServePort: number | null;
   openclawPluginInstalled: boolean;
 }
 
@@ -234,6 +242,116 @@ function cleanOpenClawConfig(): void {
   }
 }
 
+// ── Env var detection ─────────────────────────────────────────────────
+
+const SHELL_CONFIG_FILES = [
+  '.bashrc',
+  '.zshrc',
+  '.profile',
+  '.bash_profile',
+  '.zprofile',
+  '.config/fish/config.fish',
+];
+
+function detectEnvVarFiles(): EnvVarMatch[] {
+  const home = homedir();
+  const matches: EnvVarMatch[] = [];
+  const re = /^[^#]*\bOPENGRAM_\w+/;
+
+  for (const rel of SHELL_CONFIG_FILES) {
+    const filePath = path.join(home, rel);
+    if (!existsSync(filePath)) continue;
+
+    let content: string;
+    try {
+      content = readFileSync(filePath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const matchedLines: { lineNumber: number; content: string }[] = [];
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i])) {
+        matchedLines.push({ lineNumber: i + 1, content: lines[i] });
+      }
+    }
+
+    if (matchedLines.length > 0) {
+      matches.push({ filePath, lines: matchedLines });
+    }
+  }
+
+  return matches;
+}
+
+function commentOutEnvVarLines(matches: EnvVarMatch[]): void {
+  for (const { filePath, lines: matchedLines } of matches) {
+    try {
+      const content = readFileSync(filePath, 'utf8');
+      const lines = content.split('\n');
+      const lineNumbers = new Set(matchedLines.map((l) => l.lineNumber));
+
+      for (let i = 0; i < lines.length; i++) {
+        if (lineNumbers.has(i + 1)) {
+          lines[i] = `# [opengram uninstall] ${lines[i]}`;
+        }
+      }
+
+      writeFileSync(filePath, lines.join('\n'), 'utf8');
+    } catch {
+      p.log.warn(`Could not update ${filePath}. You may need to edit it manually.`);
+    }
+  }
+}
+
+// ── Tailscale detection ───────────────────────────────────────────────
+
+function readServerPort(home: string): number {
+  try {
+    const configPath = path.join(home, 'opengram.config.json');
+    const raw = readFileSync(configPath, 'utf8');
+    const cfg = JSON.parse(raw) as Record<string, any>;
+    if (typeof cfg.server?.port === 'number') return cfg.server.port;
+  } catch {
+    // fall through to default
+  }
+  return 3000;
+}
+
+function detectTailscaleServe(serverPort: number): number | null {
+  try {
+    const output = execFileSync('tailscale', ['serve', 'status', '--json'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const status = JSON.parse(output) as Record<string, any>;
+    const web = status.Web as Record<string, any> | undefined;
+    if (!web) return null;
+
+    const target = `127.0.0.1:${serverPort}`;
+    for (const [portKey, handlers] of Object.entries(web)) {
+      if (typeof handlers !== 'object' || handlers === null) continue;
+      for (const handler of Object.values(handlers as Record<string, any>)) {
+        if (
+          typeof handler === 'object' &&
+          handler !== null &&
+          typeof (handler as any).Proxy === 'string' &&
+          (handler as any).Proxy.includes(target)
+        ) {
+          // Extract port number from key like "https:8443"
+          const match = portKey.match(/:(\d+)$/);
+          return match ? parseInt(match[1], 10) : null;
+        }
+      }
+    }
+  } catch {
+    // tailscale not installed or serve not configured — ignore
+  }
+  return null;
+}
+
 // ── Detection ─────────────────────────────────────────────────────────
 
 function detect(home: string): DetectedState {
@@ -242,6 +360,8 @@ function detect(home: string): DetectedState {
   const uploadsDir = path.join(home, 'data', 'uploads');
   const uploadsExist = existsSync(uploadsDir);
   const uploads = uploadsExist ? dirStats(uploadsDir) : { count: 0, size: 0 };
+
+  const serverPort = readServerPort(home);
 
   return {
     home,
@@ -255,6 +375,8 @@ function detect(home: string): DetectedState {
     uploadsSize: formatBytes(uploads.size),
     configExists: existsSync(path.join(home, 'opengram.config.json')),
     logsExist: existsSync(path.join(home, 'logs')),
+    envVarFiles: detectEnvVarFiles(),
+    tailscaleServePort: detectTailscaleServe(serverPort),
     openclawPluginInstalled: isNpmPackageInstalled(
       '@opengramsh/openclaw-plugin',
     ),
@@ -309,6 +431,15 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
     });
   }
 
+  if (state.envVarFiles.length > 0) {
+    const totalLines = state.envVarFiles.reduce((sum, m) => sum + m.lines.length, 0);
+    const fileNames = state.envVarFiles.map((m) => path.basename(m.filePath)).join(', ');
+    options.push({
+      value: 'env-vars',
+      label: `Environment variables (${totalLines} line${totalLines === 1 ? '' : 's'} in ${fileNames})`,
+    });
+  }
+
   if (state.openclawPluginInstalled) {
     options.push({
       value: 'openclaw-plugin',
@@ -350,6 +481,7 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
     summaryLines.push(`Uploaded files (${state.uploadsCount} files, ${state.uploadsSize})`);
   if (sel.has('config')) summaryLines.push('Configuration');
   if (sel.has('logs')) summaryLines.push('Logs');
+  if (sel.has('env-vars')) summaryLines.push('Comment out OPENGRAM_* env vars from shell configs');
   if (sel.has('openclaw-plugin'))
     summaryLines.push('Uninstall @opengramsh/openclaw-plugin and remove OpenClaw config');
   if (sel.has('self')) summaryLines.push('Uninstall @opengramsh/opengram');
@@ -422,6 +554,14 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
       },
     },
     {
+      title: 'Commenting out OPENGRAM_* env vars',
+      enabled: sel.has('env-vars'),
+      task: () => {
+        commentOutEnvVarLines(state.envVarFiles);
+        return 'Environment variables commented out';
+      },
+    },
+    {
       title: `Removing ${home}`,
       enabled: removeHome,
       task: () => {
@@ -452,6 +592,13 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
     },
   ]);
 
+  // Hint to reload shell config after env var removal
+  if (sel.has('env-vars')) {
+    const shellFiles = state.envVarFiles.map((m) => path.basename(m.filePath));
+    const sourceCmd = shellFiles.map((f) => `source ~/${f}`).join(' && ');
+    p.log.info(`Reload your shell config to apply changes:\n  ${sourceCmd}`);
+  }
+
   // Offer to restart the OpenClaw gateway so it picks up config changes
   if (sel.has('openclaw-plugin') && isOpenClawOnPath()) {
     const restart = await p.confirm({
@@ -468,6 +615,15 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
     } else {
       p.log.info('Run `openclaw service restart` to apply the config changes.');
     }
+  }
+
+  // Warn about Tailscale still serving traffic to Opengram
+  if (state.tailscaleServePort !== null) {
+    p.log.warn(
+      `Tailscale is still serving traffic to Opengram on HTTPS port ${state.tailscaleServePort}.\n` +
+        `  To stop it, run:\n` +
+        `  sudo tailscale serve --https=${state.tailscaleServePort} off`,
+    );
   }
 
   p.outro('Opengram has been uninstalled. Goodbye!');
