@@ -5,6 +5,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const {
+  clearActiveChatHintForSwMock,
   disablePushNotificationsMock,
   enablePushNotificationsMock,
   fetchPushConfigMock,
@@ -13,6 +14,7 @@ const {
   isPushSupportedMock,
   sendPushTestNotificationMock,
 } = vi.hoisted(() => ({
+  clearActiveChatHintForSwMock: vi.fn(),
   disablePushNotificationsMock: vi.fn(),
   enablePushNotificationsMock: vi.fn(),
   fetchPushConfigMock: vi.fn(),
@@ -23,6 +25,7 @@ const {
 }));
 
 vi.mock("@/src/lib/push-client", () => ({
+  clearActiveChatHintForSw: clearActiveChatHintForSwMock,
   disablePushNotifications: disablePushNotificationsMock,
   enablePushNotifications: enablePushNotificationsMock,
   fetchPushConfig: fetchPushConfigMock,
@@ -44,6 +47,7 @@ import SettingsPage from "@/src/client/pages/settings";
 
 describe("settings push notifications", () => {
   beforeEach(() => {
+    clearActiveChatHintForSwMock.mockReset();
     disablePushNotificationsMock.mockReset();
     enablePushNotificationsMock.mockReset();
     fetchPushConfigMock.mockReset();
@@ -53,6 +57,7 @@ describe("settings push notifications", () => {
     sendPushTestNotificationMock.mockReset();
 
     isPushSupportedMock.mockReturnValue(true);
+    clearActiveChatHintForSwMock.mockResolvedValue(undefined);
     getPushPermissionStateMock.mockReturnValue("granted");
     getCurrentPushSubscriptionMock.mockResolvedValue({
       endpoint: "https://example/sub",
@@ -65,7 +70,11 @@ describe("settings push notifications", () => {
       endpoint: "https://example/sub",
     });
     disablePushNotificationsMock.mockResolvedValue(true);
-    sendPushTestNotificationMock.mockResolvedValue(undefined);
+    sendPushTestNotificationMock.mockResolvedValue({
+      sent: 1,
+      failed: 0,
+      removed: 0,
+    });
 
     vi.stubGlobal(
       "fetch",
@@ -111,7 +120,9 @@ describe("settings push notifications", () => {
       expect(sendPushTestNotificationMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(screen.getByText("Test notification sent.")).toBeTruthy();
+    expect(
+      screen.getByText("Test notification sent to 1 device(s)."),
+    ).toBeTruthy();
   });
 
   it("enables and disables notifications through push client actions", async () => {

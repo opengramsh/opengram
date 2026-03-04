@@ -84,6 +84,21 @@ async function clearBearerTokenForSw(): Promise<void> {
   }
 }
 
+export async function clearActiveChatHintForSw(): Promise<void> {
+  try {
+    const db = await openIdb();
+    const tx = db.transaction('ui-state', 'readwrite');
+    tx.objectStore('ui-state').delete('activeChatId');
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    // Non-fatal.
+  }
+}
+
 export function getPushPermissionState(): PushPermissionState {
   if (!isPushSupported()) {
     return 'unsupported';
@@ -211,7 +226,27 @@ export async function disablePushNotifications() {
 
 export type PushTestResult = { sent: number; failed: number; removed: number };
 
+async function resyncCurrentSubscriptionBeforeTest() {
+  if (!isPushSupported() || getPushPermissionState() !== 'granted') {
+    return;
+  }
+
+  try {
+    const config = await fetchPushConfig();
+    if (!config.enabled || !config.vapidPublicKey) {
+      return;
+    }
+
+    await enablePushNotifications(config.vapidPublicKey);
+  } catch (error) {
+    // Best effort only: test send can still proceed even if re-sync fails.
+    console.warn('[push] Failed to re-sync subscription before test notification.', error);
+  }
+}
+
 export async function sendPushTestNotification(): Promise<PushTestResult> {
+  await resyncCurrentSubscriptionBeforeTest();
+
   const response = await apiFetch('/api/v1/push/test', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

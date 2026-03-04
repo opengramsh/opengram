@@ -5,11 +5,13 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router';
 
 const {
+  clearActiveChatHintForSwMock,
   enablePushNotificationsMock,
   fetchPushConfigMock,
   getPushPermissionStateMock,
   registerPushServiceWorkerMock,
 } = vi.hoisted(() => ({
+  clearActiveChatHintForSwMock: vi.fn(),
   enablePushNotificationsMock: vi.fn(),
   fetchPushConfigMock: vi.fn(),
   getPushPermissionStateMock: vi.fn(),
@@ -17,6 +19,7 @@ const {
 }));
 
 vi.mock('@/src/lib/push-client', () => ({
+  clearActiveChatHintForSw: clearActiveChatHintForSwMock,
   enablePushNotifications: enablePushNotificationsMock,
   fetchPushConfig: fetchPushConfigMock,
   getPushPermissionState: getPushPermissionStateMock,
@@ -32,10 +35,12 @@ function LocationProbe() {
 
 describe('PushBootstrap', () => {
   beforeEach(() => {
+    clearActiveChatHintForSwMock.mockReset();
     enablePushNotificationsMock.mockReset();
     fetchPushConfigMock.mockReset();
     getPushPermissionStateMock.mockReset();
     registerPushServiceWorkerMock.mockReset();
+    clearActiveChatHintForSwMock.mockResolvedValue(undefined);
     fetchPushConfigMock.mockResolvedValue({ enabled: false, vapidPublicKey: '' });
     getPushPermissionStateMock.mockReturnValue('default');
     registerPushServiceWorkerMock.mockResolvedValue(null);

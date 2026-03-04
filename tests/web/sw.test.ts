@@ -188,6 +188,47 @@ describe('service worker push suppression via IndexedDB', () => {
     expect(showNotification).toHaveBeenCalledTimes(1);
   });
 
+  it('should always show explicit test notifications even when active chat matches', async () => {
+    const listeners = new Map<string, (event: PushEvent) => void>();
+    const showNotification = vi.fn(async () => undefined);
+
+    const selfObject = {
+      addEventListener: (type: string, listener: (event: PushEvent) => void) => {
+        listeners.set(type, listener);
+      },
+      location: { origin: 'https://app.example' },
+      clients: { matchAll: vi.fn(async () => []) },
+      registration: {
+        showNotification,
+        pushManager: { subscribe: vi.fn() },
+      },
+      indexedDB: createMockIndexedDB('chat-42'),
+    };
+
+    loadServiceWorker(selfObject);
+    const handler = listeners.get('push');
+    expect(handler).toBeTypeOf('function');
+
+    const payload = {
+      title: 'Push test',
+      body: 'Test notification',
+      data: { chatId: 'chat-42', type: 'test', url: '/settings' },
+    };
+
+    let pending: Promise<unknown> | null = null;
+    handler?.({
+      data: { text: () => JSON.stringify(payload) },
+      waitUntil: (promise) => { pending = promise; },
+    });
+
+    expect(pending).not.toBeNull();
+    if (pending) {
+      await pending;
+    }
+
+    expect(showNotification).toHaveBeenCalledTimes(1);
+  });
+
   it('should skip showNotification on iOS PWA (IndexedDB works even when client.focused is undefined)', async () => {
     const listeners = new Map<string, (event: PushEvent) => void>();
     const showNotification = vi.fn(async () => undefined);

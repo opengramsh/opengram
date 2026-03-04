@@ -2,7 +2,13 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 
-import { enablePushNotifications, fetchPushConfig, getPushPermissionState, registerPushServiceWorker } from '@/src/lib/push-client';
+import {
+  clearActiveChatHintForSw,
+  enablePushNotifications,
+  fetchPushConfig,
+  getPushPermissionState,
+  registerPushServiceWorker,
+} from '@/src/lib/push-client';
 import { setBrowserNotificationsEnabled } from '@/src/lib/notification-preferences';
 
 const PROMPT_STORAGE_KEY = 'opengram.push.prompted.v1';
@@ -39,6 +45,7 @@ export function PushBootstrap() {
         }
 
         await registerPushServiceWorker();
+        await clearActiveChatHintForSw();
 
         if (cancelled) {
           return;

@@ -104,7 +104,13 @@ self.addEventListener('push', (event) => {
   event.waitUntil((async () => {
     // On iOS, every push MUST show a notification — Safari kills the
     // subscription after 3 "silent" pushes. Skip suppression on iOS.
-    if (!isIos) {
+    const notificationType = payload.data && typeof payload.data.type === 'string'
+      ? payload.data.type
+      : 'message';
+
+    // Always show explicit "test" notifications so users can reliably verify
+    // delivery even when chat suppression would otherwise apply.
+    if (!isIos && notificationType !== 'test') {
       const chatId = payload.data && payload.data.chatId;
       if (chatId) {
         var idbTimeout = new Promise(function (resolve) { self.setTimeout(function () { resolve(null); }, 1500); });
@@ -115,13 +121,20 @@ self.addEventListener('push', (event) => {
       }
     }
 
+    const notificationTag = payload.data && payload.data.messageId
+      ? `message:${payload.data.messageId}`
+      : notificationType === 'test'
+        ? `test:${Date.now()}`
+        : 'opengram';
+
     await self.registration.showNotification(payload.title, {
       body: payload.body,
       data: payload.data,
       badge: '/web-app-manifest-192x192.png',
       icon: '/web-app-manifest-192x192.png',
-      tag: payload.data && payload.data.messageId ? `message:${payload.data.messageId}` : 'opengram',
+      tag: notificationTag,
       renotify: true,
+      requireInteraction: notificationType === 'test',
     });
   })());
 });
