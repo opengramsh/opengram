@@ -11,8 +11,8 @@ type KeyboardWindowLike = {
   cancelAnimationFrame: (handle: number) => void;
   setTimeout: (handler: () => void, timeout?: number) => number;
   clearTimeout: (handle: number | undefined) => void;
-  addEventListener: (type: 'focusout' | 'resize' | 'orientationchange', listener: () => void) => void;
-  removeEventListener: (type: 'focusout' | 'resize' | 'orientationchange', listener: () => void) => void;
+  addEventListener: (type: 'focusout' | 'resize' | 'orientationchange' | 'focus' | 'pageshow', listener: () => void) => void;
+  removeEventListener: (type: 'focusout' | 'resize' | 'orientationchange' | 'focus' | 'pageshow', listener: () => void) => void;
   scrollTo: (x: number, y: number) => void;
 };
 
@@ -77,12 +77,21 @@ export function subscribeToKeyboardLayout(
     }, 300);
   };
 
+  const handleVisibilityChange = () => {
+    if (documentObj.visibilityState === 'visible') {
+      scheduleLayoutUpdate();
+    }
+  };
+
   scheduleLayoutUpdate();
   viewport.addEventListener('resize', scheduleLayoutUpdate);
   viewport.addEventListener('scroll', scheduleLayoutUpdate);
   windowObj.addEventListener('resize', scheduleLayoutUpdate);
   windowObj.addEventListener('orientationchange', scheduleLayoutUpdate);
   windowObj.addEventListener('focusout', handleFocusOut);
+  windowObj.addEventListener('focus', scheduleLayoutUpdate);
+  windowObj.addEventListener('pageshow', scheduleLayoutUpdate);
+  documentObj.addEventListener('visibilitychange', handleVisibilityChange);
 
   return () => {
     viewport.removeEventListener('resize', scheduleLayoutUpdate);
@@ -90,6 +99,9 @@ export function subscribeToKeyboardLayout(
     windowObj.removeEventListener('resize', scheduleLayoutUpdate);
     windowObj.removeEventListener('orientationchange', scheduleLayoutUpdate);
     windowObj.removeEventListener('focusout', handleFocusOut);
+    windowObj.removeEventListener('focus', scheduleLayoutUpdate);
+    windowObj.removeEventListener('pageshow', scheduleLayoutUpdate);
+    documentObj.removeEventListener('visibilitychange', handleVisibilityChange);
     if (focusoutTimer !== null) {
       windowObj.clearTimeout(focusoutTimer);
     }

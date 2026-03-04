@@ -51,7 +51,11 @@ export function FilePreviewSection({ previewFile, setPreviewFileId }: FilePrevie
                   size="icon"
                   className="text-white/80 hover:text-white"
                   aria-label={`Download ${previewFile.filename || 'file'}`}
-                  onClick={() => downloadFile(buildFileUrl(previewFile.id), previewFile.filename || 'file')}
+                  onClick={() => {
+                    void downloadFile(buildFileUrl(previewFile.id), previewFile.filename || 'file', {
+                      beforeOpen: () => setPreviewFileId(null),
+                    });
+                  }}
                 >
                   <Download size={16} />
                 </Button>

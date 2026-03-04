@@ -15,7 +15,7 @@ type MockVisualViewport = {
   emit: (type: 'resize' | 'scroll') => void;
 };
 
-type ListenerType = 'focusout' | 'resize' | 'orientationchange';
+type ListenerType = 'focusout' | 'resize' | 'orientationchange' | 'focus' | 'pageshow';
 
 function createMockVisualViewport(height: number, offsetTop = 0): MockVisualViewport {
   const listeners: Record<string, Set<() => void>> = {};
@@ -45,6 +45,8 @@ function createMockKeyboardWindow(viewport: MockVisualViewport, innerHeight = 84
     focusout: new Set(),
     resize: new Set(),
     orientationchange: new Set(),
+    focus: new Set(),
+    pageshow: new Set(),
   };
   const rafCallbacks = new Map<number, FrameRequestCallback>();
   const timeoutCallbacks = new Map<number, () => void>();

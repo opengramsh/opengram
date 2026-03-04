@@ -54,6 +54,12 @@ export function ChatMediaGallery({
   setViewerMediaId,
   setPreviewFileId,
 }: ChatMediaGalleryProps) {
+  const closeMediaOverlays = useCallback(() => {
+    setViewerMediaId(null);
+    setPreviewFileId(null);
+    setIsMediaGalleryOpen(false);
+  }, [setIsMediaGalleryOpen, setPreviewFileId, setViewerMediaId]);
+
   return (
     <>
       <Drawer open={isMediaGalleryOpen} onOpenChange={setIsMediaGalleryOpen}>
@@ -145,7 +151,12 @@ export function ChatMediaGallery({
                         variant="ghost"
                         size="icon-sm"
                         aria-label={`Download ${item.filename || 'attachment'}`}
-                        onClick={(e) => { e.stopPropagation(); downloadFile(buildFileUrl(item.id), item.filename || 'attachment'); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void downloadFile(buildFileUrl(item.id), item.filename || 'attachment', {
+                            beforeOpen: closeMediaOverlays,
+                          });
+                        }}
                       >
                         <Download size={16} />
                       </Button>
@@ -175,6 +186,7 @@ export function ChatMediaGallery({
       <ImageViewerDialog
         viewerMedia={viewerMedia}
         setViewerMediaId={setViewerMediaId}
+        onBeforeDownload={closeMediaOverlays}
       />
     </>
   );
@@ -185,9 +197,11 @@ const DISMISS_THRESHOLD = 100;
 function ImageViewerDialog({
   viewerMedia,
   setViewerMediaId,
+  onBeforeDownload,
 }: {
   viewerMedia?: MediaItem;
   setViewerMediaId: (id: string | null) => void;
+  onBeforeDownload: () => void;
 }) {
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -270,7 +284,11 @@ function ImageViewerDialog({
                   type="button"
                   aria-label={`Download ${viewerMedia.filename || 'image'}`}
                   className="cursor-pointer text-xs text-white/90"
-                  onClick={() => downloadFile(buildFileUrl(viewerMedia.id), viewerMedia.filename || 'image')}
+                  onClick={() => {
+                    void downloadFile(buildFileUrl(viewerMedia.id), viewerMedia.filename || 'image', {
+                      beforeOpen: onBeforeDownload,
+                    });
+                  }}
                 >
                   Download
                 </button>

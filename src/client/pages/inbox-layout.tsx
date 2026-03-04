@@ -21,6 +21,56 @@ type UnreadSummaryPayload = {
   unread_by_agent?: Record<string, number>;
 };
 
+function hasOpenModalLayer(documentObj: Document) {
+  return Boolean(
+    documentObj.querySelector(
+      [
+        '[role="dialog"]',
+        '[data-slot="dialog-overlay"]',
+        '[data-slot="drawer-overlay"]',
+        '[data-vaul-overlay]',
+      ].join(','),
+    ),
+  );
+}
+
+function clearStaleBodyLocks(documentObj: Document) {
+  const body = documentObj.body;
+  if (!body) {
+    return;
+  }
+
+  body.style.pointerEvents = '';
+  body.style.overflow = '';
+  body.style.paddingRight = '';
+  body.style.removeProperty('--removed-body-scroll-bar-size');
+  body.removeAttribute('data-scroll-locked');
+}
+
+function useGlobalReturnRecovery() {
+  useEffect(() => {
+    const recover = () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+      if (hasOpenModalLayer(document)) {
+        return;
+      }
+      clearStaleBodyLocks(document);
+    };
+
+    window.addEventListener('pageshow', recover);
+    window.addEventListener('focus', recover);
+    document.addEventListener('visibilitychange', recover);
+
+    return () => {
+      window.removeEventListener('pageshow', recover);
+      window.removeEventListener('focus', recover);
+      document.removeEventListener('visibilitychange', recover);
+    };
+  }, []);
+}
+
 /**
  * Global safety-net: reset keyboard-related viewport offset when the
  * visualViewport height returns to full window height (keyboard dismissed).
@@ -36,6 +86,7 @@ function useGlobalKeyboardReset() {
 
 export default function InboxLayout() {
   useGlobalKeyboardReset();
+  useGlobalReturnRecovery();
 
   // Prefetch chat route chunk while user browses inbox
   useEffect(() => {

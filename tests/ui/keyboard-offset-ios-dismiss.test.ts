@@ -33,6 +33,8 @@ type MockKeyboardWindow = {
   scrollTo: ReturnType<typeof vi.fn>;
 };
 
+type WindowListenerType = 'focusout' | 'resize' | 'orientationchange' | 'focus' | 'pageshow';
+
 function createMockVisualViewport(overrides: { height: number; offsetTop?: number }): MockVisualViewport {
   const listeners: Record<string, Set<() => void>> = {};
 
@@ -76,7 +78,7 @@ describe('KAI-218: visualViewport + focusout fallback', () => {
   let keyboardOffset = 0;
   let rafCallbacks: Map<number, FrameRequestCallback>;
   let timeoutCallbacks: Map<number, () => void>;
-  let listeners: Record<'focusout' | 'resize' | 'orientationchange', Set<() => void>>;
+  let listeners: Record<WindowListenerType, Set<() => void>>;
   let nextRafId = 0;
   let nextTimeoutId = 0;
 
@@ -104,6 +106,8 @@ describe('KAI-218: visualViewport + focusout fallback', () => {
       focusout: new Set(),
       resize: new Set(),
       orientationchange: new Set(),
+      focus: new Set(),
+      pageshow: new Set(),
     };
     nextRafId = 0;
     nextTimeoutId = 0;
@@ -128,10 +132,10 @@ describe('KAI-218: visualViewport + focusout fallback', () => {
       clearTimeout: vi.fn().mockImplementation((id: number) => {
         timeoutCallbacks.delete(id);
       }),
-      addEventListener: vi.fn().mockImplementation((type: 'focusout' | 'resize' | 'orientationchange', listener: () => void) => {
+      addEventListener: vi.fn().mockImplementation((type: WindowListenerType, listener: () => void) => {
         listeners[type].add(listener);
       }),
-      removeEventListener: vi.fn().mockImplementation((type: 'focusout' | 'resize' | 'orientationchange', listener: () => void) => {
+      removeEventListener: vi.fn().mockImplementation((type: WindowListenerType, listener: () => void) => {
         listeners[type].delete(listener);
       }),
       getComputedStyle: vi.fn().mockReturnValue({ paddingBottom: '0px' } as CSSStyleDeclaration),
@@ -174,6 +178,49 @@ describe('KAI-218: visualViewport + focusout fallback', () => {
     expect(keyboardOffset).toBe(0);
   });
 
+  it('resyncs offset when pageshow fires after returning from external view', () => {
+    mockViewport.height = 512;
+    mockViewport.emit('resize');
+    flushRaf();
+    expect(keyboardOffset).toBe(340);
+
+    mockViewport.height = 852;
+    for (const listener of listeners.pageshow) {
+      listener();
+    }
+    flushRaf();
+
+    expect(keyboardOffset).toBe(0);
+  });
+
+  it('resyncs offset when window focus fires after return', () => {
+    mockViewport.height = 512;
+    mockViewport.emit('resize');
+    flushRaf();
+    expect(keyboardOffset).toBe(340);
+
+    mockViewport.height = 852;
+    for (const listener of listeners.focus) {
+      listener();
+    }
+    flushRaf();
+
+    expect(keyboardOffset).toBe(0);
+  });
+
+  it('resyncs offset when visibility changes to visible', () => {
+    mockViewport.height = 512;
+    mockViewport.emit('resize');
+    flushRaf();
+    expect(keyboardOffset).toBe(340);
+
+    mockViewport.height = 852;
+    document.dispatchEvent(new Event('visibilitychange'));
+    flushRaf();
+
+    expect(keyboardOffset).toBe(0);
+  });
+
   it('detaches listeners on cleanup', () => {
     const focusoutBeforeCleanup = listeners.focusout.size;
     expect(focusoutBeforeCleanup).toBeGreaterThan(0);
@@ -184,5 +231,7 @@ describe('KAI-218: visualViewport + focusout fallback', () => {
     expect(listeners.focusout.size).toBe(0);
     expect(listeners.resize.size).toBe(0);
     expect(listeners.orientationchange.size).toBe(0);
+    expect(listeners.focus.size).toBe(0);
+    expect(listeners.pageshow.size).toBe(0);
   });
 });

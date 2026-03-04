@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import ChatPage from '@/src/client/pages/chat';
@@ -10,6 +10,11 @@ import type { FrontendStreamEvent } from '@/src/lib/events-stream';
 const streamMock = vi.hoisted(() => ({
   listener: null as ((event: FrontendStreamEvent) => void) | null,
   unsubscribe: vi.fn(),
+}));
+const downloadFileMock = vi.hoisted(() => ({
+  downloadFile: vi.fn(async (_url: string, _filename: string, options?: { beforeOpen?: () => void }) => {
+    options?.beforeOpen?.();
+  }),
 }));
 
 vi.mock('facehash', () => ({
@@ -40,6 +45,10 @@ vi.mock('@/src/lib/events-stream', () => ({
   },
 }));
 
+vi.mock('@/app/chats/[chatId]/_lib/download-file', () => ({
+  downloadFile: downloadFileMock.downloadFile,
+}));
+
 type FetchMock = ReturnType<typeof vi.fn>;
 
 function renderChatPage() {
@@ -60,6 +69,7 @@ describe('chat media previews', () => {
   beforeEach(() => {
     streamMock.listener = null;
     streamMock.unsubscribe.mockReset();
+    downloadFileMock.downloadFile.mockClear();
     Element.prototype.scrollTo = vi.fn();
 
     messagesPayload = [
@@ -207,5 +217,60 @@ describe('chat media previews', () => {
 
     const reportDownloads = within(gallery).getAllByRole('button', { name: 'Download report.pdf', hidden: true });
     expect(reportDownloads.length).toBeGreaterThan(0);
+  });
+
+  it('closes the media gallery before starting file download', async () => {
+    renderChatPage();
+
+    await screen.findByText('Chat 1');
+
+    fireEvent.click(screen.getByText('Chat 1'));
+    const chatMenu = await screen.findByRole('dialog', { name: 'Chat menu' });
+    fireEvent.click(within(chatMenu).getByRole('button', { name: /Media/i }));
+
+    const gallery = await screen.findByRole('dialog', { name: 'Media gallery' });
+    fireEvent.click(within(gallery).getByRole('button', { name: 'Download report.pdf' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Media gallery' }).getAttribute('data-state')).toBe('closed');
+    });
+  });
+
+  it('closes image viewer and media gallery before viewer download', async () => {
+    renderChatPage();
+
+    await screen.findByText('Chat 1');
+
+    fireEvent.click(screen.getByText('Chat 1'));
+    const chatMenu = await screen.findByRole('dialog', { name: 'Chat menu' });
+    fireEvent.click(within(chatMenu).getByRole('button', { name: /Media/i }));
+
+    const gallery = await screen.findByRole('dialog', { name: 'Media gallery' });
+    fireEvent.click(within(gallery).getByRole('button', { name: 'View image image-1.png' }));
+
+    const viewer = await screen.findByRole('dialog', { name: 'Image viewer' });
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Download image-1.png' }));
+
+    await waitFor(() => {
+      const imageViewer = screen.queryByRole('dialog', { name: 'Image viewer' });
+      expect(imageViewer === null || imageViewer.getAttribute('data-state') === 'closed').toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Media gallery' }).getAttribute('data-state')).toBe('closed');
+    });
+  });
+
+  it('closes file preview before preview download', async () => {
+    renderChatPage();
+
+    await screen.findByText('Chat 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Preview report.pdf' }));
+
+    const previewDialog = await screen.findByRole('dialog', { name: 'report.pdf' });
+    fireEvent.click(within(previewDialog).getByRole('button', { name: 'Download report.pdf' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'report.pdf' })).toBeNull();
+    });
   });
 });
