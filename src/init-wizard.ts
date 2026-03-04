@@ -266,22 +266,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
     }
   }
 
-  // 5. OpenClaw detection — ask now, but run setup after the server starts (step 8)
-  let connectOpenClaw = false;
-  if (isOpenClawInstalled()) {
-    p.note(
-      `OpenClaw CLI detected on PATH.\n` +
-        `Opengram ships with an OpenClaw plugin that allows you to easily connect your OpenClaw agents to Opengram.`,
-      "Integrations",
-    );
-    const answer = await p.confirm({
-      message: "Connect OpenGram to OpenClaw?",
-      initialValue: true,
-    });
-    connectOpenClaw = !p.isCancel(answer) && !!answer;
-  }
-
-  // 6. Generate config — merge wizard-managed keys into existing config
+  // 5. Generate config — merge wizard-managed keys into existing config
   let config: Record<string, unknown> = {};
   if (existsSync(configPath)) {
     try {
@@ -387,6 +372,20 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
 
   // 8. OpenClaw plugin — runs after the server is started so the agent
   //    push to /api/v1/config/admin can reach the running instance.
+  let connectOpenClaw = false;
+  if (isOpenClawInstalled()) {
+    p.note(
+      `OpenClaw CLI detected on PATH.\n` +
+        `Opengram ships with an OpenClaw plugin that allows you to easily connect your OpenClaw agents to Opengram.`,
+      "Integrations",
+    );
+    const answer = await p.confirm({
+      message: "Connect OpenGram to OpenClaw?",
+      initialValue: true,
+    });
+    connectOpenClaw = !p.isCancel(answer) && !!answer;
+  }
+
   if (connectOpenClaw) {
     const pluginSpinner = p.spinner();
     pluginSpinner.start("Installing @opengramsh/openclaw-plugin...");
