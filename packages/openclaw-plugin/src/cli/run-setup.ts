@@ -213,9 +213,11 @@ export async function runFullSetup(options?: FullSetupOptions): Promise<void> {
   }
 
   if (shouldRestart) {
-    console.log("Restarting gateway…");
-    // SIGUSR1 is the gateway's graceful restart signal.
-    // Small delay to ensure config write is flushed.
-    setTimeout(() => process.kill(process.pid, "SIGUSR1"), 500);
+    const { execSync } = await import("node:child_process");
+    try {
+      execSync("openclaw gateway restart", { stdio: "inherit" });
+    } catch {
+      console.warn("Could not restart gateway. Run manually: openclaw gateway restart");
+    }
   }
 }
