@@ -1,0 +1,28 @@
+{
+  "name": "opengramsh",
+  "version": "0.1.0",
+  "description": "Convenience wrapper for @opengramsh/opengram — install as 'opengramsh' instead of '@opengramsh/opengram'",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opengramsh/opengram.git",
+    "directory": "packages/opengramsh"
+  },
+  "homepage": "https://opengram.sh",
+  "bugs": {
+    "url": "https://github.com/opengramsh/opengram/issues"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "agents",
+    "mobile",
+    "opengram"
+  ],
+  "bin": {
+    "opengram": "./cli.js"
+  },
+  "dependencies": {
+    "@opengramsh/opengram": "0.1.0"
+  }
+}
