@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 
+import JSON5 from "json5";
 import type { OpenClawConfig, WizardPrompter } from "openclaw/plugin-sdk";
 
 import type { SetupWizardOptions } from "./setup.js";
@@ -10,36 +11,73 @@ import { runSetupWizard } from "./setup.js";
 
 // ---------------------------------------------------------------------------
 // OpenClaw path helpers
+// Mirrors the SDK's resolveConfigPathCandidate() logic so that standalone
+// CLI usage (`opengram-openclaw setup`) finds the same config file as the
+// gateway, including legacy state dirs and env-var overrides.
 // ---------------------------------------------------------------------------
 
-const OPENCLAW_HOME = process.env.OPENCLAW_HOME ?? path.join(homedir(), ".openclaw");
+const LEGACY_STATE_DIRNAMES = [".clawdbot", ".moldbot", ".moltbot"];
+const NEW_STATE_DIRNAME = ".openclaw";
+const CONFIG_FILENAME = "openclaw.json";
+const LEGACY_CONFIG_FILENAMES = ["clawdbot.json", "moldbot.json", "moltbot.json"];
+
+function expandHome(p: string): string {
+  return p.replace(/^~(?=$|[/\\])/, homedir());
+}
 
 /**
- * Locate `openclaw.json` on disk.
+ * Locate the OpenClaw config file on disk.
  *
- * Resolution order:
- *   1. `OPENCLAW_CONFIG` env var (explicit override)
+ * Resolution order (aligned with the OpenClaw SDK):
+ *   1. `OPENCLAW_CONFIG_PATH` / `CLAWDBOT_CONFIG_PATH` env var
  *   2. Walk up from `cwd` looking for `openclaw.json`
- *   3. Default `~/.openclaw/openclaw.json`
+ *   3. `OPENCLAW_STATE_DIR` / `CLAWDBOT_STATE_DIR` env var
+ *   4. New + legacy state dirs (`~/.openclaw`, `~/.clawdbot`, …)
+ *   5. Default `~/.openclaw/openclaw.json`
  */
 export function findOpenClawConfig(): string {
-  if (process.env.OPENCLAW_CONFIG) return process.env.OPENCLAW_CONFIG;
+  // 1. Explicit config path override
+  const override = process.env.OPENCLAW_CONFIG_PATH?.trim() || process.env.CLAWDBOT_CONFIG_PATH?.trim();
+  if (override) return path.resolve(expandHome(override));
 
+  // 2. Walk up from cwd (useful for local/dev configs)
   let dir = process.cwd();
   while (true) {
-    const candidate = path.join(dir, "openclaw.json");
+    const candidate = path.join(dir, CONFIG_FILENAME);
     if (existsSync(candidate)) return candidate;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
 
-  return path.join(OPENCLAW_HOME, "openclaw.json");
+  // 3. State dir override
+  const stateOverride = process.env.OPENCLAW_STATE_DIR?.trim() || process.env.CLAWDBOT_STATE_DIR?.trim();
+  if (stateOverride) {
+    const resolved = path.resolve(expandHome(stateOverride));
+    return path.join(resolved, CONFIG_FILENAME);
+  }
+
+  // 4. Check new state dir + legacy state dirs
+  const home = homedir();
+  const newDir = path.join(home, NEW_STATE_DIRNAME);
+  const candidates = [
+    path.join(newDir, CONFIG_FILENAME),
+    ...LEGACY_STATE_DIRNAMES.flatMap(d => [
+      path.join(home, d, CONFIG_FILENAME),
+      ...LEGACY_CONFIG_FILENAMES.map(f => path.join(home, d, f)),
+    ]),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+
+  // 5. Default canonical path
+  return path.join(newDir, CONFIG_FILENAME);
 }
 
 export function readOpenClawConfig(configPath: string): OpenClawConfig {
   if (!existsSync(configPath)) return {} as OpenClawConfig;
-  return JSON.parse(readFileSync(configPath, "utf8")) as OpenClawConfig;
+  return JSON5.parse(readFileSync(configPath, "utf8")) as OpenClawConfig;
 }
 
 export function writeOpenClawConfig(configPath: string, cfg: OpenClawConfig): void {
@@ -59,7 +97,9 @@ export function writeOpenClawConfig(configPath: string, cfg: OpenClawConfig): vo
  * flow with zero friction.
  */
 export function autoApprovePairing(stateDir?: string): void {
-  const dir = stateDir ?? path.join(OPENCLAW_HOME, "state");
+  const envStateDir = process.env.OPENCLAW_STATE_DIR?.trim() || process.env.CLAWDBOT_STATE_DIR?.trim();
+  const resolvedHome = envStateDir ? path.resolve(expandHome(envStateDir)) : path.join(homedir(), NEW_STATE_DIRNAME);
+  const dir = stateDir ?? path.join(resolvedHome, "state");
   const allowFromPath = path.join(dir, "credentials", "opengram-allowFrom.json");
 
   let existing: string[] = [];
