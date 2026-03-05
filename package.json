@@ -40,7 +40,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build",
+    "prepare": "npm run build",
     "docs:dev": "npm --prefix docs run dev",
     "docs:build": "npm --prefix docs run build",
     "docs:extract-spec": "NODE_ENV=test tsx scripts/extract-openapi-spec.ts"
