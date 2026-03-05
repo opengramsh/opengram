@@ -15,21 +15,22 @@ const PLIST_PATH = path.join(PLIST_DIR, `${PLIST_LABEL}.plist`);
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function resolveExecStart(): string {
-  // Try to find the opengram binary on PATH
-  try {
-    const which = execSync('which opengram', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    if (which) return which;
-  } catch {
-    // not on PATH
-  }
-
-  // Fall back to node + the CLI script
+/**
+ * Return the absolute node binary path and CLI script path for use in
+ * service definitions (systemd unit / launchd plist).  We always use the
+ * explicit `node + cli.js` form so that:
+ *   1. We bypass the `#!/usr/bin/env node` shebang — launchd's default
+ *      PATH is `/usr/bin:/bin:/usr/sbin:/sbin` and won't find node when
+ *      installed via nvm/fnm/brew/volta.
+ *   2. We never split a single string on spaces, which would break paths
+ *      that contain whitespace.
+ */
+function resolveServiceExecParts(): { nodePath: string; cliPath: string } {
   const cliPath = path.resolve(
     new URL('.', import.meta.url).pathname,
     '..', '..', 'dist', 'cli', 'cli.js',
   );
-  return `${process.execPath} ${cliPath}`;
+  return { nodePath: process.execPath, cliPath };
 }
 
 function run(cmd: string, quiet = false): boolean {
@@ -70,7 +71,7 @@ function checkSystemd(): boolean {
 }
 
 function generateUnit(home: string): string {
-  const execStart = resolveExecStart();
+  const { nodePath, cliPath } = resolveServiceExecParts();
 
   return `[Unit]
 Description=OpenGram
@@ -79,11 +80,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${execStart} start
+ExecStart=${nodePath} ${cliPath} start
 Restart=always
 RestartSec=2
 Environment=NODE_ENV=production
 Environment=OPENGRAM_HOME=${home}
+Environment=PATH=${process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin'}
 
 [Install]
 WantedBy=default.target
@@ -108,6 +110,7 @@ async function installSystemdService(home: string): Promise<boolean> {
   }
 
   console.log('OpenGram service installed and started.');
+  console.log('  Run `opengram service logs` or `journalctl --user-unit opengram -f` to tail logs.');
   return true;
 }
 
@@ -147,11 +150,9 @@ function showSystemdLogs(): void {
 // ── Launchd (macOS) ────────────────────────────────────────────────────
 
 function generatePlist(home: string): string {
-  const execStart = resolveExecStart();
-  // Split into program + args for ProgramArguments
-  const parts = execStart.split(' ');
-  const programArgs = parts.map((p) => `      <string>${p}</string>`).join('\n');
+  const { nodePath, cliPath } = resolveServiceExecParts();
   const logsDir = path.join(home, 'logs');
+  const envPath = process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -162,7 +163,8 @@ function generatePlist(home: string): string {
 
   <key>ProgramArguments</key>
   <array>
-${programArgs}
+      <string>${nodePath}</string>
+      <string>${cliPath}</string>
       <string>start</string>
   </array>
 
@@ -178,6 +180,8 @@ ${programArgs}
     <string>production</string>
     <key>OPENGRAM_HOME</key>
     <string>${home}</string>
+    <key>PATH</key>
+    <string>${envPath}</string>
   </dict>
 
   <key>StandardOutPath</key>
@@ -198,9 +202,15 @@ async function installLaunchdService(home: string): Promise<boolean> {
   writeFileSync(PLIST_PATH, generatePlist(home));
   console.log(`Plist written to ${PLIST_PATH}`);
 
-  const ok = run(`launchctl load -w ${PLIST_PATH}`);
+  const uid = execSync('id -u', { encoding: 'utf8' }).trim();
+  // Unload any existing service first (may fail if not loaded — that's OK)
+  run(`launchctl bootout gui/${uid}/${PLIST_LABEL}`, true);
+  // Try modern API first (`bootstrap`), fall back to deprecated `load -w`.
+  // Both are quiet so only one final error is shown if both fail.
+  const ok = run(`launchctl bootstrap gui/${uid} ${PLIST_PATH}`, true)
+    || run(`launchctl load -w ${PLIST_PATH}`, true);
   if (!ok) {
-    console.error('Failed to load the launchd service.');
+    console.error('Failed to load the launchd service. Try: launchctl load -w ' + PLIST_PATH);
     return false;
   }
 
@@ -210,7 +220,11 @@ async function installLaunchdService(home: string): Promise<boolean> {
 
 async function uninstallLaunchdService(): Promise<boolean> {
   if (existsSync(PLIST_PATH)) {
-    run(`launchctl unload ${PLIST_PATH}`, true);
+    const uid = execSync('id -u', { encoding: 'utf8' }).trim();
+    // Try modern API first (`bootout`), fall back to deprecated `unload`
+    if (!run(`launchctl bootout gui/${uid}/${PLIST_LABEL}`, true)) {
+      run(`launchctl unload ${PLIST_PATH}`, true);
+    }
     unlinkSync(PLIST_PATH);
     console.log(`Removed ${PLIST_PATH}`);
   } else {
@@ -230,18 +244,47 @@ function showLaunchdStatus(): void {
 }
 
 function showLaunchdLogs(): void {
-  const logPath = path.join(homedir(), '.opengram', 'logs', 'stdout.log');
-  if (!existsSync(logPath)) {
-    console.log(`No log file found at ${logPath}`);
+  const logsDir = path.join(homedir(), '.opengram', 'logs');
+  const stdoutLog = path.join(logsDir, 'stdout.log');
+  const stderrLog = path.join(logsDir, 'stderr.log');
+
+  const logFiles = [stdoutLog, stderrLog].filter(existsSync);
+  if (logFiles.length === 0) {
+    console.log(`No log files found in ${logsDir}`);
     console.log('Is the service installed? Run `opengram service install` first.');
     return;
   }
 
   try {
-    execSync(`tail -f ${logPath}`, { stdio: 'inherit' });
+    execSync(`tail -f ${logFiles.join(' ')}`, { stdio: 'inherit' });
   } catch {
     // User interrupted with Ctrl+C
   }
+}
+
+// ── Status helpers (public API) ────────────────────────────────────────
+
+export function isServiceRunning(): boolean {
+  try {
+    if (isMacOS()) {
+      execSync(`launchctl list ${PLIST_LABEL}`, {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return true;
+    }
+    const result = execSync('systemctl --user is-active opengram', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return result === 'active';
+  } catch {
+    return false;
+  }
+}
+
+export function isServiceInstalled(): boolean {
+  if (isMacOS()) return existsSync(PLIST_PATH);
+  return existsSync(UNIT_PATH);
 }
 
 // ── Router functions (public API) ──────────────────────────────────────
