@@ -45,22 +45,9 @@ fi
 
 info "OpenClaw CLI detected"
 
-# ── Detect package manager ─────────────────────────────────────
-
-if command -v pnpm >/dev/null 2>&1; then
-  PKG_MGR="pnpm"
-  INSTALL_CMD="pnpm add -g @opengramsh/openclaw-plugin"
-elif command -v bun >/dev/null 2>&1; then
-  PKG_MGR="bun"
-  INSTALL_CMD="bun add -g @opengramsh/openclaw-plugin"
-else
-  PKG_MGR="npm"
-  INSTALL_CMD="npm install -g @opengramsh/openclaw-plugin"
-fi
-
-info "Using $PKG_MGR to install"
-
 # ── Install plugin ─────────────────────────────────────────────
+
+INSTALL_CMD="npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/openclaw-plugin"
 
 echo ""
 printf "${BOLD}Installing @opengramsh/openclaw-plugin...${RESET}\n"
@@ -68,17 +55,15 @@ printf "${BOLD}Installing @opengramsh/openclaw-plugin...${RESET}\n"
 if ! $INSTALL_CMD; then
   echo ""
   error "Installation failed."
-  if [ "$PKG_MGR" = "npm" ]; then
-    echo ""
-    echo "If you got a permission error, try one of:"
-    echo "  sudo npm install -g @opengramsh/openclaw-plugin"
-    echo "  npm install -g @opengramsh/openclaw-plugin --prefix ~/.local"
-    echo ""
-    echo "Or configure npm to use a user-writable directory:"
-    echo "  mkdir -p ~/.npm-global"
-    echo "  npm config set prefix ~/.npm-global"
-    echo "  export PATH=~/.npm-global/bin:\$PATH"
-  fi
+  echo ""
+  echo "If you got a permission error, try one of:"
+  echo "  sudo npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/openclaw-plugin"
+  echo "  npm install -g @opengramsh/openclaw-plugin --prefix ~/.local"
+  echo ""
+  echo "Or configure npm to use a user-writable directory:"
+  echo "  mkdir -p ~/.npm-global"
+  echo "  npm config set prefix ~/.npm-global"
+  echo "  export PATH=~/.npm-global/bin:\$PATH"
   exit 1
 fi
 

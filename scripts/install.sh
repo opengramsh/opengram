@@ -37,22 +37,9 @@ fi
 
 info "Node.js $(node --version) detected"
 
-# ── Detect package manager ─────────────────────────────────────
-
-if command -v pnpm >/dev/null 2>&1; then
-  PKG_MGR="pnpm"
-  INSTALL_CMD="pnpm add -g @opengramsh/opengram"
-elif command -v bun >/dev/null 2>&1; then
-  PKG_MGR="bun"
-  INSTALL_CMD="bun add -g @opengramsh/opengram"
-else
-  PKG_MGR="npm"
-  INSTALL_CMD="npm install -g @opengramsh/opengram"
-fi
-
-info "Using $PKG_MGR to install"
-
 # ── Install OpenGram ───────────────────────────────────────────
+
+INSTALL_CMD="npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/opengram"
 
 echo ""
 printf "${BOLD}Installing OpenGram...${RESET}\n"
@@ -60,17 +47,15 @@ printf "${BOLD}Installing OpenGram...${RESET}\n"
 if ! $INSTALL_CMD; then
   echo ""
   error "Installation failed."
-  if [ "$PKG_MGR" = "npm" ]; then
-    echo ""
-    echo "If you got a permission error, try one of:"
-    echo "  sudo npm install -g @opengramsh/opengram"
-    echo "  npm install -g @opengramsh/opengram --prefix ~/.local"
-    echo ""
-    echo "Or configure npm to use a user-writable directory:"
-    echo "  mkdir -p ~/.npm-global"
-    echo "  npm config set prefix ~/.npm-global"
-    echo "  export PATH=~/.npm-global/bin:\$PATH"
-  fi
+  echo ""
+  echo "If you got a permission error, try one of:"
+  echo "  sudo npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/opengram"
+  echo "  npm install -g @opengramsh/opengram --prefix ~/.local"
+  echo ""
+  echo "Or configure npm to use a user-writable directory:"
+  echo "  mkdir -p ~/.npm-global"
+  echo "  npm config set prefix ~/.npm-global"
+  echo "  export PATH=~/.npm-global/bin:\$PATH"
   exit 1
 fi
 

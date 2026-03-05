@@ -13,21 +13,17 @@ import { homedir } from "node:os";
 
 import * as p from "@clack/prompts";
 
-// ── Service file paths (mirrors cli-service.ts) ──────────────────────
-const PLIST_LABEL = "sh.opengram.server";
-const PLIST_PATH = path.join(
-  homedir(),
-  "Library",
-  "LaunchAgents",
-  `${PLIST_LABEL}.plist`,
-);
-const UNIT_PATH = path.join(
-  homedir(),
-  ".config",
-  "systemd",
-  "user",
-  "opengram.service",
-);
+// Service status checks — imported lazily to avoid circular deps at module level
+let _isServiceRunning: (() => boolean) | null = null;
+let _isServiceInstalled: (() => boolean) | null = null;
+
+async function loadServiceHelpers() {
+  if (!_isServiceRunning) {
+    const svc = await import("./cli-service.js");
+    _isServiceRunning = svc.isServiceRunning;
+    _isServiceInstalled = svc.isServiceInstalled;
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -65,7 +61,6 @@ interface DetectedState {
 
 interface UninstallOpts {
   resolveHome: () => string;
-  detectPkgManager: () => string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -78,32 +73,11 @@ function formatBytes(bytes: number): string {
   return `${val < 10 ? val.toFixed(1) : Math.round(val)} ${units[i]}`;
 }
 
-function isServiceRunning(): boolean {
-  try {
-    if (process.platform === "darwin") {
-      execSync("launchctl list sh.opengram.server", {
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      return true;
-    }
-    const result = execSync("systemctl --user is-active opengram", {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return result === "active";
-  } catch {
-    return false;
-  }
-}
+// isServiceRunning and isServiceInstalled are loaded lazily from cli-service.ts
 
-function isServiceInstalled(): boolean {
-  if (process.platform === "darwin") return existsSync(PLIST_PATH);
-  return existsSync(UNIT_PATH);
-}
-
-function isGlobalPackageInstalled(pm: string, name: string): boolean {
+function isGlobalPackageInstalled(name: string): boolean {
   try {
-    execSync(`${pm} list -g --depth=0 ${name}`, {
+    execSync(`npm list -g --depth=0 ${name}`, {
       stdio: ["ignore", "pipe", "ignore"],
     });
     return true;
@@ -364,7 +338,8 @@ function detectTailscaleServe(serverPort: number): number | null {
 
 // ── Detection ─────────────────────────────────────────────────────────
 
-function detect(home: string, pm: string): DetectedState {
+async function detect(home: string): Promise<DetectedState> {
+  await loadServiceHelpers();
   const homeExists = existsSync(home);
   const databaseExists = existsSync(path.join(home, "data", "opengram.db"));
   const uploadsDir = path.join(home, "data", "uploads");
@@ -376,8 +351,8 @@ function detect(home: string, pm: string): DetectedState {
   return {
     home,
     homeExists,
-    serviceInstalled: isServiceInstalled(),
-    serviceRunning: isServiceRunning(),
+    serviceInstalled: _isServiceInstalled!(),
+    serviceRunning: _isServiceRunning!(),
     databaseExists,
     databaseSize: databaseExists ? formatBytes(dbFileSize(home)) : "0 B",
     uploadsExist,
@@ -388,7 +363,6 @@ function detect(home: string, pm: string): DetectedState {
     envVarFiles: detectEnvVarFiles(),
     tailscaleServePort: detectTailscaleServe(serverPort),
     openclawPluginInstalled: isGlobalPackageInstalled(
-      pm,
       "@opengramsh/openclaw-plugin",
     ),
   };
@@ -398,8 +372,7 @@ function detect(home: string, pm: string): DetectedState {
 
 export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
   const home = opts.resolveHome();
-  const pm = opts.detectPkgManager();
-  const state = detect(home, pm);
+  const state = await detect(home);
 
   p.intro("OpenGram Uninstall");
 
@@ -615,7 +588,7 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
       enabled: sel.has("openclaw-plugin"),
       task: () => {
         cleanOpenClawConfig();
-        execSync(`${pm} uninstall -g @opengramsh/openclaw-plugin`, {
+        execSync(`npm uninstall -g @opengramsh/openclaw-plugin`, {
           stdio: ["ignore", "pipe", "ignore"],
         });
         return "Plugin uninstalled, config cleaned";
@@ -625,7 +598,7 @@ export async function runUninstallWizard(opts: UninstallOpts): Promise<void> {
       title: "Uninstalling Opengram CLI",
       enabled: sel.has("self"),
       task: () => {
-        execSync(`${pm} uninstall -g @opengramsh/opengram`, {
+        execSync(`npm uninstall -g @opengramsh/opengram`, {
           stdio: ["ignore", "pipe", "ignore"],
         });
         return "Opengram uninstalled";

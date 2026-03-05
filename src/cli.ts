@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -103,44 +102,19 @@ async function cmdService(action: string | undefined) {
   await runServiceCommand(action, { resolveHome });
 }
 
-function detectPkgManager(): string {
-  for (const pm of ['pnpm', 'bun']) {
-    try {
-      execSync(`which ${pm}`, { stdio: ['ignore', 'pipe', 'ignore'] });
-      return pm;
-    } catch {
-      // not found
-    }
-  }
-  return 'npm';
-}
-
-function isServiceRunning(): boolean {
-  try {
-    if (process.platform === 'darwin') {
-      execSync('launchctl list sh.opengram.server', {
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      return true;
-    }
-    const result = execSync('systemctl --user is-active opengram', {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    return result === 'active';
-  } catch {
-    return false;
-  }
+async function isServiceRunningCheck(): Promise<boolean> {
+  const { isServiceRunning } = await import('./cli-service.js');
+  return isServiceRunning();
 }
 
 async function cmdUpgrade() {
+  const { execSync } = await import('node:child_process');
   const oldVersion = getVersion();
-  const pm = detectPkgManager();
 
-  console.log(`Upgrading Opengram via ${pm}...`);
+  console.log('Upgrading Opengram...');
 
   try {
-    execSync(`${pm} install -g @opengramsh/opengram@latest`, {
+    execSync('npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/opengram@latest', {
       stdio: 'inherit',
     });
   } catch {
@@ -150,7 +124,7 @@ async function cmdUpgrade() {
 
   const newVersion = getVersion();
 
-  if (isServiceRunning()) {
+  if (await isServiceRunningCheck()) {
     console.log('Service is running, restarting...');
     const { restartService } = await import('./cli-service.js');
     restartService();
@@ -196,7 +170,7 @@ async function main() {
 
     case 'uninstall': {
       const { runUninstallWizard } = await import('./cli-uninstall.js');
-      await runUninstallWizard({ resolveHome, detectPkgManager });
+      await runUninstallWizard({ resolveHome });
       break;
     }
 

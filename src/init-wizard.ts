@@ -357,7 +357,7 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
     });
 
     if (!p.isCancel(installSvc) && installSvc) {
-      const { installService } = await import("./cli-service.js");
+      const { installService, isServiceRunning } = await import("./cli-service.js");
       const svcSpinner = p.spinner();
       svcSpinner.start(
         isLinux
@@ -366,8 +366,18 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
       );
       const ok = await installService(home);
       if (ok) {
-        svcSpinner.stop("Service installed and started.");
-        serviceStarted = true;
+        // Wait briefly and verify the service didn't crash on startup
+        await new Promise((r) => setTimeout(r, 2000));
+        if (isServiceRunning()) {
+          svcSpinner.stop("Service installed and started.");
+          serviceStarted = true;
+        } else {
+          svcSpinner.stop(
+            "Service installed but may have crashed on startup.\n" +
+            `  Check logs: ${path.join(home, "logs", "stderr.log")}\n` +
+            "  Or run: opengram service logs",
+          );
+        }
       } else {
         svcSpinner.stop(
           "Service installation failed. You can run `opengram service install` later.",
@@ -397,13 +407,13 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
     pluginSpinner.start("Installing @opengramsh/openclaw-plugin...");
     try {
       const execAsync = promisify(exec);
-      await execAsync("npm install -g @opengramsh/openclaw-plugin", {
+      await execAsync("npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/openclaw-plugin", {
         timeout: 600000,
       });
       pluginSpinner.stop("Plugin installed.");
     } catch {
       pluginSpinner.stop(
-        "Plugin install failed — you can install it later with:\n  npm i -g @opengramsh/openclaw-plugin",
+        "Plugin install failed — you can install it later with:\n  npm install -g @opengramsh/openclaw-plugin",
       );
     }
 
