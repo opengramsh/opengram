@@ -141,7 +141,9 @@ export function ChatComposer({
 
     const root = document.documentElement;
     const updateComposerHeight = () => {
-      const composerHeight = Math.max(0, Math.ceil(footer.getBoundingClientRect().height));
+      const footerHeight = footer.getBoundingClientRect().height;
+      const paddingBottom = Number.parseFloat(window.getComputedStyle(footer).paddingBottom) || 0;
+      const composerHeight = Math.max(0, Math.ceil(footerHeight - paddingBottom));
       root.style.setProperty('--composer-height', `${composerHeight}px`);
     };
 
@@ -163,6 +165,30 @@ export function ChatComposer({
       root.style.removeProperty('--composer-height');
     };
   }, []);
+
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) {
+      return;
+    }
+
+    const root = document.documentElement;
+    const updateComposerHeight = () => {
+      const footerHeight = footer.getBoundingClientRect().height;
+      const paddingBottom = Number.parseFloat(window.getComputedStyle(footer).paddingBottom) || 0;
+      const composerHeight = Math.max(0, Math.ceil(footerHeight - paddingBottom));
+      root.style.setProperty('--composer-height', `${composerHeight}px`);
+    };
+
+    updateComposerHeight();
+    const frame = window.requestAnimationFrame(updateComposerHeight);
+    const timer = window.setTimeout(updateComposerHeight, 180);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [keyboardOffset]);
 
   return (
     <>

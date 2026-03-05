@@ -411,7 +411,10 @@ export function ChatMessages({
 
         <div
           className="shrink-0 pointer-events-none"
-          style={{ height: 'calc(var(--composer-height, 5rem) + var(--keyboard-offset, 0px))' }}
+          style={{
+            height:
+              'calc(var(--composer-height, 5rem) + var(--composer-bottom-base, 12px) + var(--composer-safe-area, 0px) + var(--keyboard-offset, 0px))',
+          }}
           aria-hidden="true"
         />
       </ConversationContent>

@@ -49,7 +49,10 @@ export function ChatRequestWidget({
   return (
     <section
       className="fixed inset-x-0 z-30 w-full px-3"
-      style={{ bottom: `calc(var(--composer-height, 76px) + ${keyboardOffset}px + 8px)` }}
+      style={{
+        bottom:
+          `calc(var(--composer-height, 76px) + var(--composer-bottom-base, 12px) + var(--composer-safe-area, 0px) + ${keyboardOffset}px + 8px)`,
+      }}
     >
       <div className="rounded-2xl border border-amber-300/40 bg-amber-500/10 p-3">
         <button

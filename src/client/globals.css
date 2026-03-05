@@ -21,6 +21,8 @@
   --accent-foreground: hsl(210 40% 98%);
   --destructive: hsl(0 84% 60%);
   --radius: 0.75rem;
+  --composer-bottom-base: 12px;
+  --composer-safe-area: 0px;
 }
 
 @theme inline {
@@ -117,16 +119,17 @@ body {
  * no text input is focused (i.e. keyboard is closed).
  */
 .kbd-safe-pb {
-  padding-bottom: 12px;
+  padding-bottom: calc(var(--composer-bottom-base, 12px) + var(--composer-safe-area, 0px));
 }
+
 :root:not(
   :has(
-    input:focus-visible,
-    textarea:focus-visible,
-    [contenteditable]:focus-visible
+    input:focus,
+    textarea:focus,
+    [contenteditable]:focus
   )
-) .kbd-safe-pb {
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+) {
+  --composer-safe-area: env(safe-area-inset-bottom, 0px);
 }
 
 @keyframes typing-dot {
@@ -163,4 +166,3 @@ button[data-streamdown="link"] {
 [data-streamdown="code-block-body"] {
   overflow-x: auto;
 }
-

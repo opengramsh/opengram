@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 
@@ -194,7 +197,8 @@ describe('KAI-237: composer height CSS variable integration', () => {
   });
 
   it('7) updates message padding variable when composer height changes', () => {
-    let measuredHeight = 80;
+    let measuredHeight = 104;
+    let measuredPaddingBottom = 24;
     let observerCallback: ((entries: ResizeObserverEntry[], observer: ResizeObserver) => void) | null = null;
 
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
@@ -208,6 +212,10 @@ describe('KAI-237: composer height CSS variable integration', () => {
       height: measuredHeight,
       toJSON: () => ({}),
     } as DOMRect));
+
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(() => ({
+      paddingBottom: `${measuredPaddingBottom}px`,
+    } as CSSStyleDeclaration));
 
     class MockResizeObserver {
       constructor(callback: ResizeObserverCallback) {
@@ -254,7 +262,8 @@ describe('KAI-237: composer height CSS variable integration', () => {
 
     expect(document.documentElement.style.getPropertyValue('--composer-height')).toBe('80px');
 
-    measuredHeight = 132;
+    measuredHeight = 166;
+    measuredPaddingBottom = 34;
     observerCallback!([] as ResizeObserverEntry[], {} as ResizeObserver);
 
     expect(document.documentElement.style.getPropertyValue('--composer-height')).toBe('132px');
@@ -275,5 +284,18 @@ describe('KAI-237: composer height CSS variable integration', () => {
 
     const spacer = container.querySelector('[aria-hidden="true"]');
     expect(spacer?.getAttribute('style')).toContain('var(--composer-height');
+    expect(spacer?.getAttribute('style')).toContain('var(--composer-bottom-base');
+    expect(spacer?.getAttribute('style')).toContain('var(--composer-safe-area');
+  });
+
+  it('8) keeps request widget anchored with composer + safe-area offsets', () => {
+    const widgetSource = readFileSync(
+      join(process.cwd(), 'app/chats/[chatId]/_components/chat-request-widget.tsx'),
+      'utf8',
+    );
+
+    expect(widgetSource).toContain('var(--composer-height');
+    expect(widgetSource).toContain('var(--composer-bottom-base');
+    expect(widgetSource).toContain('var(--composer-safe-area');
   });
 });
