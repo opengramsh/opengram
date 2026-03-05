@@ -403,18 +403,29 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   }
 
   if (connectOpenClaw) {
-    const pluginSpinner = p.spinner();
-    pluginSpinner.start("Installing @opengramsh/openclaw-plugin...");
+    // Skip install if the plugin binary is already on PATH
+    let pluginAlreadyInstalled = false;
     try {
-      const execAsync = promisify(exec);
-      await execAsync("npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/openclaw-plugin", {
-        timeout: 600000,
-      });
-      pluginSpinner.stop("Plugin installed.");
+      execSync("which opengram-openclaw", { stdio: ["ignore", "pipe", "ignore"] });
+      pluginAlreadyInstalled = true;
     } catch {
-      pluginSpinner.stop(
-        "Plugin install failed — you can install it later with:\n  npm install -g @opengramsh/openclaw-plugin",
-      );
+      // not found — need to install
+    }
+
+    if (!pluginAlreadyInstalled) {
+      const pluginSpinner = p.spinner();
+      pluginSpinner.start("Installing @opengramsh/openclaw-plugin...");
+      try {
+        const execAsync = promisify(exec);
+        await execAsync("npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/openclaw-plugin", {
+          timeout: 600000,
+        });
+        pluginSpinner.stop("Plugin installed.");
+      } catch {
+        pluginSpinner.stop(
+          "Plugin install failed — you can install it later with:\n  npm install -g @opengramsh/openclaw-plugin",
+        );
+      }
     }
 
     // Chain into the standalone setup wizard with pre-filled values.
