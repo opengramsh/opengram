@@ -1,17 +1,18 @@
 import { docsSource, apiSource } from '@/lib/source';
 import { createSearchAPI } from 'fumadocs-core/search/server';
+import type { StructuredData } from 'fumadocs-core/mdx-plugins';
 
-const emptyStructuredData = {
+const emptyStructuredData: StructuredData = {
   headings: [],
   contents: [],
 };
 
 async function getStructuredData(page: {
   data: {
-    structuredData?: unknown;
-    load?: () => Promise<{ structuredData?: unknown }>;
+    structuredData?: StructuredData;
+    load?: () => Promise<{ structuredData?: StructuredData }>;
   };
-}) {
+}): Promise<StructuredData> {
   if (page.data.structuredData) {
     return page.data.structuredData;
   }
