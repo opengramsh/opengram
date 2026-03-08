@@ -1,0 +1,31 @@
+name: Opengram
+options:
+  bundleIdPrefix: sh.opengram
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  Opengram:
+    type: application
+    platform: macOS
+    sources:
+      - path: Opengram
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: sh.opengram.macos
+        PRODUCT_NAME: Opengram
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: Opengram/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Opengram/Opengram.entitlements
+        GENERATE_INFOPLIST_FILE: false
+        COMBINE_HIDPI_IMAGES: true

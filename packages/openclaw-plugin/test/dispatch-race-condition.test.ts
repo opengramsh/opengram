@@ -3,8 +3,8 @@ import {
   clearChatQueuesForTests,
   enqueueOrSupersede,
   isSuperseded,
-} from "../../packages/openclaw-plugin/src/chat-queue.js";
-import { clearActiveStreamsForTests, hasActiveStream, initStream } from "../../packages/openclaw-plugin/src/streaming.js";
+} from "../src/chat-queue.js";
+import { clearActiveStreamsForTests, hasActiveStream, initStream } from "../src/streaming.js";
 
 /**
  * KAI-234: Dispatch race condition — after createMessage returns, isSuperseded
@@ -71,7 +71,7 @@ describe("KAI-234: dispatch race condition — supersede check after createMessa
      * Mirrors the FIXED production code from inbound.ts — after createMessage
      * returns, isSuperseded is checked and the message is cancelled if true.
      */
-    const client = makeClient(100) as unknown as MockClient & import("../../packages/openclaw-plugin/src/api-client.js").OpenGramClient;
+    const client = makeClient(100) as unknown as MockClient & import("../src/api-client.js").OpenGramClient;
     const chatId = "chat-1";
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -129,7 +129,7 @@ describe("KAI-234: dispatch race condition — supersede check after createMessa
      * Stress test: 6 messages in quick succession — matches the scenario
      * described in the KAI-234 bug report.
      */
-    const client = makeClient(50) as unknown as MockClient & import("../../packages/openclaw-plugin/src/api-client.js").OpenGramClient;
+    const client = makeClient(50) as unknown as MockClient & import("../src/api-client.js").OpenGramClient;
     const chatId = "chat-stress";
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -183,7 +183,7 @@ describe("KAI-234: dispatch race condition — supersede check after createMessa
      * If the server already cleaned up the streaming message (404),
      * the .catch(() => {}) prevents the error from bubbling.
      */
-    const client = makeClient(50) as unknown as MockClient & import("../../packages/openclaw-plugin/src/api-client.js").OpenGramClient;
+    const client = makeClient(50) as unknown as MockClient & import("../src/api-client.js").OpenGramClient;
     // Make cancelMessage reject
     (client as any).cancelMessage = vi.fn(async () => {
       throw new Error("404 Not Found");

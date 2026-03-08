@@ -12,7 +12,7 @@ describe("openclaw-plugin media", () => {
       ),
     );
 
-    const { downloadMedia } = await import("../../packages/openclaw-plugin/src/media.ts");
+    const { downloadMedia } = await import("../src/media.ts");
     const result = await downloadMedia("https://files.example/path/photo.png");
 
     expect(result.buffer.toString()).toBe("abc");
@@ -31,7 +31,7 @@ describe("openclaw-plugin media", () => {
       ),
     );
 
-    const { downloadMedia } = await import("../../packages/openclaw-plugin/src/media.ts");
+    const { downloadMedia } = await import("../src/media.ts");
     const result = await downloadMedia("https://files.example/path/");
 
     expect(result.filename).toBe("file.mpga");

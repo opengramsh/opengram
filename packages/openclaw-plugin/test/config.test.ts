@@ -8,7 +8,7 @@ describe("openclaw-plugin config", () => {
   it("applies defaults and env secret override", async () => {
     process.env.OPENGRAM_INSTANCE_SECRET = "env-secret";
 
-    const { resolveOpenGramAccount } = await import("../../packages/openclaw-plugin/src/config.ts");
+    const { resolveOpenGramAccount } = await import("../src/config.ts");
 
     const resolved = resolveOpenGramAccount({
       channels: {
@@ -29,7 +29,7 @@ describe("openclaw-plugin config", () => {
   });
 
   it("handles missing section with sane defaults", async () => {
-    const { resolveOpenGramAccount } = await import("../../packages/openclaw-plugin/src/config.ts");
+    const { resolveOpenGramAccount } = await import("../src/config.ts");
 
     const resolved = resolveOpenGramAccount({});
 
