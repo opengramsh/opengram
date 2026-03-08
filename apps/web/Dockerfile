@@ -1,10 +1,13 @@
+# Build from repo root: docker build -f apps/web/Dockerfile .
 FROM node:20-bookworm AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY apps/web/package.json apps/web/
+RUN npm ci -w apps/web --include-workspace-root
 
 FROM deps AS builder
-COPY . .
+COPY apps/web/ apps/web/
+WORKDIR /app/apps/web
 RUN npm run build
 
 FROM deps AS prod-deps
@@ -25,11 +28,11 @@ RUN apt-get update \
   && useradd --system --uid 10001 --gid opengram --home /opt/opengram/web --shell /usr/sbin/nologin opengram \
   && mkdir -p /opt/opengram/data/uploads /opt/opengram/config
 
-COPY --from=builder /app/dist/server/ /opt/opengram/web/dist/server/
-COPY --from=builder /app/dist/client/ /opt/opengram/web/dist/client/
-COPY --from=builder /app/migrations/ /opt/opengram/web/migrations/
-COPY --from=builder /app/deploy/docker/ /opt/opengram/web/deploy/docker/
-COPY --from=builder /app/config/opengram.config.json /opt/opengram/config/opengram.config.json
+COPY --from=builder /app/apps/web/dist/server/ /opt/opengram/web/dist/server/
+COPY --from=builder /app/apps/web/dist/client/ /opt/opengram/web/dist/client/
+COPY --from=builder /app/apps/web/migrations/ /opt/opengram/web/migrations/
+COPY --from=builder /app/apps/web/deploy/docker/ /opt/opengram/web/deploy/docker/
+COPY --from=builder /app/apps/web/config/opengram.config.json /opt/opengram/config/opengram.config.json
 COPY --from=prod-deps /app/node_modules/ /opt/opengram/web/node_modules/
 
 RUN chmod +x /opt/opengram/web/deploy/docker/entrypoint.sh \

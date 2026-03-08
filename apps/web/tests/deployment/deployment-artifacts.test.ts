@@ -10,7 +10,7 @@ describe("deployment artifacts", () => {
     expect(dockerfile).toContain("dist/server/");
     expect(dockerfile).toContain("dist/client/");
     expect(dockerfile).toContain("node_modules/");
-    expect(dockerfile).toContain("COPY --from=builder /app/deploy/docker/");
+    expect(dockerfile).toContain("COPY --from=builder /app/apps/web/deploy/docker/");
     expect(dockerfile).toContain("entrypoint.sh");
     expect(dockerfile).toContain('VOLUME ["/opt/opengram/data"]');
     expect(dockerfile).toContain("/api/v1/health");

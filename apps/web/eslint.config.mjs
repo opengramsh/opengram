@@ -19,14 +19,7 @@ export default tseslint.config(
     ignores: [
       "dist/**",
       "build/**",
-      ".next/**",
       "node_modules/**",
-      "packages/*/node_modules/**",
-      "packages/*/dist/**",
-      "docs/.next/**",
-      "docs/.source/**",
-      "docs/node_modules/**",
-      "demo-video/**",
     ],
   },
 );
