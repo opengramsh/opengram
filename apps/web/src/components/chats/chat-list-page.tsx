@@ -197,7 +197,7 @@ export function ChatListPage({
                   }
                   : undefined,
                 scrollToMessageId: messageId,
-                fromPath: location.pathname,
+                fromPath: chatPathPrefix || '/',
               },
             })}
         />
@@ -211,7 +211,7 @@ export function ChatListPage({
           rowActionLabel={rowActionLabel}
           activeChatId={activeChatId}
           streamingChatIds={streamingChatIds}
-          onOpenChat={(chat) => navigate(`${chatPathPrefix}/chats/${chat.id}`, { state: { chat, fromPath: location.pathname } })}
+          onOpenChat={(chat) => navigate(`${chatPathPrefix}/chats/${chat.id}`, { state: { chat, fromPath: chatPathPrefix || '/' } })}
           onMarkRead={markChatRead}
           onMarkUnread={markChatUnread}
           onTogglePin={togglePin}
