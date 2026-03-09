@@ -34,11 +34,30 @@ export function PushBootstrap() {
     return () => navigator.serviceWorker?.removeEventListener('message', handler);
   }, [navigate]);
 
+  // Handle macOS native notification clicks — Swift dispatches this custom
+  // event via evaluateJavaScript when the user clicks a notification banner.
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const chatId = (event as CustomEvent).detail?.chatId;
+      if (typeof chatId === 'string' && chatId) {
+        navigate(`/chats/${encodeURIComponent(chatId)}`);
+      }
+    };
+    window.addEventListener('opengram:navigate', handler);
+    return () => window.removeEventListener('opengram:navigate', handler);
+  }, [navigate]);
+
   useEffect(() => {
     let cancelled = false;
 
     async function setupPush() {
       try {
+        // macOS native app handles notifications via its own JS bridge —
+        // skip web push to avoid duplicate notifications.
+        if ((window as { __OPENGRAM_MACOS__?: unknown }).__OPENGRAM_MACOS__) {
+          return;
+        }
+
         const config = await fetchPushConfig();
         if (!config.enabled || !config.vapidPublicKey) {
           return;
