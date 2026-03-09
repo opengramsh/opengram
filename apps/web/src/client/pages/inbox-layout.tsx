@@ -12,7 +12,10 @@ import {
   type FrontendStreamEvent,
 } from "@/src/lib/events-stream";
 import { cn } from "@/src/lib/utils";
-import { isSoundEnabled } from "@/src/lib/notification-preferences";
+import {
+  isBrowserNotificationsEnabled,
+  isSoundEnabled,
+} from "@/src/lib/notification-preferences";
 import { playNotificationSound } from "@/src/lib/notification-sound";
 import { applyKeyboardCssVars, subscribeToKeyboardLayout } from "@/src/lib/keyboard-layout";
 
@@ -161,7 +164,11 @@ export default function InboxLayout() {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
 
-  const { setChats, loadChats, refreshChats, matchesActiveFilters } = chatList;
+  const { setChats, loadChats, refreshChats, matchesActiveFilters, agentsById } = chatList;
+  const agentsByIdRef = useRef(agentsById);
+  useEffect(() => {
+    agentsByIdRef.current = agentsById;
+  }, [agentsById]);
 
   useEffect(() => {
     loadPendingSummary().catch(() => setPendingRequestsTotal(0));
@@ -170,6 +177,14 @@ export default function InboxLayout() {
       setUnreadByAgent({});
     });
   }, [loadPendingSummary, loadUnreadSummary]);
+
+  // Update macOS dock badge when unread count changes
+  useEffect(() => {
+    const macos = (window as { __OPENGRAM_MACOS__?: {
+      updateBadge: (count: number) => void;
+    } }).__OPENGRAM_MACOS__;
+    macos?.updateBadge(totalUnread);
+  }, [totalUnread]);
 
   const refreshSingleInboxChat = useCallback(
     async (incomingChatId: string) => {
@@ -262,7 +277,7 @@ export default function InboxLayout() {
         }
 
         // Play notification sound for completed agent messages only
-        const shouldPlaySound =
+        const shouldNotify =
           chatIdFromEvent &&
           (
             (event.type === "message.created" &&
@@ -272,10 +287,31 @@ export default function InboxLayout() {
             (event.type === "message.streaming.complete" &&
               event.payload.streamState === "complete")
           );
-        if (shouldPlaySound) {
+        if (shouldNotify) {
           const chat = chatsRef.current.find((c) => c.id === chatIdFromEvent);
-          if (!(chat?.notifications_muted) && isSoundEnabled()) {
-            playNotificationSound(chatIdFromEvent);
+          if (!(chat?.notifications_muted)) {
+            if (isSoundEnabled()) {
+              playNotificationSound(chatIdFromEvent);
+            }
+
+            // macOS native notification (only if not viewing this chat)
+            const macos = (window as { __OPENGRAM_MACOS__?: {
+              postNotification: (title: string, body: string, chatId: string) => void;
+            } }).__OPENGRAM_MACOS__;
+            if (macos && isBrowserNotificationsEnabled() && activeChatIdRef.current !== chatIdFromEvent) {
+              const agentId = chat?.agent_ids[0];
+              const agentName = agentId ? agentsByIdRef.current.get(agentId)?.name : undefined;
+              const title = agentName || chat?.title || "New message";
+              const messageText = (event.type === "message.streaming.complete"
+                ? (event.payload.finalText as string | undefined)
+                : (event.payload.contentFinal as string | undefined)
+              )?.trim().slice(0, 200) || "";
+              const chatTitle = chat?.title && chat.title !== title ? chat.title : null;
+              const body = chatTitle
+                ? `${chatTitle}\n${messageText || "New message received."}`
+                : (messageText || "New message received.");
+              macos.postNotification(title, body, chatIdFromEvent);
+            }
           }
         }
 
