@@ -1,5 +1,7 @@
 'use client';
 
+import { useCallback } from 'react';
+
 import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
 import { ChatHeader } from '@/app/chats/[chatId]/_components/chat-header';
 import { ChatMediaGallery } from '@/app/chats/[chatId]/_components/chat-media-gallery';
@@ -8,11 +10,23 @@ import { ChatMessages } from '@/app/chats/[chatId]/_components/chat-messages';
 import { ChatRequestWidget } from '@/app/chats/[chatId]/_components/chat-request-widget';
 import { CameraCapture } from '@/app/chats/[chatId]/_components/camera-capture';
 import { FilePreviewSection } from '@/app/chats/[chatId]/_components/file-preview-section';
+import { DropZoneOverlay } from '@/app/chats/[chatId]/_components/drop-zone-overlay';
 import { useChatPageContext } from '@/app/chats/[chatId]/_components/chat-page-provider';
+import { useFileDrop } from '@/app/chats/[chatId]/_hooks/use-file-drop';
 
 export function ChatPageSections() {
+  const chat = useChatPageContext();
+
+  const handleFileDrop = useCallback(
+    (files: FileList) => void chat.uploadComposerFiles(files),
+    [chat.uploadComposerFiles],
+  );
+
+  const { dropRef, isDragging } = useFileDrop({ onDrop: handleFileDrop });
+
   return (
-    <>
+    <div ref={dropRef} className="relative flex h-full w-full flex-col">
+      <DropZoneOverlay visible={isDragging} />
       <ChatHeaderSection />
       <ChatMessagesSection />
       <ChatRequestWidgetSection />
@@ -21,7 +35,7 @@ export function ChatPageSections() {
       <ChatMenuSection />
       <CameraCaptureSection />
       <FilePreviewSectionWrapper />
-    </>
+    </div>
   );
 }
 

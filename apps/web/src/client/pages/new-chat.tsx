@@ -7,7 +7,9 @@ import { toast } from 'sonner';
 import { Facehash } from 'facehash';
 
 import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
+import { DropZoneOverlay } from '@/app/chats/[chatId]/_components/drop-zone-overlay';
 import { useChatRecorder } from '@/app/chats/[chatId]/_hooks/use-chat-recorder';
+import { useFileDrop } from '@/app/chats/[chatId]/_hooks/use-file-drop';
 import type { PendingAttachment, MediaKind } from '@/app/chats/[chatId]/_lib/types';
 import { apiFetch } from '@/src/lib/api-fetch';
 import { subscribeToKeyboardLayout } from '@/src/lib/keyboard-layout';
@@ -252,8 +254,16 @@ export default function NewChatPage() {
     onVoiceNoteUploaded: (chatId) => navigate(`/chats/${chatId}`, { replace: true }),
   });
 
+  const handleFileDrop = useCallback(
+    (files: FileList) => void uploadComposerFiles(files),
+    [uploadComposerFiles],
+  );
+
+  const { dropRef, isDragging } = useFileDrop({ onDrop: handleFileDrop });
+
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-background">
+    <div ref={dropRef} className="relative flex h-[100dvh] w-full flex-col bg-background">
+      <DropZoneOverlay visible={isDragging} />
       {/* Header */}
       <header className="sticky top-0 z-30 h-[61px] border-b border-border/70 bg-background/95 px-3 py-3 backdrop-blur-md">
         <div className="flex items-center gap-3">
