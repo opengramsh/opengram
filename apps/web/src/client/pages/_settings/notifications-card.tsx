@@ -28,6 +28,9 @@ import { playNotificationSound } from "@/src/lib/notification-sound";
 import type { ConfigResponse } from "./types";
 
 export function NotificationsCard({ config }: { config: ConfigResponse }) {
+  const isMacosNative = Boolean(
+    (window as { __OPENGRAM_MACOS__?: unknown }).__OPENGRAM_MACOS__,
+  );
   const [soundOn, setSoundOn] = useState(isSoundEnabled);
   const [browserOn, setBrowserOn] = useState(isBrowserNotificationsEnabled);
   const [permission, setPermission] =
@@ -50,6 +53,9 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
   }, []);
 
   useEffect(() => {
+    // macOS native app handles notifications via its own bridge — skip web push state sync
+    if (isMacosNative) return;
+
     refreshPushState()
       .then((hasSubscription) => {
         if (!hasSubscription || !config.push?.enabled) {
@@ -58,7 +64,7 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
         }
       })
       .catch(() => undefined);
-  }, [refreshPushState, config.push?.enabled]);
+  }, [isMacosNative, refreshPushState, config.push?.enabled]);
 
   function handleSoundToggle(checked: boolean) {
     setSoundEnabled(checked);
@@ -70,6 +76,13 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
 
   async function handleBrowserToggle(checked: boolean) {
     setStatusMessage(null);
+
+    // macOS native app — just toggle the preference (no web push API needed)
+    if (isMacosNative) {
+      setBrowserNotificationsEnabled(checked);
+      setBrowserOn(checked);
+      return;
+    }
 
     if (!checked) {
       setBusyBrowser(true);
@@ -141,12 +154,15 @@ export function NotificationsCard({ config }: { config: ConfigResponse }) {
     }
   }
 
-  const showDeniedHint = permission === "denied" && !browserOn;
+  const showDeniedHint = !isMacosNative && permission === "denied" && !browserOn;
   const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const showIosHint = isIos && permission === "default";
-  const showTestButton = browserOn && isSubscribed && config.push?.enabled;
+  const showIosHint = !isMacosNative && isIos && permission === "default";
+  const showTestButton =
+    !isMacosNative && browserOn && isSubscribed && config.push?.enabled;
   const showLocalhostWarning =
-    config.push?.enabled && config.push.subject?.includes("localhost");
+    !isMacosNative &&
+    config.push?.enabled &&
+    config.push.subject?.includes("localhost");
 
   return (
     <Card>

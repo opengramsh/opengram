@@ -3,31 +3,38 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		11A374685E0E0681DD9C140B /* DiscoveredServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F75314F34FFF704CBC1B8C /* DiscoveredServer.swift */; };
 		1E186783A4FE5DC2F46CC09E /* ManualEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C1E80176699B56C1CFAFFA /* ManualEntrySheet.swift */; };
+		20A634F8255FAB9E60B40C25 /* UpdaterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59929F611277BE470B390EAE /* UpdaterService.swift */; };
 		2C96B1AD414D13477DF2EB7A /* OpengramApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 789E68E491FC8C7F20196CA2 /* OpengramApp.swift */; };
 		3A03276E9A4134DFD92A143E /* ServerListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96BB83B5A2D97B41AB5B2F3 /* ServerListView.swift */; };
 		4D9C86680F5CA40CE7DD07F8 /* ConnectionErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8D3CF6C5FE9B6628E8DD05 /* ConnectionErrorView.swift */; };
+		5003B147B82449CC9C117B9F /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = EE0FFD4FA86CDF2B6B782AD5 /* Sparkle */; };
 		5B9FEB505E136C1FDBFFE3B6 /* ConnectingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46153F5CC0F3E2185F601F4D /* ConnectingView.swift */; };
 		5DB58E1105A794B94C11DC90 /* ServerProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF3F961A0C40BE0AB8300DD6 /* ServerProfile.swift */; };
 		8CB9782E2C5C5C83EC2DA1E1 /* ConnectionLostOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF46E8E1DC1AB42DEC207905 /* ConnectionLostOverlay.swift */; };
 		968A9398140303B12F31830B /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60304F418D9764F72E079908 /* WebView.swift */; };
+		99453F565C3519E540563B5F /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00BC881AD116453A761D8F /* NotificationService.swift */; };
 		BF65DA5C99DCFDC3B7DAD66C /* ServerDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75F3B021BBC4477E6F97329B /* ServerDiscoveryService.swift */; };
 		C24C130B844E19339CB014AB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7A9D34E148E897C54735F737 /* Assets.xcassets */; };
 		C3EF48CB8558EAF8B7A40F69 /* ServerProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64749BA299ABA2BACB8DE0FE /* ServerProfileStore.swift */; };
+		C7BAB28FA4EDB33EE9BD9A1A /* GlobalShortcutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF2111444A7F5BBB451A7B6 /* GlobalShortcutService.swift */; };
 		E51413F63FA13B38C69CE875 /* HealthProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD955D64F23F1971AE336B41 /* HealthProber.swift */; };
 		EED715AF1D9AD68F742120AA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8ED0C1608A442A530CC226B /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0A00BC881AD116453A761D8F /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		0CF2111444A7F5BBB451A7B6 /* GlobalShortcutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutService.swift; sourceTree = "<group>"; };
 		141D19E3F9DF4A535F33D18D /* Opengram.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Opengram.entitlements; sourceTree = "<group>"; };
 		25C1E80176699B56C1CFAFFA /* ManualEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualEntrySheet.swift; sourceTree = "<group>"; };
 		30ACAEB97DC35E7261468707 /* Opengram.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Opengram.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		46153F5CC0F3E2185F601F4D /* ConnectingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectingView.swift; sourceTree = "<group>"; };
+		59929F611277BE470B390EAE /* UpdaterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterService.swift; sourceTree = "<group>"; };
 		60304F418D9764F72E079908 /* WebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebView.swift; sourceTree = "<group>"; };
 		604D5980BA91840101EDFCA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		64749BA299ABA2BACB8DE0FE /* ServerProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerProfileStore.swift; sourceTree = "<group>"; };
@@ -42,6 +49,17 @@
 		FA8D3CF6C5FE9B6628E8DD05 /* ConnectionErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionErrorView.swift; sourceTree = "<group>"; };
 		FF46E8E1DC1AB42DEC207905 /* ConnectionLostOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionLostOverlay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		DDB2FFF4AA3747C1F3B716C8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5003B147B82449CC9C117B9F /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		6D43D758E9063C3EA81886B9 /* Opengram */ = {
@@ -78,9 +96,12 @@
 		BD7326F3CBD09747DC80E747 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				0CF2111444A7F5BBB451A7B6 /* GlobalShortcutService.swift */,
 				AD955D64F23F1971AE336B41 /* HealthProber.swift */,
+				0A00BC881AD116453A761D8F /* NotificationService.swift */,
 				75F3B021BBC4477E6F97329B /* ServerDiscoveryService.swift */,
 				64749BA299ABA2BACB8DE0FE /* ServerProfileStore.swift */,
+				59929F611277BE470B390EAE /* UpdaterService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -116,6 +137,7 @@
 			buildPhases = (
 				A01EB1D14613B4F78747C735 /* Sources */,
 				795D670834F0E5FFF5F348E2 /* Resources */,
+				DDB2FFF4AA3747C1F3B716C8 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -123,6 +145,7 @@
 			);
 			name = Opengram;
 			packageProductDependencies = (
+				EE0FFD4FA86CDF2B6B782AD5 /* Sparkle */,
 			);
 			productName = Opengram;
 			productReference = 30ACAEB97DC35E7261468707 /* Opengram.app */;
@@ -136,6 +159,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					6B1BF335B84F097A174CA021 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = 1C06165F6E61F0BEFD76BA4B /* Build configuration list for PBXProject "Opengram" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -147,7 +175,9 @@
 			);
 			mainGroup = 9A3DEBE99E6048092F7877D4;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
+			packageReferences = (
+				76D1B094A3B7453FEBCAC15E /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -176,14 +206,17 @@
 				4D9C86680F5CA40CE7DD07F8 /* ConnectionErrorView.swift in Sources */,
 				8CB9782E2C5C5C83EC2DA1E1 /* ConnectionLostOverlay.swift in Sources */,
 				11A374685E0E0681DD9C140B /* DiscoveredServer.swift in Sources */,
+				C7BAB28FA4EDB33EE9BD9A1A /* GlobalShortcutService.swift in Sources */,
 				E51413F63FA13B38C69CE875 /* HealthProber.swift in Sources */,
 				1E186783A4FE5DC2F46CC09E /* ManualEntrySheet.swift in Sources */,
+				99453F565C3519E540563B5F /* NotificationService.swift in Sources */,
 				2C96B1AD414D13477DF2EB7A /* OpengramApp.swift in Sources */,
 				BF65DA5C99DCFDC3B7DAD66C /* ServerDiscoveryService.swift in Sources */,
 				3A03276E9A4134DFD92A143E /* ServerListView.swift in Sources */,
 				5DB58E1105A794B94C11DC90 /* ServerProfile.swift in Sources */,
 				C3EF48CB8558EAF8B7A40F69 /* ServerProfileStore.swift in Sources */,
 				EED715AF1D9AD68F742120AA /* SettingsView.swift in Sources */,
+				20A634F8255FAB9E60B40C25 /* UpdaterService.swift in Sources */,
 				968A9398140303B12F31830B /* WebView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -224,8 +257,12 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -261,6 +298,7 @@
 				CODE_SIGN_ENTITLEMENTS = Opengram/Opengram.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G7VX74286H;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Opengram/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -281,6 +319,7 @@
 				CODE_SIGN_ENTITLEMENTS = Opengram/Opengram.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G7VX74286H;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Opengram/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -327,8 +366,12 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -372,6 +415,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		76D1B094A3B7453FEBCAC15E /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		EE0FFD4FA86CDF2B6B782AD5 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 76D1B094A3B7453FEBCAC15E /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 27C8BE71F8B681981D6F9764 /* Project object */;
 }

@@ -72,6 +72,9 @@ export function ChatComposer({
   filesInputRef,
   keyboardOffset,
 }: ChatComposerProps) {
+  const isMacosNative = Boolean(
+    (window as { __OPENGRAM_MACOS__?: unknown }).__OPENGRAM_MACOS__,
+  );
   const footerRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -340,32 +343,36 @@ export function ChatComposer({
           </div>
         )}
         {/* tabIndex={-1} removes these from iOS form navigation, suppressing the ↑↓✓ accessory bar */}
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          tabIndex={-1}
-          onChange={(event) => {
-            void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
-              event.currentTarget.value = '';
-            });
-          }}
-        />
-        <input
-          ref={photosInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          tabIndex={-1}
-          onChange={(event) => {
-            void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
-              event.currentTarget.value = '';
-            });
-          }}
-        />
+        {!isMacosNative && (
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            tabIndex={-1}
+            onChange={(event) => {
+              void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
+                event.currentTarget.value = '';
+              });
+            }}
+          />
+        )}
+        {!isMacosNative && (
+          <input
+            ref={photosInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            tabIndex={-1}
+            onChange={(event) => {
+              void uploadComposerFiles(event.currentTarget.files, 'image').finally(() => {
+                event.currentTarget.value = '';
+              });
+            }}
+          />
+        )}
         <input
           ref={filesInputRef}
           type="file"
@@ -398,27 +405,31 @@ export function ChatComposer({
               <span className="text-xs font-medium text-foreground">Files</span>
             </button>
 
-            <button
-              type="button"
-              className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              onClick={() => { setIsComposerMenuOpen(false); cameraInputRef.current?.click(); }}
-            >
-              <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
-                <Camera size={20} className="text-primary" />
-              </div>
-              <span className="text-xs font-medium text-foreground">Camera</span>
-            </button>
+            {!isMacosNative && (
+              <button
+                type="button"
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
+                onClick={() => { setIsComposerMenuOpen(false); cameraInputRef.current?.click(); }}
+              >
+                <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
+                  <Camera size={20} className="text-primary" />
+                </div>
+                <span className="text-xs font-medium text-foreground">Camera</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
-              onClick={() => { setIsComposerMenuOpen(false); photosInputRef.current?.click(); }}
-            >
-              <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
-                <Images size={20} className="text-primary" />
-              </div>
-              <span className="text-xs font-medium text-foreground">Photos</span>
-            </button>
+            {!isMacosNative && (
+              <button
+                type="button"
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-muted/60 px-5 py-4 transition active:scale-95 disabled:opacity-50"
+                onClick={() => { setIsComposerMenuOpen(false); photosInputRef.current?.click(); }}
+              >
+                <div className="flex size-10 items-center justify-center rounded-full bg-primary/15">
+                  <Images size={20} className="text-primary" />
+                </div>
+                <span className="text-xs font-medium text-foreground">Photos</span>
+              </button>
+            )}
           </div>
 
           {!allAttachmentsReady && <p className="pt-2 text-xs text-muted-foreground">Uploading attachment…</p>}

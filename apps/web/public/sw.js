@@ -81,8 +81,12 @@ function getBearerToken() {
 }
 
 var isIos = /iPad|iPhone|iPod/.test(self.navigator.userAgent);
+var isMacosNative = /Opengram-macOS/.test(self.navigator.userAgent);
 
 self.addEventListener('push', (event) => {
+  // macOS native app handles notifications via its own Swift bridge —
+  // the service worker should never show its own notifications there.
+  if (isMacosNative) return;
   let payload = {
     title: 'OpenGram',
     body: 'You have a new notification.',

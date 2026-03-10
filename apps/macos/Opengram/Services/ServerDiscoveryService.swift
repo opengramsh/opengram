@@ -46,23 +46,35 @@ class ServerDiscoveryService: ObservableObject {
 
     // MARK: - Discovery channels
 
+    /// Holds mutable state for Bonjour discovery (reference type to avoid
+    /// Swift 6 concurrency warnings when captured in multiple closures).
+    private class BonjourScanState {
+        var found: [DiscoveredServer] = []
+        var hasResumed = false
+    }
+
     private func discoverBonjour() async -> [DiscoveredServer] {
         // Use NWBrowser to find _opengram._tcp services on the local network.
         // We collect results for up to 5 seconds, then return what we found.
         await withCheckedContinuation { continuation in
-            var found: [DiscoveredServer] = []
+            let state = BonjourScanState()
             let params = NWParameters()
             params.includePeerToPeer = true
             let browser = NWBrowser(for: .bonjour(type: "_opengram._tcp", domain: "local."), using: params)
 
-            browser.browseResultsChangedHandler = { results, _ in
+            // All closures run on DispatchQueue.main, so access to `state` is serialized.
+            let resumeOnce: @Sendable () -> Void = { [state] in
+                guard !state.hasResumed else { return }
+                state.hasResumed = true
+                browser.cancel()
+                continuation.resume(returning: state.found)
+            }
+
+            browser.browseResultsChangedHandler = { [state] results, _ in
                 for result in results {
                     if case let .bonjour(txtRecord) = result.metadata {
                         let version = txtRecord["version"]
-                        // We need to resolve the endpoint to get a usable URL.
-                        // For now, extract from the endpoint description.
                         if case let .service(name, _, _, _) = result.endpoint {
-                            // We'll probe this after resolution; for now, store a placeholder.
                             let server = DiscoveredServer(
                                 id: "bonjour-\(name)",
                                 url: URL(string: "http://\(name).local:3000")!,
@@ -70,8 +82,8 @@ class ServerDiscoveryService: ObservableObject {
                                 version: version,
                                 name: name
                             )
-                            if !found.contains(where: { $0.id == server.id }) {
-                                found.append(server)
+                            if !state.found.contains(where: { $0.id == server.id }) {
+                                state.found.append(server)
                             }
                         }
                     }
@@ -80,8 +92,7 @@ class ServerDiscoveryService: ObservableObject {
 
             browser.stateUpdateHandler = { state in
                 if case .failed = state {
-                    browser.cancel()
-                    continuation.resume(returning: found)
+                    resumeOnce()
                 }
             }
 
@@ -90,20 +101,26 @@ class ServerDiscoveryService: ObservableObject {
 
             // Give Bonjour 5 seconds to discover services
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                browser.cancel()
-                continuation.resume(returning: found)
+                resumeOnce()
             }
         }
     }
 
     private func discoverLocalhost() async -> [DiscoveredServer] {
-        let ports = [3000, 3333, 5173]
+        let probeTargets: [(Int, String)] = [
+            (3000, "http"),
+            (3333, "http"),
+            (5173, "http"),
+            (8080, "http"),
+            (8443, "https"),
+            (443, "https"),
+        ]
         var found: [DiscoveredServer] = []
 
         await withTaskGroup(of: DiscoveredServer?.self) { group in
-            for port in ports {
+            for (port, scheme) in probeTargets {
                 group.addTask {
-                    let url = URL(string: "http://127.0.0.1:\(port)")!
+                    let url = URL(string: "\(scheme)://127.0.0.1:\(port)")!
                     if let result = await HealthProber.probe(url: url, timeout: 3) {
                         return DiscoveredServer(
                             id: url.absoluteString,
@@ -127,7 +144,21 @@ class ServerDiscoveryService: ObservableObject {
 
     private func discoverTailscale() async -> [DiscoveredServer] {
         // Shell out to `tailscale status --json` and probe discovered hosts.
-        guard let output = try? await runCommand("/usr/local/bin/tailscale", arguments: ["status", "--json"]) else {
+        // Check multiple known paths for the Tailscale CLI
+        let tailscalePaths = [
+            "/usr/local/bin/tailscale",
+            "/opt/homebrew/bin/tailscale",
+            "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+        ]
+        var output: String?
+        for path in tailscalePaths {
+            if FileManager.default.isExecutableFile(atPath: path),
+               let result = try? await runCommand(path, arguments: ["status", "--json"]) {
+                output = result
+                break
+            }
+        }
+        guard let output else {
             return []
         }
 
@@ -148,8 +179,15 @@ class ServerDiscoveryService: ObservableObject {
 
                 let cleanHost = hostName.hasSuffix(".") ? String(hostName.dropLast()) : hostName
 
-                for port in [3000, 443] {
-                    let scheme = port == 443 ? "https" : "http"
+                let probeTargets: [(Int, String)] = [
+                    (443, "https"),
+                    (8443, "https"),
+                    (3000, "https"),
+                    (3333, "https"),
+                    (5173, "https"),
+                    (8080, "https"),
+                ]
+                for (port, scheme) in probeTargets {
                     group.addTask {
                         let url = URL(string: "\(scheme)://\(cleanHost):\(port)")!
                         if let result = await HealthProber.probe(url: url, timeout: 3) {
@@ -186,16 +224,17 @@ class ServerDiscoveryService: ObservableObject {
             process.standardOutput = pipe
             process.standardError = Pipe()
 
-            do {
-                try process.run()
-                process.waitUntilExit()
-
+            process.terminationHandler = { _ in
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 if let output = String(data: data, encoding: .utf8) {
                     continuation.resume(returning: output)
                 } else {
                     continuation.resume(throwing: NSError(domain: "ServerDiscovery", code: 1))
                 }
+            }
+
+            do {
+                try process.run()
             } catch {
                 continuation.resume(throwing: error)
             }

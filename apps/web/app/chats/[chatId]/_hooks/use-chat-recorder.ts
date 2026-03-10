@@ -253,9 +253,13 @@ export function useChatRecorder({ getChatId, setError, setMessages, setMedia, on
     } catch (micError) {
       resetRecordingState();
 
+      if (!window.isSecureContext) {
+        setError('Microphone access requires a secure (HTTPS) connection.');
+        return;
+      }
+
       if (isMicPermissionDenied(micError)) {
         setShowMicSettingsPrompt(true);
-        setError('Microphone permission was denied.');
         return;
       }
 

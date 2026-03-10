@@ -296,21 +296,18 @@ export default function InboxLayout() {
 
             // macOS native notification (only if not viewing this chat)
             const macos = (window as { __OPENGRAM_MACOS__?: {
-              postNotification: (title: string, body: string, chatId: string) => void;
+              postNotification: (title: string, subtitle: string, body: string, chatId: string) => void;
             } }).__OPENGRAM_MACOS__;
             if (macos && isBrowserNotificationsEnabled() && activeChatIdRef.current !== chatIdFromEvent) {
               const agentId = chat?.agent_ids[0];
               const agentName = agentId ? agentsByIdRef.current.get(agentId)?.name : undefined;
               const title = agentName || chat?.title || "New message";
-              const messageText = (event.type === "message.streaming.complete"
+              const subtitle = chat?.title && chat.title !== title ? chat.title : "";
+              const body = (event.type === "message.streaming.complete"
                 ? (event.payload.finalText as string | undefined)
                 : (event.payload.contentFinal as string | undefined)
-              )?.trim().slice(0, 200) || "";
-              const chatTitle = chat?.title && chat.title !== title ? chat.title : null;
-              const body = chatTitle
-                ? `${chatTitle}\n${messageText || "New message received."}`
-                : (messageText || "New message received.");
-              macos.postNotification(title, body, chatIdFromEvent);
+              )?.trim().slice(0, 200) || "New message received.";
+              macos.postNotification(title, subtitle, body, chatIdFromEvent);
             }
           }
         }

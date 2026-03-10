@@ -26,5 +26,22 @@
 	<string></string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Opengram needs microphone access to record voice notes.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Opengram searches the local network to discover running Opengram servers.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_opengram._tcp</string>
+	</array>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/opengramsh/opengram/main/apps/macos/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>3b34VYn0+QnUxrR9Ym4x+kgR3D10ZHlwxyexZdqH/pA=</string>
 </dict>
 </plist>

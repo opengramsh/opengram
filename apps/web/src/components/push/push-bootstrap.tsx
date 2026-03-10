@@ -55,6 +55,16 @@ export function PushBootstrap() {
         // macOS native app handles notifications via its own JS bridge —
         // skip web push to avoid duplicate notifications.
         if ((window as { __OPENGRAM_MACOS__?: unknown }).__OPENGRAM_MACOS__) {
+          // Clean up any service worker registered before the macOS skip was
+          // added.  A stale SW with an active push subscription can show
+          // broken notifications in WKWebView.
+          if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+              for (const reg of registrations) {
+                reg.unregister();
+              }
+            }).catch(() => {});
+          }
           return;
         }
 

@@ -157,8 +157,15 @@ body {
   color: var(--foreground);
 }
 
-/* Fix: pointer cursor on clickable link buttons */
-button[data-streamdown="link"] {
+/* Fix: Tailwind v4 no longer sets cursor:pointer on interactive elements */
+button,
+[role="button"],
+a,
+select,
+summary,
+[type="button"],
+[type="submit"],
+[type="reset"] {
   cursor: pointer;
 }
 

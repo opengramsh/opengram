@@ -7,6 +7,7 @@ struct ServerListView: View {
 
     @State private var showManualEntry = false
     @State private var profileHealth: [UUID: HealthResult] = [:]
+    @State private var editingProfile: ServerProfile?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,15 +29,21 @@ struct ServerListView: View {
                 onConnect(profile)
             }
         }
+        .sheet(item: $editingProfile) { profile in
+            EditProfileSheet(profile: profile) { updated in
+                profileStore.updateProfile(updated)
+            }
+        }
     }
 
     // MARK: - Header
 
     private var header: some View {
         VStack(spacing: 8) {
-            Image(systemName: "message.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.blue)
+            Image("Logo")
+                .resizable()
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
                 .padding(.top, 32)
 
             Text("Opengram")
@@ -94,6 +101,17 @@ struct ServerListView: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         connectToItem(item)
+                    }
+                    .contextMenu {
+                        if case .saved(let profile, _) = item {
+                            Button("Edit") {
+                                editingProfile = profile
+                            }
+                            Divider()
+                            Button("Remove", role: .destructive) {
+                                profileStore.removeProfile(profile)
+                            }
+                        }
                     }
             }
 

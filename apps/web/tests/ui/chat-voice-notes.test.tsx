@@ -68,6 +68,10 @@ describe('chat voice notes', () => {
         getUserMedia: getUserMediaMock,
       },
     });
+    Object.defineProperty(window, 'isSecureContext', {
+      configurable: true,
+      value: true,
+    });
 
     class TestMediaRecorder {
       ondataavailable: ((event: { data: Blob }) => void) | null = null;
@@ -327,5 +331,28 @@ describe('chat voice notes', () => {
 
     expect(await screen.findByText(/Microphone access is blocked/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry microphone access' })).toBeTruthy();
+  });
+
+  it('shows secure-context hint when microphone is requested from an insecure context', async () => {
+    Object.defineProperty(window, 'isSecureContext', {
+      configurable: true,
+      value: false,
+    });
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      mediaDevices: {
+        getUserMedia: vi.fn(async () => {
+          throw new DOMException('blocked', 'NotAllowedError');
+        }),
+      },
+    });
+
+    renderChatPage();
+    await screen.findByText('Chat 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+
+    expect(await screen.findByText(/requires a secure \(HTTPS\) connection/i)).toBeTruthy();
+    expect(screen.queryByText(/Microphone access is blocked/i)).toBeNull();
   });
 });
