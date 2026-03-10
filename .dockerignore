@@ -1,8 +1,12 @@
 .git
 .codecrew
-.next
+.claude
+.codex
 node_modules
 coverage
 dist
 *.log
 npm-debug.log*
+apps/docs
+apps/demo-video
+apps/macos

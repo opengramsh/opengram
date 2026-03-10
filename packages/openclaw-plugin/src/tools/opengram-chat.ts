@@ -8,7 +8,8 @@ export const opengramChatTool: AgentTool = {
   label: "OpenGram Chat",
   description:
     "Manage OpenGram chats — create new chats, update metadata, or list existing chats. " +
-    "Creating a chat requires modelId — the tool will error without it.",
+    "Creating a chat requires modelId — the tool will error without it. " +
+    "When creating a chat, always pass your own agent ID as agentId (found in your Runtime context as the `agent=` field), unless explicitly instructed otherwise. Never omit agentId — the default fallback will assign chats to the wrong agent.",
   parameters: Type.Object({
     action: Type.Union(
       [Type.Literal("create"), Type.Literal("update"), Type.Literal("list")],

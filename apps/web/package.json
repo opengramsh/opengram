@@ -1,0 +1,104 @@
+{
+  "name": "@opengramsh/opengram",
+  "version": "0.1.3",
+  "description": "Open-source, self-hosted chat UI and REST API for AI agent workflows",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opengramsh/opengram.git",
+    "directory": "apps/web"
+  },
+  "homepage": "https://opengram.sh",
+  "bugs": {
+    "url": "https://github.com/opengramsh/opengram/issues"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "agents",
+    "mobile"
+  ],
+  "bin": {
+    "opengram": "./dist/cli/cli.js"
+  },
+  "files": [
+    "dist/",
+    "migrations/"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -k \"OPENGRAM_SERVER_PORT=3334 tsx --watch src/server.ts\" \"vite --host 0.0.0.0 --port 5173 --strictPort\"",
+    "dev:server": "OPENGRAM_SERVER_PORT=3334 tsx --watch src/server.ts",
+    "dev:client": "vite",
+    "build": "vite build && tsup",
+    "build:demo": "vite build --config demo/vite.config.demo.ts && cp demo/vercel.json dist/demo/vercel.json",
+    "start": "node dist/server/server.js",
+    "db:migrate": "node deploy/docker/run-migrations.js",
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.1",
+    "@hono/node-server": "^1.19.9",
+    "@hono/zod-openapi": "^1.2.2",
+    "@scalar/hono-api-reference": "^0.9.46",
+    "better-sqlite3": "^12.4.1",
+    "eventsource": "^4.1.0",
+    "hono": "^4.12.3",
+    "mime-types": "^3.0.2",
+    "nanoid": "^5.1.6",
+    "sharp": "^0.34.5"
+  },
+  "overrides": {
+    "esbuild": "^0.25.0",
+    "minimatch": "^10.2.1"
+  },
+  "devDependencies": {
+    "@streamdown/cjk": "^1.0.2",
+    "@streamdown/code": "^1.0.3",
+    "@streamdown/math": "^1.0.2",
+    "@streamdown/mermaid": "^1.0.2",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^4.0.18",
+    "ai": "^6.0.103",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "facehash": "^0.1.0",
+    "jsdom": "^28.1.0",
+    "lucide-react": "^0.575.0",
+    "media-chrome": "^4.18.0",
+    "radix-ui": "^1.4.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "^7.13.1",
+    "shiki": "^3.23.0",
+    "sonner": "^2.0.7",
+    "streamdown": "^2.3.0",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss": "^4",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "typescript-eslint": "^8.56.1",
+    "use-stick-to-bottom": "^1.1.3",
+    "vaul": "^1.1.2",
+    "vitest": "^4.0.18"
+  }
+}
