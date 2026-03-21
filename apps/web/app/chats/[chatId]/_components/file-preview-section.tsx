@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
+import { Streamdown } from 'streamdown';
 
 import { downloadFile } from '@/app/chats/[chatId]/_lib/download-file';
 import { getPreviewKind } from '@/app/chats/[chatId]/_lib/file-preview-utils';
+import { useStreamdownPlugins } from '@/src/components/ai-elements/streamdown-plugins';
 import { apiFetch, buildFileUrl } from '@/src/lib/api-fetch';
 import type { MediaItem } from '@/app/chats/[chatId]/_lib/types';
 import { Button } from '@/src/components/ui/button';
@@ -172,126 +174,9 @@ function TextPreview({ item }: { item: MediaItem }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Lightweight markdown renderer (no external deps)
-// ---------------------------------------------------------------------------
-
-function renderInline(text: string, key?: number): React.ReactNode {
-  // Tokenize bold, italic, inline code
-  const parts = text.split(/(\*\*[\s\S]+?\*\*|__[\s\S]+?__|`[^`]+`|\*[\s\S]+?\*|_[\s\S]+?_)/);
-  if (parts.length === 1) return text;
-  return (
-    <span key={key}>
-      {parts.map((part, i) => {
-        if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'))) {
-          return <strong key={i}>{part.slice(2, -2)}</strong>;
-        }
-        if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
-          return <code key={i} className="rounded bg-white/10 px-1 py-0.5 font-mono text-xs">{part.slice(1, -1)}</code>;
-        }
-        if ((part.startsWith('*') && part.endsWith('*')) || (part.startsWith('_') && part.endsWith('_'))) {
-          return <em key={i}>{part.slice(1, -1)}</em>;
-        }
-        return part;
-      })}
-    </span>
-  );
-}
-
-function renderMarkdown(text: string): React.ReactNode[] {
-  const lines = text.split('\n');
-  const nodes: React.ReactNode[] = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    // Fenced code block
-    if (line.startsWith('```')) {
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith('```')) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      nodes.push(
-        <pre key={`pre-${i}`} className="mb-3 overflow-auto rounded-lg bg-white/5 p-3">
-          <code className="font-mono text-xs text-white/90">{codeLines.join('\n')}</code>
-        </pre>,
-      );
-      i++;
-      continue;
-    }
-
-    // Headings
-    const h3 = line.match(/^### (.+)/);
-    const h2 = line.match(/^## (.+)/);
-    const h1 = line.match(/^# (.+)/);
-    if (h1) { nodes.push(<h1 key={i} className="mb-3 text-base font-semibold text-white">{renderInline(h1[1])}</h1>); i++; continue; }
-    if (h2) { nodes.push(<h2 key={i} className="mb-2 mt-4 text-sm font-semibold text-white">{renderInline(h2[1])}</h2>); i++; continue; }
-    if (h3) { nodes.push(<h3 key={i} className="mb-1 mt-3 text-sm font-medium text-white">{renderInline(h3[1])}</h3>); i++; continue; }
-
-    // Blockquote
-    if (line.startsWith('> ')) {
-      nodes.push(
-        <blockquote key={i} className="border-l-2 border-white/30 pl-3 text-white/70">
-          {renderInline(line.slice(2))}
-        </blockquote>,
-      );
-      i++;
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^[-*_]{3,}$/.test(line.trim())) {
-      nodes.push(<hr key={i} className="my-4 border-white/20" />);
-      i++;
-      continue;
-    }
-
-    // Unordered list
-    if (/^[-*] /.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^[-*] /.test(lines[i])) {
-        items.push(lines[i].replace(/^[-*] /, ''));
-        i++;
-      }
-      nodes.push(
-        <ul key={`ul-${i}`} className="mb-3 list-disc pl-5">
-          {items.map((item, j) => <li key={j} className="mb-0.5">{renderInline(item)}</li>)}
-        </ul>,
-      );
-      continue;
-    }
-
-    // Ordered list
-    if (/^\d+\. /.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^\d+\. /.test(lines[i])) {
-        items.push(lines[i].replace(/^\d+\. /, ''));
-        i++;
-      }
-      nodes.push(
-        <ol key={`ol-${i}`} className="mb-3 list-decimal pl-5">
-          {items.map((item, j) => <li key={j} className="mb-0.5">{renderInline(item)}</li>)}
-        </ol>,
-      );
-      continue;
-    }
-
-    // Blank line
-    if (line.trim() === '') { i++; continue; }
-
-    // Paragraph
-    nodes.push(<p key={i} className="mb-3 leading-relaxed">{renderInline(line)}</p>);
-    i++;
-  }
-
-  return nodes;
-}
-
 function MarkdownPreview({ item }: { item: MediaItem }) {
   const state = useTextContent(item.id);
+  const plugins = useStreamdownPlugins();
 
   if (state.status === 'loading') {
     return <Skeleton className="h-full w-full rounded-none" />;
@@ -307,7 +192,13 @@ function MarkdownPreview({ item }: { item: MediaItem }) {
 
   return (
     <div className="h-full overflow-auto p-4 text-sm text-white/90">
-      {renderMarkdown(state.text)}
+      <Streamdown
+        mode="static"
+        plugins={plugins}
+        className="w-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+      >
+        {state.text}
+      </Streamdown>
     </div>
   );
 }
