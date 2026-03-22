@@ -4,6 +4,17 @@
 
 ### Features
 
+- **release:** add option to keep current version (972aef2)
+
+### Bug Fixes
+
+- improve release script error handling and auth flows (89348d5)
+
+
+## 0.2.0 (2026-03-22)
+
+### Features
+
 - add interactive release orchestration script (faf417e)
 - **web:** add WhatsApp-style scroll-to-bottom button and fix chat scroll behavior (3e863d1)
 - **web:** support pasting images from clipboard into chat composer (a5f642d)
