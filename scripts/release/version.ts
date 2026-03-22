@@ -92,6 +92,10 @@ export async function promptVersions(
       message: "What type of release?",
       options: [
         {
+          value: "same" as const,
+          label: `same   (keep ${currentMain})`,
+        },
+        {
           value: "patch" as const,
           label: `patch  (${currentMain} → ${bumpSemver(currentMain, "patch")})`,
         },
@@ -110,6 +114,14 @@ export async function promptVersions(
       ],
     });
     handleCancel(choice);
+
+    if (choice === "same") {
+      return promptIndependentVersions(
+        repoRoot,
+        currentVersions,
+        currentMain,
+      );
+    }
 
     if (choice === "custom") {
       const custom = await p.text({
