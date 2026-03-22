@@ -147,35 +147,36 @@ export async function publishToNpm(ctx: ReleaseContext): Promise<void> {
     if (dryRun) {
       p.log.info(`${pc.dim("[dry-run]")} ${pc.cyan(cmd)}`);
     } else {
-      try {
-        run(cmd, { cwd: repoRoot });
-        p.log.success(`${pkgName}@${version} published`);
-      } catch (err) {
-        p.log.error(
-          `Failed to publish ${pkgName}: ${err instanceof Error ? err.message : err}`,
-        );
-        const action = await p.select({
-          message: `What would you like to do?`,
-          options: [
-            { value: "retry" as const, label: "Retry" },
-            { value: "skip" as const, label: "Skip this package" },
-            { value: "abort" as const, label: "Abort release" },
-          ],
-        });
-        handleCancel(action);
+      // Use runLive so npm can prompt for browser-based re-authentication
+      let published = false;
+      while (!published) {
+        try {
+          await runLive(cmd, { cwd: repoRoot });
+          p.log.success(`${pkgName}@${version} published`);
+          published = true;
+        } catch (err) {
+          p.log.error(
+            `Failed to publish ${pkgName}: ${err instanceof Error ? err.message : err}`,
+          );
+          const action = await p.select({
+            message: `What would you like to do?`,
+            options: [
+              { value: "retry" as const, label: "Retry" },
+              { value: "skip" as const, label: "Skip this package" },
+              { value: "abort" as const, label: "Abort release" },
+            ],
+          });
+          handleCancel(action);
 
-        if (action === "retry") {
-          try {
-            run(cmd, { cwd: repoRoot });
-            p.log.success(`${pkgName}@${version} published`);
-          } catch {
-            p.log.error(`Retry also failed — skipping ${pkgName}`);
+          if (action === "abort") {
+            p.log.error("Aborting release.");
+            return;
           }
-        } else if (action === "abort") {
-          p.log.error("Aborting release.");
-          return;
+          if (action === "skip") {
+            break;
+          }
+          // "retry" loops back
         }
-        // "skip" falls through
       }
     }
   }
