@@ -8,6 +8,14 @@ import type { ReleaseContext } from "./types.js";
 import { run } from "./utils.js";
 
 /**
+ * Check if a git tag already exists.
+ */
+function tagExists(tagName: string, repoRoot: string): boolean {
+  const result = run(`git tag -l "${tagName}"`, { cwd: repoRoot });
+  return result === tagName;
+}
+
+/**
  * Stage the given files, create a release commit and annotated tag,
  * then push both to the remote.
  *
@@ -32,9 +40,13 @@ export function commitTagAndPush(
   run(`git commit -m "${commitMessage}"`, opts);
   p.log.success(`Committed: ${pc.dim(commitMessage)}`);
 
-  // 3. Create annotated tag
-  run(`git tag -a "${tagName}" -m "${tagName}"`, opts);
-  p.log.success(`Tagged: ${pc.bold(tagName)}`);
+  // 3. Create annotated tag (skip if it already exists)
+  if (!dryRun && tagExists(tagName, repoRoot)) {
+    p.log.warn(`Tag ${pc.bold(tagName)} already exists — skipping`);
+  } else {
+    run(`git tag -a "${tagName}" -m "${tagName}"`, opts);
+    p.log.success(`Tagged: ${pc.bold(tagName)}`);
+  }
 
   // 4. Push commit and tag
   run(`git push origin ${currentBranch} --follow-tags`, opts);
