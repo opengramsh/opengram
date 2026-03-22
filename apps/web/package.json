@@ -1,6 +1,6 @@
 {
   "name": "@opengramsh/opengram",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Open-source, self-hosted chat UI and REST API for AI agent workflows",
   "license": "MIT",
   "type": "module",
