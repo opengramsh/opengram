@@ -7,9 +7,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { OpenGramClient } from "../src/api-client.js";
+import type { DispatchClaimResponse, OpenGramClient } from "../src/api-client.js";
 import { initializeChatManager } from "../src/chat-manager.js";
-import { clearProcessedIdsForTests, startInboundListener } from "../src/inbound.js";
+import { clearProcessedIdsForTests, processClaimedDispatchBatch, startInboundListener } from "../src/inbound.js";
 import { setOpenGramRuntime } from "../src/runtime.js";
 import { clearChatQueuesForTests } from "../src/chat-queue.js";
 import { clearActiveStreamsForTests } from "../src/streaming.js";
@@ -71,14 +71,16 @@ function createMockEventSource() {
   };
 }
 
-function createMockRuntime() {
-  const dispatchSpy = vi.fn().mockImplementation(async (params: any) => {
+function createMockRuntime(
+  dispatchImpl?: (params: any) => Promise<{ status: string }> | { status: string },
+) {
+  const dispatchSpy = vi.fn().mockImplementation(dispatchImpl ?? (async (params: any) => {
     await params.dispatcherOptions.deliver(
       { text: "Agent reply" },
       { kind: "final" },
     );
     return { status: "ok" };
-  });
+  }));
 
   const finalizeInboundContextSpy = vi.fn().mockImplementation((ctx: any) => ({
     ...ctx,
@@ -238,6 +240,67 @@ describe("KAI-265: inject conversation history on fresh sessions", () => {
     abortController.abort();
   });
 
+  it("should re-inject history after a skipped first dispatch attempt", async () => {
+    let attempts = 0;
+    const { runtime, finalizeInboundContextSpy, dispatchSpy } = createMockRuntime(
+      async (params: any) => {
+        attempts += 1;
+        if (attempts === 1) {
+          params.dispatcherOptions.onSkip(
+            { text: undefined },
+            { kind: "final", reason: "busy" },
+          );
+          return { status: "skipped" };
+        }
+
+        await params.dispatcherOptions.deliver(
+          { text: "Agent reply" },
+          { kind: "final" },
+        );
+        return { status: "ok" };
+      },
+    );
+    setOpenGramRuntime(runtime as any);
+
+    const getMessages = vi.fn().mockResolvedValue(makeHistoryMessages());
+    const client = createMockClient({ getMessages } as any);
+    await initializeChatManager(client, baseCfg);
+
+    const mockEs = createMockEventSource();
+    (client.connectSSE as ReturnType<typeof vi.fn>).mockReturnValue(mockEs);
+    const abortController = new AbortController();
+
+    startInboundListener({
+      client,
+      cfg: baseCfg,
+      abortSignal: abortController.signal,
+      reconnectDelayMs: 100,
+    });
+
+    mockEs.triggerMessage({
+      id: "evt-1",
+      type: "message.created",
+      payload: {
+        chatId: "chat-1",
+        messageId: "user-msg-retry",
+        role: "user",
+        content: "Retry me",
+        senderId: "user:primary",
+      },
+    });
+
+    await vi.waitFor(() => expect(dispatchSpy).toHaveBeenCalledTimes(2));
+
+    expect(getMessages).toHaveBeenCalledTimes(2);
+
+    const secondBody = finalizeInboundContextSpy.mock.calls[1][0].Body as string;
+    expect(secondBody).toContain("[Prior conversation context:");
+    expect(secondBody).toContain("agent: Hello! How can I assist you?");
+    expect(secondBody).toContain("Retry me");
+
+    abortController.abort();
+  });
+
   it("should gracefully handle API failure when fetching history", async () => {
     const { runtime, finalizeInboundContextSpy } = createMockRuntime();
     setOpenGramRuntime(runtime as any);
@@ -330,6 +393,49 @@ describe("KAI-265: inject conversation history on fresh sessions", () => {
     expect(historyBlock).not.toContain("user: Current msg");
 
     abortController.abort();
+  });
+
+  it("should exclude current user message IDs for claimed dispatch batches", async () => {
+    const { runtime, finalizeInboundContextSpy } = createMockRuntime();
+    setOpenGramRuntime(runtime as any);
+
+    const getMessages = vi.fn().mockResolvedValue([
+      { id: "user-msg-current", role: "user", content_final: "Current msg", content: "Current msg" } as unknown as Message,
+      { id: "msg-old", role: "agent", content_final: "Old reply", content: "Old reply" } as unknown as Message,
+    ]);
+    const client = createMockClient({ getMessages } as any);
+    await initializeChatManager(client, baseCfg);
+
+    const batch: DispatchClaimResponse = {
+      batchId: "batch-1",
+      chatId: "chat-1",
+      kind: "user_batch",
+      agentIdHint: "grami",
+      compiledContent: "Current msg",
+      items: [
+        {
+          inputId: "input-1",
+          sourceKind: "user_message",
+          sourceId: "user-msg-current",
+          senderId: "user:primary",
+          content: "Current msg",
+          mediaIds: [],
+          attachmentNames: [],
+        },
+      ],
+      attachments: [],
+    };
+
+    await processClaimedDispatchBatch({
+      batch,
+      cfg: baseCfg as any,
+      client,
+    });
+
+    const body = finalizeInboundContextSpy.mock.calls[0][0].Body as string;
+    expect(body).toContain("agent: Old reply");
+    const historyBlock = body.split("\n\n")[0];
+    expect(historyBlock).not.toContain("user: Current msg");
   });
 
   it("should filter out tool and system messages from history", async () => {
