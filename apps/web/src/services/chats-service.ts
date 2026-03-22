@@ -401,6 +401,7 @@ export function createChat(input: CreateChatInput) {
   const now = Date.now();
   const chatId = nanoid();
   const title = normalizeTitle(input.title, input.firstMessage, config.titleMaxChars);
+  const titleSource = input.title !== undefined ? 'manual' : 'default';
   const firstMessageContent = normalizeFirstMessageContent(input.firstMessage);
   const tags = normalizeTags(input.tags ?? []);
 
@@ -410,14 +411,15 @@ export function createChat(input: CreateChatInput) {
   db.prepare(
     [
       'INSERT INTO chats (',
-      'id, is_archived, title, tags, pinned, agent_ids, model_id,',
+      'id, is_archived, title, title_source, tags, pinned, agent_ids, model_id,',
       'pending_requests_count, last_read_at, unread_count, created_at, updated_at',
-      ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ].join(' '),
   ).run(
     chatId,
     0,
     title,
+    titleSource,
     JSON.stringify(tags),
     0,
     JSON.stringify(input.agentIds),
