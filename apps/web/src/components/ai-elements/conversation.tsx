@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import type { CSSProperties, ComponentProps } from "react";
 
 import { Button } from "@/src/components/ui/button";
 import { cn } from "@/src/lib/utils";
@@ -20,19 +20,52 @@ export const Conversation = ({ className, ...props }: ConversationProps) => (
   />
 );
 
-export type ConversationContentProps = ComponentProps<
-  typeof StickToBottom.Content
->;
+export type ConversationContentProps = ComponentProps<"div"> & {
+  scrollClassName?: string;
+  scrollStyle?: CSSProperties;
+};
 
 export const ConversationContent = ({
   className,
+  scrollClassName,
+  scrollStyle,
   ...props
 }: ConversationContentProps) => (
-  <StickToBottom.Content
-    className={cn("flex flex-col px-3 pt-3", className)}
+  <ConversationScrollContent
+    className={className}
+    scrollClassName={scrollClassName}
+    scrollStyle={scrollStyle}
     {...props}
   />
 );
+
+const ConversationScrollContent = ({
+  className,
+  scrollClassName,
+  scrollStyle,
+  ...props
+}: ConversationContentProps) => {
+  const context = useStickToBottomContext();
+
+  return (
+    <div
+      ref={context.scrollRef}
+      style={{
+        height: "100%",
+        width: "100%",
+        scrollbarGutter: "stable both-edges",
+        ...scrollStyle,
+      }}
+      className={scrollClassName}
+    >
+      <div
+        {...props}
+        ref={context.contentRef}
+        className={cn("flex flex-col px-3 pt-3", className)}
+      />
+    </div>
+  );
+};
 
 export type ConversationEmptyStateProps = ComponentProps<"div"> & {
   title?: string;
@@ -75,11 +108,15 @@ export const ConversationScrollButton = ({
   className,
   ...props
 }: ConversationScrollButtonProps) => {
-  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  const { isAtBottom, scrollToBottom, scrollRef } = useStickToBottomContext();
 
   const handleScrollToBottom = useCallback(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollTop, behavior: "instant" as ScrollBehavior });
+    }
+    scrollToBottom("instant");
+  }, [scrollToBottom, scrollRef]);
 
   return (
     !isAtBottom && (

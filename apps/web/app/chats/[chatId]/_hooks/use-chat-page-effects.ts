@@ -43,7 +43,6 @@ export function useChatPageEffects(data: ChatPageData) {
     refreshPendingRequests,
     resetRecordingState,
     scrollToBottom,
-    feedRef,
     setKeyboardOffset,
     setMessages,
     setChat,
@@ -403,21 +402,10 @@ export function useChatPageEffects(data: ChatPageData) {
 
   useEffect(() => {
     const unsubscribe = subscribeToKeyboardLayout(window, document, ({ keyboardOffset }) => {
-      const feed = feedRef.current?.scrollRef.current;
-      const nearBottom = feed
-        ? (feed.scrollHeight - feed.scrollTop - feed.clientHeight) <= 80
-        : false;
-
       if (keyboardOffset !== keyboardOffsetRef.current) {
         keyboardOffsetRef.current = keyboardOffset;
         setKeyboardOffset(keyboardOffset);
         document.documentElement.style.setProperty('--keyboard-offset', `${keyboardOffset}px`);
-      }
-
-      if (nearBottom) {
-        window.requestAnimationFrame(() => {
-          scrollToBottom();
-        });
       }
     });
 
@@ -425,7 +413,7 @@ export function useChatPageEffects(data: ChatPageData) {
       unsubscribe();
       document.documentElement.style.removeProperty('--keyboard-offset');
     };
-  }, [feedRef, scrollToBottom, setKeyboardOffset]);
+  }, [setKeyboardOffset]);
 
   useEffect(() => {
     const handleTouchStart = (event: TouchEvent) => {

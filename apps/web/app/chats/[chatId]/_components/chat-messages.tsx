@@ -212,7 +212,12 @@ export function ChatMessages({
       className="flex-1"
       initial={scrollToMessageId ? false : 'smooth'}
     >
-      <ConversationContent>
+      <ConversationContent
+        scrollStyle={{
+          paddingBottom:
+            'calc(var(--composer-height, 5rem) + var(--composer-bottom-base, 12px) + var(--composer-safe-area, 0px) + var(--keyboard-offset, 0px))',
+        }}
+      >
         {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}
         {!loading && error && <p className="px-2 py-6 text-sm text-red-300">{error}</p>}
 
@@ -409,17 +414,11 @@ export function ChatMessages({
           </div>
         )}
 
-        <div
-          className="shrink-0 pointer-events-none"
-          style={{
-            height:
-              'calc(var(--composer-height, 5rem) + var(--composer-bottom-base, 12px) + var(--composer-safe-area, 0px) + var(--keyboard-offset, 0px))',
-          }}
-          aria-hidden="true"
-        />
       </ConversationContent>
 
-      <ConversationScrollButton />
+      <ConversationScrollButton
+        className="fixed right-4 left-auto translate-x-0 z-40 shadow-lg bottom-[calc(var(--composer-height,5rem)+var(--composer-bottom-base,12px)+var(--composer-safe-area,0px)+var(--keyboard-offset,0px)+0.75rem)]"
+      />
     </Conversation>
   );
 }

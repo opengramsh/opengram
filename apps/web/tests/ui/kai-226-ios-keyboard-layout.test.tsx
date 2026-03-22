@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { ChatComposer } from '@/app/chats/[chatId]/_components/chat-composer';
 import { ChatMessages } from '@/app/chats/[chatId]/_components/chat-messages';
@@ -228,6 +228,7 @@ describe('KAI-237: composer height CSS variable integration', () => {
     }
 
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 
     render(
       <ChatComposer
@@ -282,10 +283,12 @@ describe('KAI-237: composer height CSS variable integration', () => {
       />,
     );
 
-    const spacer = container.querySelector('[aria-hidden="true"]');
-    expect(spacer?.getAttribute('style')).toContain('var(--composer-height');
-    expect(spacer?.getAttribute('style')).toContain('var(--composer-bottom-base');
-    expect(spacer?.getAttribute('style')).toContain('var(--composer-safe-area');
+    const scrollContainer = container.querySelector('[style*="padding-bottom"]');
+    expect(scrollContainer?.getAttribute('style')).toContain('var(--composer-height');
+    expect(scrollContainer?.getAttribute('style')).toContain('var(--composer-bottom-base');
+    expect(scrollContainer?.getAttribute('style')).toContain('var(--composer-safe-area');
+    expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(scrollToSpy).not.toHaveBeenCalled();
   });
 
   it('8) keeps request widget anchored with composer + safe-area offsets', () => {
@@ -297,5 +300,58 @@ describe('KAI-237: composer height CSS variable integration', () => {
     expect(widgetSource).toContain('var(--composer-height');
     expect(widgetSource).toContain('var(--composer-bottom-base');
     expect(widgetSource).toContain('var(--composer-safe-area');
+  });
+
+  it('9) locks page scrolling while the composer textarea is focused', () => {
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+
+    render(
+      <ChatComposer
+        composerText=""
+        isSending={false}
+        isComposerMenuOpen={false}
+        selectedModelId=""
+        models={[]}
+        setComposerText={() => {}}
+        setIsComposerMenuOpen={() => {}}
+        sendMessage={async () => {}}
+        onModelChange={async () => {}}
+        handleMicAction={async () => {}}
+        stopRecording={() => {}}
+        cancelRecording={() => {}}
+        audioLevels={[]}
+        isRecording={false}
+        recordingSeconds={0}
+        isUploadingVoiceNote={false}
+        showMicSettingsPrompt={false}
+        allAttachmentsReady={true}
+        uploadComposerFiles={async () => {}}
+        pendingAttachments={[]}
+        removePendingAttachment={() => {}}
+        retryUpload={() => {}}
+        cameraInputRef={{ current: null }}
+        photosInputRef={{ current: null }}
+        filesInputRef={{ current: null }}
+        keyboardOffset={0}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText('Message');
+    fireEvent.focus(textarea);
+
+    expect(document.body.getAttribute('data-chat-composer-scroll-lock')).toBe('1');
+    expect(document.body.style.position).toBe('fixed');
+    expect(document.body.style.width).toBe('100%');
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
+
+    fireEvent.blur(textarea);
+
+    expect(document.body.getAttribute('data-chat-composer-scroll-lock')).toBeNull();
+    expect(document.body.style.position).toBe('');
+    expect(document.body.style.width).toBe('');
+    expect(document.body.style.overflow).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
+    expect(scrollToSpy).toHaveBeenCalled();
   });
 });

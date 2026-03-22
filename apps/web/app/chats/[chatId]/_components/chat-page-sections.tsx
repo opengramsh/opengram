@@ -25,7 +25,7 @@ export function ChatPageSections() {
   const { dropRef, isDragging } = useFileDrop({ onDrop: handleFileDrop });
 
   return (
-    <div ref={dropRef} className="relative flex h-full w-full flex-col">
+    <div ref={dropRef} className="relative flex h-full min-h-0 w-full flex-col overflow-hidden">
       <DropZoneOverlay visible={isDragging} />
       <ChatHeaderSection />
       <ChatMessagesSection />
