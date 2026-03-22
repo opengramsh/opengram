@@ -215,7 +215,7 @@ export function ChatMessages({
       <ConversationContent
         scrollStyle={{
           paddingBottom:
-            'calc(var(--composer-height, 5rem) + var(--composer-bottom-base, 12px) + var(--composer-safe-area, 0px) + var(--keyboard-offset, 0px))',
+            'calc(var(--composer-height, 5rem) + var(--composer-bottom-base, 12px) + var(--composer-safe-area, 0px))',
         }}
       >
         {loading && <p className="px-2 py-6 text-sm text-muted-foreground">Loading chat...</p>}

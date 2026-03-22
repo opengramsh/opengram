@@ -41,7 +41,10 @@ export default function ChatPage() {
 
   return (
     <ChatPageProvider key={chatId} chatId={chatId} initialChat={initialChat} scrollToMessageId={scrollToMessageId} fromPath={fromPath}>
-      <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-background">
+      <div
+        className="flex min-h-0 w-full flex-col overflow-hidden bg-background"
+        style={{ height: 'calc(100dvh - var(--keyboard-offset, 0px))' }}
+      >
         <ChatPageSections />
       </div>
     </ChatPageProvider>
