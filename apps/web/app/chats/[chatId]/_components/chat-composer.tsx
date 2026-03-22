@@ -300,6 +300,13 @@ export function ChatComposer({
               enterKeyHint="send"
               className="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border-0 bg-transparent px-3 py-2.5 text-sm shadow-none focus-visible:ring-0"
               style={{ fieldSizing: 'fixed' } as React.CSSProperties}
+              onPaste={(event) => {
+                const files = event.clipboardData?.files;
+                if (files && files.length > 0) {
+                  event.preventDefault();
+                  void uploadComposerFiles(files);
+                }
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !isTouchDevice() && (composerText.trim() || pendingAttachments.length > 0)) {
                   event.preventDefault();
