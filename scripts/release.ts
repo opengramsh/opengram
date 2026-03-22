@@ -304,7 +304,7 @@ async function main(): Promise<void> {
 
   if (targets.githubRelease) {
     step("Creating GitHub Release");
-    createGithubRelease(ctx);
+    await createGithubRelease(ctx);
   }
 
   // ── Docker ─────────────────────────────────────────────────────────────────

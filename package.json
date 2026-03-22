@@ -19,6 +19,6 @@
     "typecheck": "npm -w apps/web run typecheck",
     "docs:dev": "npm -w apps/docs run dev",
     "docs:build": "npm -w apps/docs run build",
-    "release": "tsx scripts/release.ts"
+    "release": "npx --silent tsx scripts/release.ts"
   }
 }

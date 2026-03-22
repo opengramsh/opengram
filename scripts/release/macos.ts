@@ -13,7 +13,7 @@ import path from "node:path";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import type { ReleaseContext } from "./types.js";
-import { handleCancel, run, runLive } from "./utils.js";
+import { CommandError, handleCancel, run, runLiveCapture } from "./utils.js";
 
 /**
  * Build the macOS app and update the Sparkle appcast feed.
@@ -22,6 +22,7 @@ export async function buildMacosApp(ctx: ReleaseContext): Promise<void> {
   const { repoRoot, newMacosVersion, dryRun } = ctx;
   const macosDir = path.join(repoRoot, "apps/macos");
   const scriptPath = path.join(macosDir, "scripts/build-and-notarize.sh");
+  const dmgPath = path.join(macosDir, "build/Opengram.dmg");
 
   if (process.platform !== "darwin") {
     p.log.warn("macOS builds can only run on macOS — skipping");
@@ -29,13 +30,11 @@ export async function buildMacosApp(ctx: ReleaseContext): Promise<void> {
   }
 
   if (!existsSync(scriptPath)) {
-    p.log.error(
-      `Build script not found: ${scriptPath}`,
-    );
+    p.log.error(`Build script not found: ${scriptPath}`);
     return;
   }
 
-  // ── Run the build ─────────────────────────────────────────────────────────
+  // ── Run the build (with retry loop) ───────────────────────────────────────
 
   p.log.info("Starting macOS build (this may take a while)...");
   p.log.info(
@@ -44,39 +43,82 @@ export async function buildMacosApp(ctx: ReleaseContext): Promise<void> {
     ),
   );
 
-  // Set MARKETING_VERSION if we're bumping the macOS version
-  const env: Record<string, string> = {};
-  if (newMacosVersion) {
-    env.MARKETING_VERSION = newMacosVersion;
-  }
+  let buildSucceeded = false;
 
-  if (dryRun) {
-    p.log.info(
-      `${pc.dim("[dry-run]")} ${pc.cyan(`bash scripts/build-and-notarize.sh`)} (in apps/macos/)`,
-    );
-  } else {
+  // Retry loop — the user can fix issues and retry without restarting
+  while (!buildSucceeded) {
+    if (dryRun) {
+      p.log.info(
+        `${pc.dim("[dry-run]")} ${pc.cyan(`bash scripts/build-and-notarize.sh`)} (in apps/macos/)`,
+      );
+      buildSucceeded = true;
+      break;
+    }
+
     try {
-      await runLive(`bash scripts/build-and-notarize.sh`, {
+      await runLiveCapture(`bash scripts/build-and-notarize.sh`, {
         cwd: macosDir,
       });
+      buildSucceeded = true;
       p.log.success("macOS build completed");
     } catch (err) {
-      p.log.error(
-        `macOS build failed: ${err instanceof Error ? err.message : err}`,
-      );
+      // Show the error clearly
+      p.log.error("macOS build script exited with an error.");
+
+      // Display the last lines of output so the error is easy to spot
+      if (err instanceof CommandError && err.tail) {
+        p.note(err.tail, "Last lines of build output");
+      }
+
+      // Check if the DMG was already built (build may have succeeded
+      // but a later step like Sparkle signing failed)
+      const dmgExists = existsSync(dmgPath);
+      if (dmgExists) {
+        p.log.info(
+          pc.yellow(
+            "The DMG was built and notarized successfully — the failure is in a later step (likely Sparkle signing).",
+          ),
+        );
+      }
+
+      // Let the user decide what to do
+      const options = [
+        {
+          value: "retry" as const,
+          label: "Retry",
+          hint: "fix the issue first, then retry",
+        },
+        ...(dmgExists
+          ? [
+              {
+                value: "continue" as const,
+                label: "Continue anyway",
+                hint: "DMG is ready",
+              },
+            ]
+          : []),
+        { value: "skip" as const, label: "Skip macOS release" },
+        { value: "abort" as const, label: "Abort the entire release" },
+      ];
+
       const action = await p.select({
         message: "What would you like to do?",
-        options: [
-          { value: "skip" as const, label: "Skip macOS release" },
-          { value: "abort" as const, label: "Abort the entire release" },
-        ],
+        options,
       });
       handleCancel(action);
+
       if (action === "abort") {
         p.log.error("Release aborted.");
         process.exit(1);
       }
-      return;
+      if (action === "skip") {
+        return;
+      }
+      if (action === "continue") {
+        // Treat as success — DMG exists, proceed with appcast + upload
+        buildSucceeded = true;
+      }
+      // "retry" loops back to the top
     }
   }
 
@@ -123,7 +165,6 @@ export async function buildMacosApp(ctx: ReleaseContext): Promise<void> {
 
   // ── Verify DMG exists ────────────────────────────────────────────────────
 
-  const dmgPath = path.join(macosDir, "build/Opengram.dmg");
   if (existsSync(dmgPath)) {
     p.log.success(`DMG ready at: ${pc.dim(dmgPath)}`);
     p.log.info(

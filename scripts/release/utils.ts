@@ -64,6 +64,85 @@ export function runLive(
   });
 }
 
+/** Error subclass that carries the last N lines of output from a failed command. */
+export class CommandError extends Error {
+  /** The last lines of combined stdout+stderr output. */
+  tail: string;
+  exitCode: number;
+
+  constructor(cmd: string, exitCode: number, tail: string) {
+    super(`Command failed with exit code ${exitCode}: ${cmd}`);
+    this.tail = tail;
+    this.exitCode = exitCode;
+  }
+}
+
+/**
+ * Run a shell command with output piped to the terminal in real time,
+ * while also capturing the last `tailLines` lines of combined output.
+ *
+ * On success, resolves normally.
+ * On failure, rejects with a CommandError that includes the output tail
+ * so the caller can display the error context clearly.
+ */
+export function runLiveCapture(
+  cmd: string,
+  opts?: { cwd?: string; dryRun?: boolean; tailLines?: number },
+): Promise<void> {
+  if (opts?.dryRun) {
+    p.log.info(`${pc.dim("[dry-run]")} ${pc.cyan(cmd)}`);
+    return Promise.resolve();
+  }
+
+  const maxLines = opts?.tailLines ?? 20;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, {
+      cwd: opts?.cwd,
+      shell: true,
+      stdio: ["inherit", "pipe", "pipe"],
+    });
+
+    // Ring buffer for the last N lines of output
+    const recentLines: string[] = [];
+
+    const collectLine = (line: string) => {
+      recentLines.push(line);
+      if (recentLines.length > maxLines) {
+        recentLines.shift();
+      }
+    };
+
+    // Pipe stdout to terminal and capture
+    child.stdout?.on("data", (chunk: Buffer) => {
+      process.stdout.write(chunk);
+      for (const line of chunk.toString("utf8").split("\n")) {
+        if (line) collectLine(line);
+      }
+    });
+
+    // Pipe stderr to terminal and capture
+    child.stderr?.on("data", (chunk: Buffer) => {
+      process.stderr.write(chunk);
+      for (const line of chunk.toString("utf8").split("\n")) {
+        if (line) collectLine(line);
+      }
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(
+          new CommandError(cmd, code ?? 1, recentLines.join("\n")),
+        );
+      }
+    });
+
+    child.on("error", reject);
+  });
+}
+
 // ─── JSON file helpers ───────────────────────────────────────────────────────
 
 /**

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -161,6 +161,7 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					6B1BF335B84F097A174CA021 = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -178,6 +179,7 @@
 			packageReferences = (
 				76D1B094A3B7453FEBCAC15E /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -298,7 +300,6 @@
 				CODE_SIGN_ENTITLEMENTS = Opengram/Opengram.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = G7VX74286H;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Opengram/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -319,7 +320,6 @@
 				CODE_SIGN_ENTITLEMENTS = Opengram/Opengram.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = G7VX74286H;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Opengram/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

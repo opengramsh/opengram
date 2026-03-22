@@ -11,7 +11,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import type { PackageId, ReleaseContext } from "./types.js";
 import { PACKAGE_DIRS, PACKAGE_NAMES } from "./types.js";
-import { handleCancel, run } from "./utils.js";
+import { handleCancel, run, runLive } from "./utils.js";
 
 /** The order in which packages must be published. */
 const PUBLISH_ORDER: PackageId[] = [
@@ -63,26 +63,65 @@ function getTargetVersion(
 }
 
 /**
+ * Ensure the user is logged in to npm, offering to log in interactively.
+ * Returns true if authenticated, false if the user chose to skip.
+ */
+async function ensureNpmAuth(repoRoot: string): Promise<boolean> {
+  const user = getNpmUser(repoRoot);
+  if (user) {
+    p.log.info(`Logged in to npm as ${pc.bold(user)}`);
+    return true;
+  }
+
+  p.log.warn("Not logged in to npm.");
+
+  const action = await p.select({
+    message: "npm authentication is required to publish. What would you like to do?",
+    options: [
+      { value: "login" as const, label: "Log in now", hint: "runs npm login" },
+      { value: "skip" as const, label: "Skip npm publishing" },
+    ],
+  });
+  handleCancel(action);
+
+  if (action === "skip") {
+    return false;
+  }
+
+  // Run npm login interactively
+  p.log.info("Starting npm login...");
+  try {
+    await runLive("npm login", { cwd: repoRoot });
+  } catch {
+    p.log.error("npm login did not complete successfully.");
+  }
+
+  // Verify login worked
+  const userAfterLogin = getNpmUser(repoRoot);
+  if (userAfterLogin) {
+    p.log.success(`Logged in to npm as ${pc.bold(userAfterLogin)}`);
+    return true;
+  }
+
+  p.log.error("Still not logged in to npm after login attempt.");
+  const retry = await p.confirm({
+    message: "Skip npm publishing?",
+    initialValue: true,
+  });
+  handleCancel(retry);
+  return !retry;
+}
+
+/**
  * Publish selected packages to npm.
  */
 export async function publishToNpm(ctx: ReleaseContext): Promise<void> {
   const { repoRoot, targets, dryRun } = ctx;
 
-  // Check npm auth
+  // Check npm auth (with interactive login option)
   if (!dryRun) {
-    const npmUser = getNpmUser(repoRoot);
-    if (!npmUser) {
-      p.log.error("Not logged in to npm. Run `npm login` first.");
-      const skip = await p.confirm({
-        message: "Skip npm publishing?",
-        initialValue: false,
-      });
-      handleCancel(skip);
-      if (skip) return;
-      p.log.error("Cannot publish without npm authentication.");
-      return;
-    }
-    p.log.info(`Logged in to npm as ${pc.bold(npmUser)}`);
+    const authenticated = await ensureNpmAuth(repoRoot);
+    if (!authenticated) return;
   }
 
   // Publish each selected package in order
