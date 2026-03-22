@@ -8,6 +8,22 @@
 
 ### Bug Fixes
 
+- **release:** skip git tag when it already exists (391d569)
+- improve release script error handling and auth flows (89348d5)
+
+### Other Changes
+
+- v0.2.0 (4d0bc16)
+
+
+## 0.2.0 (2026-03-22)
+
+### Features
+
+- **release:** add option to keep current version (972aef2)
+
+### Bug Fixes
+
 - improve release script error handling and auth flows (89348d5)
 
 
