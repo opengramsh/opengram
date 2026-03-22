@@ -45,16 +45,9 @@ function clearStaleBodyLocks(documentObj: Document) {
 
   body.style.pointerEvents = '';
   body.style.overflow = '';
-  body.style.position = '';
-  body.style.top = '';
-  body.style.left = '';
-  body.style.right = '';
-  body.style.width = '';
   body.style.paddingRight = '';
   body.style.removeProperty('--removed-body-scroll-bar-size');
   body.removeAttribute('data-scroll-locked');
-  body.removeAttribute('data-chat-composer-scroll-lock');
-  documentObj.documentElement.style.overflow = '';
 }
 
 function useGlobalReturnRecovery() {

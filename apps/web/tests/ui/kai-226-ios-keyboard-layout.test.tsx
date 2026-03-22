@@ -228,7 +228,6 @@ describe('KAI-237: composer height CSS variable integration', () => {
     }
 
     globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
-    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 
     render(
       <ChatComposer
@@ -288,7 +287,6 @@ describe('KAI-237: composer height CSS variable integration', () => {
     expect(scrollContainer?.getAttribute('style')).toContain('var(--composer-bottom-base');
     expect(scrollContainer?.getAttribute('style')).toContain('var(--composer-safe-area');
     expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
-    expect(scrollToSpy).not.toHaveBeenCalled();
   });
 
   it('8) keeps request widget anchored with composer + safe-area offsets', () => {
@@ -302,8 +300,8 @@ describe('KAI-237: composer height CSS variable integration', () => {
     expect(widgetSource).toContain('var(--composer-safe-area');
   });
 
-  it('9) locks page scrolling while the composer textarea is focused', () => {
-    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  it('9) focuses the composer textarea without allowing native touch-scroll', () => {
+    const focusSpy = vi.spyOn(HTMLTextAreaElement.prototype, 'focus').mockImplementation(() => {});
 
     render(
       <ChatComposer
@@ -337,21 +335,8 @@ describe('KAI-237: composer height CSS variable integration', () => {
     );
 
     const textarea = screen.getByPlaceholderText('Message');
-    fireEvent.focus(textarea);
+    fireEvent.pointerDown(textarea, { pointerType: 'touch' });
 
-    expect(document.body.getAttribute('data-chat-composer-scroll-lock')).toBe('1');
-    expect(document.body.style.position).toBe('fixed');
-    expect(document.body.style.width).toBe('100%');
-    expect(document.body.style.overflow).toBe('hidden');
-    expect(document.documentElement.style.overflow).toBe('hidden');
-
-    fireEvent.blur(textarea);
-
-    expect(document.body.getAttribute('data-chat-composer-scroll-lock')).toBeNull();
-    expect(document.body.style.position).toBe('');
-    expect(document.body.style.width).toBe('');
-    expect(document.body.style.overflow).toBe('');
-    expect(document.documentElement.style.overflow).toBe('');
-    expect(scrollToSpy).toHaveBeenCalled();
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
   });
 });

@@ -31,6 +31,7 @@ export function useChatPageEffects(data: ChatPageData) {
   const {
     chat,
     chatId,
+    clearScrollToMessageId,
     composerText,
     goBack,
     isEditingTitle,
@@ -38,11 +39,13 @@ export function useChatPageEffects(data: ChatPageData) {
     knownMessageIdsRef,
     loadData,
     messages,
+    messagesLoading,
     refreshMedia,
     refreshMessages,
     refreshPendingRequests,
     resetRecordingState,
     scrollToBottom,
+    scrollToMessageIdRef,
     setKeyboardOffset,
     setMessages,
     setChat,
@@ -373,17 +376,17 @@ export function useChatPageEffects(data: ChatPageData) {
 
   // Scroll to bottom on new messages — but skip when a scroll-to-message target is pending
   useEffect(() => {
-    if (data.scrollToMessageIdRef.current) return;
+    if (scrollToMessageIdRef.current) return;
     const frame = window.requestAnimationFrame(() => {
       scrollToBottom();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [messages.length, scrollToBottom, data]);
+  }, [messages.length, scrollToBottom, scrollToMessageIdRef]);
 
   // Scroll to a specific message after messages finish loading
   useEffect(() => {
-    const targetId = data.scrollToMessageIdRef.current;
-    if (!targetId || data.messagesLoading) return;
+    const targetId = scrollToMessageIdRef.current;
+    if (!targetId || messagesLoading) return;
 
     // Double rAF: first gets us to the next frame, second ensures React commit + paint
     let frameRef: number;
@@ -393,12 +396,12 @@ export function useChatPageEffects(data: ChatPageData) {
         if (el) {
           el.scrollIntoView({ block: 'center' });
         }
-        data.clearScrollToMessageId();
+        clearScrollToMessageId();
       });
     });
     frameRef = outer;
     return () => cancelAnimationFrame(frameRef);
-  }, [data.messagesLoading, data]);
+  }, [messagesLoading, scrollToMessageIdRef, clearScrollToMessageId]);
 
   useEffect(() => {
     const unsubscribe = subscribeToKeyboardLayout(window, document, ({ keyboardOffset }) => {

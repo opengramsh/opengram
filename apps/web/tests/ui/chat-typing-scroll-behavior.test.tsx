@@ -178,4 +178,30 @@ describe('chat keyboard scroll behavior', () => {
     expect(document.documentElement.style.getPropertyValue('--keyboard-offset')).toBe('248px');
     expect(scrollToBottom).not.toHaveBeenCalled();
   });
+
+  it('does not scroll to bottom when data reference changes but messages.length is stable', () => {
+    subscribeToKeyboardLayoutMock.mockImplementation(() => () => {});
+
+    const scrollToBottom = vi.fn();
+    // Use a shared stable ref so both data objects reference the same ref identity
+    const scrollToMessageIdRef = { current: null };
+
+    const { rerender } = render(
+      <TestHarness
+        data={createChatPageData({ scrollToBottom, scrollToMessageIdRef })}
+      />,
+    );
+
+    scrollToBottom.mockClear();
+
+    // Re-render with a brand-new data object (same values, new reference).
+    // Before the fix, the `data` dependency would cause scrollToBottom to fire again.
+    rerender(
+      <TestHarness
+        data={createChatPageData({ scrollToBottom, scrollToMessageIdRef })}
+      />,
+    );
+
+    expect(scrollToBottom).not.toHaveBeenCalled();
+  });
 });

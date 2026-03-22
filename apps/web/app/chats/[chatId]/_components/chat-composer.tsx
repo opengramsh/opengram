@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { type PointerEvent as ReactPointerEvent, type RefObject, type TouchEvent as ReactTouchEvent, useEffect, useLayoutEffect, useRef } from 'react';
 import { ArrowUp, Camera, FileText, Images, Mic, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 
 import { isTouchDevice } from '@/src/lib/utils';
@@ -77,66 +77,40 @@ export function ChatComposer({
   );
   const footerRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const scrollLockRef = useRef<{
-    scrollX: number;
-    scrollY: number;
-    bodyOverflow: string;
-    bodyPosition: string;
-    bodyTop: string;
-    bodyLeft: string;
-    bodyRight: string;
-    bodyWidth: string;
-    htmlOverflow: string;
-  } | null>(null);
 
-  const unlockViewportScroll = useCallback(() => {
-    const lock = scrollLockRef.current;
-    if (!lock) {
+  const focusTextareaWithoutScroll = () => {
+    const textarea = textareaRef.current;
+    if (!textarea || document.activeElement === textarea) {
+      return false;
+    }
+
+    try {
+      textarea.focus({ preventScroll: true });
+    } catch {
+      textarea.focus();
+    }
+    return true;
+  };
+
+  const handleTextareaPointerDown = (event: ReactPointerEvent<HTMLTextAreaElement>) => {
+    if (event.pointerType !== 'touch') {
       return;
     }
 
-    const body = document.body;
-    const root = document.documentElement;
-    body.style.overflow = lock.bodyOverflow;
-    body.style.position = lock.bodyPosition;
-    body.style.top = lock.bodyTop;
-    body.style.left = lock.bodyLeft;
-    body.style.right = lock.bodyRight;
-    body.style.width = lock.bodyWidth;
-    root.style.overflow = lock.htmlOverflow;
-    body.removeAttribute('data-chat-composer-scroll-lock');
-    scrollLockRef.current = null;
-    window.scrollTo(lock.scrollX, lock.scrollY);
-  }, []);
+    if (focusTextareaWithoutScroll()) {
+      event.preventDefault();
+    }
+  };
 
-  const lockViewportScroll = useCallback(() => {
-    if (scrollLockRef.current) {
+  const handleTextareaTouchStart = (event: ReactTouchEvent<HTMLTextAreaElement>) => {
+    if (!isTouchDevice()) {
       return;
     }
 
-    const body = document.body;
-    const root = document.documentElement;
-    scrollLockRef.current = {
-      scrollX: window.scrollX,
-      scrollY: window.scrollY,
-      bodyOverflow: body.style.overflow,
-      bodyPosition: body.style.position,
-      bodyTop: body.style.top,
-      bodyLeft: body.style.left,
-      bodyRight: body.style.right,
-      bodyWidth: body.style.width,
-      htmlOverflow: root.style.overflow,
-    };
-
-    root.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    body.style.position = 'fixed';
-    body.style.top = `-${window.scrollY}px`;
-    body.style.left = '0';
-    body.style.right = '0';
-    body.style.width = '100%';
-    body.setAttribute('data-chat-composer-scroll-lock', '1');
-  }, []);
+    if (focusTextareaWithoutScroll()) {
+      event.preventDefault();
+    }
+  };
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
@@ -253,8 +227,6 @@ export function ChatComposer({
     };
   }, [keyboardOffset]);
 
-  useEffect(() => unlockViewportScroll, [unlockViewportScroll]);
-
   return (
     <>
       <footer
@@ -355,8 +327,8 @@ export function ChatComposer({
               ref={textareaRef}
               rows={1}
               value={composerText}
-              onFocus={lockViewportScroll}
-              onBlur={unlockViewportScroll}
+              onPointerDown={handleTextareaPointerDown}
+              onTouchStart={handleTextareaTouchStart}
               onChange={(event) => setComposerText(event.target.value)}
               placeholder="Message"
               autoComplete="off"

@@ -84,17 +84,10 @@ describe('iOS return body-lock recovery', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.body.removeAttribute('data-scroll-locked');
-    document.body.removeAttribute('data-chat-composer-scroll-lock');
     document.body.style.pointerEvents = '';
     document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.top = '';
-    document.body.style.left = '';
-    document.body.style.right = '';
-    document.body.style.width = '';
     document.body.style.paddingRight = '';
     document.body.style.removeProperty('--removed-body-scroll-bar-size');
-    document.documentElement.style.overflow = '';
   });
 
   it('clears stale body lock styles on pageshow when no dialog is open', async () => {
@@ -102,32 +95,18 @@ describe('iOS return body-lock recovery', () => {
     await screen.findByText('All agents');
 
     document.body.setAttribute('data-scroll-locked', '1');
-    document.body.setAttribute('data-chat-composer-scroll-lock', '1');
     document.body.style.pointerEvents = 'none';
     document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.top = '-120px';
-    document.body.style.left = '0px';
-    document.body.style.right = '0px';
-    document.body.style.width = '100%';
     document.body.style.paddingRight = '12px';
     document.body.style.setProperty('--removed-body-scroll-bar-size', '12px');
-    document.documentElement.style.overflow = 'hidden';
 
     window.dispatchEvent(new Event('pageshow'));
 
     expect(document.body.getAttribute('data-scroll-locked')).toBeNull();
-    expect(document.body.getAttribute('data-chat-composer-scroll-lock')).toBeNull();
     expect(document.body.style.pointerEvents).toBe('');
     expect(document.body.style.overflow).toBe('');
-    expect(document.body.style.position).toBe('');
-    expect(document.body.style.top).toBe('');
-    expect(document.body.style.left).toBe('');
-    expect(document.body.style.right).toBe('');
-    expect(document.body.style.width).toBe('');
     expect(document.body.style.paddingRight).toBe('');
     expect(document.body.style.getPropertyValue('--removed-body-scroll-bar-size')).toBe('');
-    expect(document.documentElement.style.overflow).toBe('');
   });
 
   it('does not clear lock styles when a dialog is currently open', async () => {
