@@ -1,5 +1,5 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -12,9 +12,12 @@
 /coverage
 
 # build output
-/dist/
+dist/
 /build
-packages/openclaw-plugin/dist
+apps/macos/build/
+
+# xcode user-specific state
+**/xcuserdata/
 
 # misc
 .DS_Store
@@ -31,21 +34,21 @@ yarn-error.log*
 !.env.example
 
 # runtime data
-/data/
+data/
 
 # typescript
 *.tsbuildinfo
-packages/openclaw-plugin/node_modules
 
-.next/*
-.codecrew/*
+# next.js
+.next/
+.source/
+out/
+
+# misc tooling
+.codecrew/
 .codex/
 .claude/
+
+# app config (generated at runtime)
 config/opengram.config.json
-
-docs/.next
-docs/.source
-docs/node_modules
-docs/out
-
 opengram.config.json

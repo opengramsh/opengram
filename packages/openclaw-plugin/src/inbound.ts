@@ -36,6 +36,7 @@ type ImageContent = { type: "image"; data: string; mimeType: string };
 type BatchDispatchInput = {
   chatId: string;
   messageId: string;
+  historyExcludeMessageIds?: string[];
   content: string;
   images?: ImageContent[];
   tempFilePaths?: string[];
@@ -79,6 +80,11 @@ let lastEventCursor: string | undefined;
 // Deduplication set (prevent re-dispatch on SSE reconnect replay)
 const processedMessageIds = new Set<string>();
 const MAX_DEDUP_SIZE = 10000;
+
+// Track sessions that have already received at least one dispatch (KAI-265).
+// On fresh sessions, we inject recent conversation history so the agent has context.
+const primedSessionKeys = new Set<string>();
+const HISTORY_INJECT_LIMIT = 20;
 
 let batchCoordinator: ChatBatchCoordinator | null = null;
 
@@ -547,6 +553,9 @@ export async function processClaimedDispatchBatch(args: {
   }
 
   try {
+    const historyExcludeMessageIds = batch.items
+      .filter((item) => item.sourceKind === "user_message")
+      .map((item) => item.sourceId);
     await runInboundDispatch({
       cfg,
       client,
@@ -555,6 +564,7 @@ export async function processClaimedDispatchBatch(args: {
       log,
       chatId: batch.chatId,
       messageId: `dispatch:${batch.batchId}`,
+      historyExcludeMessageIds,
       content,
       images: collectedImages.length > 0 ? collectedImages : undefined,
       tempFilePaths,
@@ -577,7 +587,21 @@ async function runInboundDispatch(args: {
   dispatch?: DispatchFn;
   log?: InboundListenerParams["log"];
 } & BatchDispatchInput): Promise<void> {
-  const { cfg, client, agentId, dispatch, log, chatId, messageId, content, images, tempFilePaths = [], tempFileMimes = [], tempFileUrls = [] } = args;
+  const {
+    cfg,
+    client,
+    agentId,
+    dispatch,
+    log,
+    chatId,
+    messageId,
+    historyExcludeMessageIds = [],
+    content,
+    images,
+    tempFilePaths = [],
+    tempFileMimes = [],
+    tempFileUrls = [],
+  } = args;
 
   const dispatchId = `${chatId}:${++dispatchSeq}`;
 
@@ -611,12 +635,14 @@ async function runInboundDispatch(args: {
       chatId,
       agentId,
       messageId,
+      historyExcludeMessageIds,
       content,
       images,
       tempFilePaths,
       tempFileMimes,
       tempFileUrls,
       cfg,
+      client,
       deliver,
       onError,
       log,
@@ -634,12 +660,14 @@ async function dispatchViaSdkWithRetry(opts: {
   chatId: string;
   agentId: string;
   messageId: string;
+  historyExcludeMessageIds?: string[];
   content: string;
   images?: ImageContent[];
   tempFilePaths?: string[];
   tempFileMimes?: string[];
   tempFileUrls?: string[];
   cfg: OpenClawConfig;
+  client: OpenGramClient;
   deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
   onError: (err: unknown) => void;
   log?: InboundListenerParams["log"];
@@ -726,6 +754,58 @@ function buildSessionKey(chatId: string, agentId: string): string {
 }
 
 /**
+ * Fetch recent messages from the OpenGram API and format them as a
+ * conversation transcript for session priming (KAI-265).
+ */
+async function fetchAndFormatHistory(
+  client: OpenGramClient,
+  chatId: string,
+  currentMessageId: string,
+  historyExcludeMessageIds: string[] = [],
+  log?: InboundListenerParams["log"],
+): Promise<string | null> {
+  const messages = await client.getMessages(chatId, { limit: HISTORY_INJECT_LIMIT + 1 });
+  const excludedIds = new Set(
+    historyExcludeMessageIds
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+  );
+  if (currentMessageId.trim()) {
+    excludedIds.add(currentMessageId.trim());
+  }
+  // Filter to user/agent roles only, exclude the current inbound message
+  const relevant = messages.filter((msg) => {
+    const rec = msg as Record<string, unknown>;
+    const role = rec.role as string | undefined;
+    const id = msg.id;
+    if (excludedIds.has(id)) return false;
+    // For batch message IDs like "batch:msg-1:3", check whether the base ID matches
+    if (currentMessageId.startsWith("batch:") && currentMessageId.includes(id)) return false;
+    if (role !== "user" && role !== "agent") return false;
+    // Exclude streaming messages with no content (e.g. the eagerly-created
+    // response placeholder created by runInboundDispatch before dispatch).
+    if (rec.stream_state === "streaming") return false;
+    const text = typeof rec.content_final === "string" ? rec.content_final : typeof rec.content === "string" ? rec.content : "";
+    if (!text.trim()) return false;
+    return true;
+  });
+  if (relevant.length === 0) return null;
+
+  // API returns newest-first; reverse for chronological order
+  const chronological = relevant.slice(0, HISTORY_INJECT_LIMIT).reverse();
+
+  const lines = chronological.map((msg) => {
+    const rec = msg as Record<string, unknown>;
+    const role = rec.role === "agent" ? "agent" : "user";
+    const text = (typeof rec.content_final === "string" ? rec.content_final : typeof rec.content === "string" ? rec.content : "") as string;
+    return `${role}: ${text}`;
+  });
+
+  log?.info(`[opengram] injecting ${lines.length} history messages for session priming (chatId=${chatId})`);
+  return `[Prior conversation context:\n${lines.join("\n")}\n]`;
+}
+
+/**
  * Production dispatch path — calls the SDK's buffered block dispatcher
  * so the agent actually processes the inbound message and replies.
  */
@@ -733,17 +813,34 @@ async function dispatchViaSdk(opts: {
   chatId: string;
   agentId: string;
   messageId: string;
+  historyExcludeMessageIds?: string[];
   content: string;
   images?: ImageContent[];
   tempFilePaths?: string[];
   tempFileMimes?: string[];
   tempFileUrls?: string[];
   cfg: OpenClawConfig;
+  client: OpenGramClient;
   deliver: (payload: ReplyPayload, meta: { kind: DeliverKind }) => Promise<void>;
   onError: (err: unknown) => void;
   log?: InboundListenerParams["log"];
 }): Promise<void> {
-  const { chatId, agentId, messageId, content, images, tempFilePaths = [], tempFileMimes = [], tempFileUrls = [], cfg, deliver, onError, log } = opts;
+  const {
+    chatId,
+    agentId,
+    messageId,
+    historyExcludeMessageIds = [],
+    content,
+    images,
+    tempFilePaths = [],
+    tempFileMimes = [],
+    tempFileUrls = [],
+    cfg,
+    client,
+    deliver,
+    onError,
+    log,
+  } = opts;
   const core = getOpenGramRuntime();
 
   const route = core.channel.routing.resolveAgentRoute({
@@ -756,10 +853,32 @@ async function dispatchViaSdk(opts: {
     `[opengram] dispatch route: chatId=${chatId} routeAgent=${route.agentId} selectedAgent=${agentId} matchedBy=${route.matchedBy} sessionKey=${sessionKey}`,
   );
 
+  // KAI-265: Inject conversation history on first dispatch for this session.
+  // We must NOT mark the session as primed until the dispatch succeeds — if
+  // the SDK skips (e.g. agent busy), dispatchViaSdkWithRetry will retry, and
+  // the retry must re-inject history.
+  let effectiveContent = content;
+  if (!primedSessionKeys.has(sessionKey)) {
+    try {
+      const historyContext = await fetchAndFormatHistory(
+        client,
+        chatId,
+        messageId,
+        historyExcludeMessageIds,
+        log,
+      );
+      if (historyContext) {
+        effectiveContent = historyContext + "\n\n" + content;
+      }
+    } catch (err) {
+      log?.warn(`[opengram] Failed to fetch history for session priming (chatId=${chatId}): ${String(err)}`);
+    }
+  }
+
   const ctx = core.channel.reply.finalizeInboundContext({
-    Body: content,
-    RawBody: content,
-    CommandBody: content,
+    Body: effectiveContent,
+    RawBody: effectiveContent,
+    CommandBody: effectiveContent,
     From: `opengram:${chatId}`,
     To: `opengram:${chatId}`,
     SessionKey: sessionKey,
@@ -821,6 +940,9 @@ async function dispatchViaSdk(opts: {
   if (skippedReason) {
     throw new DispatchSkippedError(skippedReason);
   }
+
+  // Mark session as primed only after a successful (non-skipped) dispatch.
+  primedSessionKeys.add(sessionKey);
 }
 
 /**
@@ -938,6 +1060,7 @@ function formatRequestResolution(payload: Record<string, unknown>): string {
 /** Clear dedup set. Only for testing. */
 export function clearProcessedIdsForTests(): void {
   processedMessageIds.clear();
+  primedSessionKeys.clear();
   lastEventCursor = undefined;
   batchCoordinator?.resetForTests();
 }

@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Opengram</title>
+        <item>
+            <title>0.1.0</title>
+            <pubDate>Sun, 22 Mar 2026 17:45:46 +0700</pubDate>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/opengramsh/opengram/releases/download/v0.1.0/Opengram.dmg" length="3088829" type="application/octet-stream" sparkle:edSignature="dKQtf7g4zT9QHLa0bGYLD8voRfyXDH49pNYAV8Ok/sKx6ecq6LF/6zb971USLTiQzfle2SGjgcCW9Ed76LTABg=="/>
+        </item>
+    </channel>
+</rss>
