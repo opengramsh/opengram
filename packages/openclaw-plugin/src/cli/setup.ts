@@ -299,16 +299,29 @@ async function promptAgents(
   cfg: OpenClawConfig,
   previousAgents?: string[],
 ): Promise<{ agentIds: string[]; agentConfigs: ImportedAgent[] }> {
-  const agentList = (cfg as any).agents?.list as
+  const agentsSection = (cfg as any).agents as
+    | { defaults?: { model?: string | { primary?: string } }; list?: Array<{ id: string; name?: string; model?: string }> }
+    | undefined;
+
+  let agentList = agentsSection?.list as
     | Array<{ id: string; name?: string; model?: string }>
     | undefined;
 
   if (!agentList || agentList.length === 0) {
-    await prompter.note(
-      "No agents found in config. All agents will receive messages.",
-      "Agents",
-    );
-    return { agentIds: [], agentConfigs: [] };
+    const defaults = agentsSection?.defaults;
+    if (defaults) {
+      // openclaw operates with an implicit "main" agent when only defaults exist
+      const defaultModel = typeof defaults.model === "string"
+        ? defaults.model
+        : defaults.model?.primary;
+      agentList = [{ id: "main", name: "Main Agent", model: defaultModel }];
+    } else {
+      await prompter.note(
+        "No agents found in config. All agents will receive messages.",
+        "Agents",
+      );
+      return { agentIds: [], agentConfigs: [] };
+    }
   }
 
   const options = agentList.map((a) => ({

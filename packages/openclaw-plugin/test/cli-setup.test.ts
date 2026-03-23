@@ -521,7 +521,124 @@ describe("runSetupWizard", () => {
     expect(section.agents).toEqual([]);
   });
 
+  it("synthesizes implicit main agent when agents.defaults exists but agents.list is missing", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn().mockResolvedValueOnce(["main"]),
+    });
+
+    const cfg = {
+      agents: {
+        defaults: {
+          model: { primary: "anthropic/claude-opus-4-6", fallbacks: [] },
+          workspace: "~/.openclaw/workspace",
+        },
+      },
+      channels: {},
+    } as unknown as OpenClawConfig;
+
+    const result = await runSetupWizard(prompter, cfg);
+
+    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
+    const agentCall = multiselectCalls.find(
+      (call: any) => call[0].message.match(/agent/i),
+    );
+    expect(agentCall).toBeDefined();
+    expect(agentCall?.[0].options).toEqual([
+      expect.objectContaining({ value: "main", label: "Main Agent" }),
+    ]);
+
+    const section = (result.cfg.channels as any).opengram;
+    expect(section.agents).toEqual(["main"]);
+  });
+
+  it("pushes synthesized agent with defaultModelId from agents.defaults.model string", async () => {
+    mockFetch.mockClear();
+
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn().mockResolvedValueOnce(["main"]),
+    });
+
+    const cfg = {
+      agents: {
+        defaults: { model: "anthropic/claude-opus-4-6" },
+      },
+      channels: {},
+    } as unknown as OpenClawConfig;
+
+    await runSetupWizard(prompter, cfg);
+
+    const fetchCall = mockFetch.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/v1/config/admin"),
+    );
+    expect(fetchCall).toBeDefined();
+    if (fetchCall) {
+      const body = JSON.parse(fetchCall[1].body as string);
+      expect(body.agents).toEqual([
+        expect.objectContaining({
+          id: "main",
+          name: "Main Agent",
+          defaultModelId: "anthropic/claude-opus-4-6",
+        }),
+      ]);
+    }
+  });
+
+  it("synthesizes implicit main agent even when defaults has no model", async () => {
+    mockFetch.mockClear();
+
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn().mockResolvedValueOnce(["main"]),
+    });
+
+    const cfg = {
+      agents: {
+        defaults: { workspace: "~/.openclaw/workspace" },
+      },
+      channels: {},
+    } as unknown as OpenClawConfig;
+
+    await runSetupWizard(prompter, cfg);
+
+    const fetchCall = mockFetch.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/v1/config/admin"),
+    );
+    expect(fetchCall).toBeDefined();
+    if (fetchCall) {
+      const body = JSON.parse(fetchCall[1].body as string);
+      expect(body.agents[0].id).toBe("main");
+      expect(body.agents[0].defaultModelId).toBeUndefined();
+    }
+  });
+
+  it("synthesizes implicit main agent when agents.list is empty array but defaults exists", async () => {
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn().mockResolvedValueOnce(["main"]),
+    });
+
+    const cfg = {
+      agents: {
+        defaults: { model: "anthropic/claude-sonnet-4-6" },
+        list: [],
+      },
+      channels: {},
+    } as unknown as OpenClawConfig;
+
+    const result = await runSetupWizard(prompter, cfg);
+    const section = (result.cfg.channels as any).opengram;
+    expect(section.agents).toEqual(["main"]);
+  });
+
   it("imports agents with model from agent.model in openclaw config", async () => {
+    mockFetch.mockClear();
+
     const prompter = createMockPrompter({
       text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
       confirm: vi.fn().mockResolvedValue(false),
