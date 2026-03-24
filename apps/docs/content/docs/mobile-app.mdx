@@ -1,0 +1,90 @@
+---
+title: Mobile App (PWA)
+description: Install Opengram as a Progressive Web App on your iPhone or Android phone.
+---
+
+Opengram can be installed as a Progressive Web App (PWA) on your phone. This gives you a native app-like experience -- a home screen icon, full-screen UI, and push notifications -- without downloading anything from an app store. You install it directly from the browser.
+
+## Prerequisites
+
+Your phone needs to be able to reach the Opengram web UI over the network. If you can open Opengram in your phone's browser and see the chat interface, you're good to go.
+
+If your server isn't reachable from your phone yet, see [Connecting to your server](#connecting-to-your-server) below.
+
+## Installing on iOS
+
+1. Open **Safari** on your iPhone or iPad.
+2. Navigate to your Opengram URL (e.g. `https://mybox.ts.net`).
+3. Tap the **Share** button (the square with an arrow pointing up).
+4. Scroll down and tap **Add to Home Screen**.
+5. Optionally edit the name, then tap **Add**.
+
+Opengram now appears as an app on your home screen. Launching it opens a full-screen window with no browser chrome.
+
+<Callout>
+  You must use **Safari** to install PWAs on iOS. Other browsers (Chrome, Firefox) do not support the "Add to Home Screen" option on iOS.
+</Callout>
+
+## Installing on Android
+
+1. Open **Chrome** on your Android phone.
+2. Navigate to your Opengram URL.
+3. Tap the **three-dot menu** (top right).
+4. Tap **Install app** (or **Add to Home Screen** on older versions).
+5. Confirm by tapping **Install**.
+
+Opengram now appears in your app drawer and home screen like any other app.
+
+<Callout>
+  On Android, most Chromium-based browsers (Chrome, Edge, Brave) support installing PWAs. Firefox for Android also supports it via **Add to Home Screen** in the menu.
+</Callout>
+
+## Connecting to your server
+
+Your phone needs a network path to the machine running Opengram. There are several ways to set this up, depending on your needs.
+
+### Same Wi-Fi network
+
+If your phone is on the same network as your Opengram server, you can use the server's local IP address directly:
+
+```
+http://192.168.1.42:3000
+```
+
+Find your server's local IP by running `hostname -I` (Linux) or `ipconfig getifaddr en0` (macOS) on the machine running Opengram.
+
+This is the simplest option, but it only works when you're on the same network (e.g. at home). You won't be able to access Opengram when you're on mobile data or a different Wi-Fi network.
+
+### Tailscale (recommended)
+
+[Tailscale](https://tailscale.com) creates a private, encrypted network between your devices -- no port forwarding, no firewall rules, no public exposure. It works from anywhere: home Wi-Fi, mobile data, coffee shop, etc.
+
+To set it up:
+
+1. Install Tailscale on the machine running Opengram and on your phone ([download links](https://tailscale.com/download)).
+2. Sign in to the same Tailscale account on both devices.
+3. Set up HTTPS on the server by running:
+   ```bash
+   tailscale serve --bg --https=443 http://127.0.0.1:3000
+   ```
+4. Open `https://<your-hostname>.ts.net` on your phone.
+
+That's it. Your phone can now reach Opengram over a secure, private connection from anywhere in the world. No data is exposed to the public internet.
+
+See [Tailscale deployment](/docs/deployment/tailscale) for the full setup guide, including how to find your hostname and configure the public base URL.
+
+### Public domain with reverse proxy
+
+If you already have a domain name and a reverse proxy (Caddy, nginx, etc.) with TLS, you can access Opengram from anywhere using your public URL:
+
+```
+https://opengram.yourdomain.com
+```
+
+See [Reverse Proxy](/docs/deployment/reverse-proxy) for configuration examples. Make sure you have an [instance secret](/docs/security/instance-secret) configured to protect your instance when it's publicly accessible.
+
+## Push notifications
+
+Once installed as a PWA over HTTPS, Opengram can send push notifications to your phone when agents send messages or create interactive requests. Enable them from the notification settings inside the app.
+
+See [Push Notifications](/docs/features/push-notifications) for the full setup guide.
