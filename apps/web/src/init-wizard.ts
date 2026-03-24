@@ -122,10 +122,10 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   const publicUrl = `http://localhost:${portNum}`;
 
   // 3. Instance secret
-  p.note(
-    `A secret token that protects access to your Opengram API.\n` +
-      `Anyone with this secret can read and send messages on your behalf.`,
-    "Instance secret",
+  p.log.info(
+    pc.bold("Instance secret") + "\n" +
+      pc.dim("A secret token that protects access to your Opengram API.\n" +
+        "Anyone with this secret can read and send messages on your behalf."),
   );
   const secretChoice = await p.select({
     message: "Instance secret",
@@ -173,13 +173,12 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   const { RENAME_PROVIDERS, getProviderById, getEnvVarName } =
     await import("./services/auto-rename-service.js");
 
-  p.note(
-    `Automatically generates a short title for each chat using AI,\n` +
-      `so you don't have to name conversations manually.\n\n` +
-      `If you enable this, you'll be asked to choose an AI provider,\n` +
-      `a model, and provide an API key.\n\n` +
-      `You can skip this and set it up later in the Opengram settings.`,
-    "Auto-rename",
+  p.log.info(
+    pc.bold("Auto-rename") + "\n" +
+      pc.dim("Automatically generates a short title for each chat using AI,\n" +
+        "so you don't have to name conversations manually.\n" +
+        "If you enable this, you'll need to choose an AI provider, a model, and provide an API key.\n" +
+        "You can skip this and set it up later in the Opengram settings."),
   );
   const enableAutoRename = await p.confirm({
     message: "Enable automatic chat renaming?",
@@ -412,10 +411,10 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
   //    push to /api/v1/config/admin can reach the running instance.
   let connectOpenClaw = false;
   if (isOpenClawInstalled()) {
-    p.note(
-      `OpenClaw CLI detected on PATH.\n` +
-        `Opengram ships with an OpenClaw plugin that allows you to easily connect your OpenClaw agents to Opengram.`,
-      "Integrations",
+    p.log.info(
+      pc.bold("Integrations") + "\n" +
+        pc.dim("OpenClaw CLI detected on PATH.\n" +
+          "Opengram ships with an OpenClaw plugin that allows you to easily connect your OpenClaw agents to Opengram."),
     );
     const answer = await p.confirm({
       message: "Connect OpenGram to OpenClaw?",
