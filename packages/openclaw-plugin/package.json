@@ -1,6 +1,6 @@
 {
   "name": "@opengramsh/openclaw-plugin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "OpenGram channel plugin for OpenClaw — mobile-first AI agent chat interface",
   "license": "MIT",
   "author": "Brice Ventures",

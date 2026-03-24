@@ -1,6 +1,6 @@
 {
   "name": "opengramsh",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Convenience wrapper for @opengramsh/opengram — install as 'opengramsh' instead of '@opengramsh/opengram'",
   "license": "MIT",
   "repository": {
@@ -23,6 +23,6 @@
     "opengram": "./cli.js"
   },
   "dependencies": {
-    "@opengramsh/opengram": "0.2.0"
+    "@opengramsh/opengram": "0.2.1"
   }
 }

@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.2.1 (2026-03-24)
+
+### Features
+
+- **cli:** allow custom model ID in auto-rename setup (ae4081f)
+- **cli:** upgrade OpenClaw plugin alongside main package (8d0b864)
+- **release:** add option to keep current version (972aef2)
+
+### Bug Fixes
+
+- **cli:** add details to auto-rename step in init wizard (b3f7c1d)
+- **docs:** fix broken logo path in README (e1fe88c)
+- **docs:** use dynamic npm badge for release version in README (621f009)
+- **web:** fix Streamdown code block buttons not clickable (f213acc)
+- **auto-rename:** update default model options for OpenAI, Google, and OpenRouter (b49ee71)
+- **openclaw-plugin:** detect implicit "main" agent from agents.defaults (38e4a15)
+- **release:** use interactive stdio for npm publish (030fa45)
+- **release:** skip git tag when it already exists (391d569)
+- improve release script error handling and auth flows (89348d5)
+
+### Refactoring
+
+- **cli:** replace p.note() boxes with p.log.info() for prompt descriptions (5c53592)
+
+### Documentation
+
+- mention OpenClaw plugin as agent configuration method (47af9e3)
+- add Configuring Agents page (a99e1fd)
+- add macOS App page (ced420a)
+- add Mobile App (PWA) installation guide (4346b08)
+- **openclaw-plugin:** add "Reimporting your OpenClaw agents" section (1e85f85)
+
+### Tests
+
+- **openclaw-plugin:** add fixture-based test for implicit agent detection (550e3c0)
+
+### Chores
+
+- **macos:** update Sparkle appcast for v0.2.0 (a3bdd5a)
+
+### Other Changes
+
+- v0.2.0 (ce896d7)
+- v0.2.0 (4d0bc16)
+
+
 ## 0.2.0 (2026-03-22)
 
 ### Features
