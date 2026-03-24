@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Mock the tailscale module to avoid running actual tailscale commands
@@ -585,6 +588,56 @@ describe("runSetupWizard", () => {
         }),
       ]);
     }
+  });
+
+  it("synthesizes implicit main agent from real-world config with only agents.defaults (sample.openclaw.json shape)", async () => {
+    mockFetch.mockClear();
+
+    const prompter = createMockPrompter({
+      text: vi.fn().mockResolvedValueOnce("http://localhost:3000"),
+      confirm: vi.fn().mockResolvedValue(false),
+      multiselect: vi.fn().mockResolvedValueOnce(["main"]),
+    });
+
+    // Load real-world config fixture — has agents.defaults with model.primary
+    // plus extra keys (workspace, compaction, maxConcurrent, subagents) but no agents.list.
+    const fixtureDir = path.dirname(fileURLToPath(import.meta.url));
+    const sampleConfig = JSON.parse(
+      readFileSync(path.join(fixtureDir, "fixtures/sample.openclaw.json"), "utf-8"),
+    );
+    const cfg = sampleConfig as unknown as OpenClawConfig;
+
+    const result = await runSetupWizard(prompter, cfg);
+
+    // Should have offered the synthesized "main" agent in the multiselect
+    const multiselectCalls = (prompter.multiselect as ReturnType<typeof vi.fn>).mock.calls;
+    const agentCall = multiselectCalls.find(
+      (call: any) => call[0].message.match(/agent/i),
+    );
+    expect(agentCall).toBeDefined();
+    expect(agentCall?.[0].options).toEqual([
+      expect.objectContaining({ value: "main", label: "Main Agent" }),
+    ]);
+
+    // Should have pushed the agent with the correct model
+    const fetchCall = mockFetch.mock.calls.find((call) =>
+      typeof call[0] === "string" && call[0].includes("/api/v1/config/admin"),
+    );
+    expect(fetchCall).toBeDefined();
+    if (fetchCall) {
+      const body = JSON.parse(fetchCall[1].body as string);
+      expect(body.agents).toEqual([
+        expect.objectContaining({
+          id: "main",
+          name: "Main Agent",
+          defaultModelId: "openai-codex/gpt-5.4",
+        }),
+      ]);
+    }
+
+    // Config should list "main" as the selected agent
+    const section = (result.cfg.channels as any).opengram;
+    expect(section.agents).toEqual(["main"]);
   });
 
   it("synthesizes implicit main agent even when defaults has no model", async () => {
