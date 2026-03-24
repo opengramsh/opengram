@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/release-v0.1.0-blue?style=flat-square" alt="Release" />
+  <img src="https://img.shields.io/npm/v/@opengramsh/opengram?style=flat-square&label=release&color=blue" alt="Release" />
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" /></a>
   <a href="https://opengram.sh/docs"><img src="https://img.shields.io/badge/docs-opengram.sh/docs-purple?style=flat-square" alt="Docs" /></a>
 </p>
