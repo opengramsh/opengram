@@ -1,0 +1,83 @@
+---
+title: macOS App
+description: Install and connect the native macOS client to your Opengram server.
+---
+
+The Opengram macOS app is a native desktop client that connects to your existing Opengram server. It gives you a dedicated app with native notifications, a menu bar icon, a global keyboard shortcut, and automatic updates.
+
+The macOS app does **not** replace the server -- you still need a running Opengram instance (see [Quick Start](/docs/quickstart)). Think of it like a native chat client: the server holds your data and agents, the app is just a better way to access it from your Mac.
+
+## Requirements
+
+- **macOS 14 (Sonoma)** or later
+
+## Installation
+
+1. Download the latest `.dmg` from [GitHub Releases](https://github.com/opengramsh/opengram/releases).
+2. Open the DMG and drag **Opengram** into your **Applications** folder.
+3. Launch Opengram from Applications.
+
+> The app is signed and notarized by Apple, so you won't see any Gatekeeper warnings.
+
+## Connecting to a server
+
+On first launch, the app shows a **server picker** screen. You can connect to a server in two ways: enter a URL manually, or let the app discover servers automatically (see [Auto-discovery](#auto-discovery) below).
+
+### Manual entry
+
+1. Tap **Add Server Manually**.
+2. Enter your server URL (e.g. `https://mybox.ts.net` or `http://localhost:3000`).
+3. Optionally give it a display name (defaults to the hostname).
+4. The app probes your server's health endpoint to verify it's reachable, then connects.
+
+Once connected, the app loads the Opengram web UI. If your server has an [instance secret](/docs/security/instance-secret) configured, you'll be prompted to enter it -- same as when accessing Opengram in a browser.
+
+> On subsequent launches, the app automatically reconnects to your last-used server. If it's unreachable, you'll be taken back to the server picker.
+
+## Auto-discovery
+
+The app can automatically find Opengram servers on your network. Discovered servers appear in the server picker alongside your saved profiles.
+
+### Local network (Bonjour)
+
+If your Opengram server runs on the same local network as your Mac, the app discovers it automatically using Bonjour (`_opengram._tcp` service). No configuration needed -- just start the server and it should appear in the server picker within a few seconds.
+
+> macOS will prompt you to allow local network access the first time. You need to accept this for Bonjour discovery to work.
+
+### Localhost
+
+The app probes common local development ports (`3000`, `3333`, `5173`, `8080`, `8443`, `443`) for a running Opengram instance. If you're running a local dev server, it will show up automatically.
+
+### Tailscale
+
+If [Tailscale](https://tailscale.com) is installed on your Mac, the app detects your tailnet hosts and probes them for Opengram servers. This is especially useful if you run Opengram on a VPS or home server that's part of your tailnet -- the app finds it without you needing to remember the hostname.
+
+See [Tailscale deployment](/docs/deployment/tailscale) for more on running Opengram over Tailscale.
+
+## Managing multiple servers
+
+You can save multiple server profiles -- for example, a personal VPS, a work server, and a local dev instance. Add them from the server picker or from **Settings > Servers**.
+
+Each profile has its own isolated storage (cookies, local data), so sessions and instance secrets never leak between servers.
+
+To switch servers, open **Settings > Servers** and select a different profile, or use the menu bar context menu.
+
+## Settings
+
+Open **Settings** (or press `Cmd+,`) to configure:
+
+- **Launch at login** -- start Opengram automatically when you log in.
+- **Show in menu bar** -- adds a persistent icon to the macOS menu bar (see [Menu bar](#menu-bar)).
+- **Global shortcut** -- configure a system-wide keyboard shortcut to show or hide the Opengram window from anywhere (e.g. `Cmd+Shift+O`).
+- **Automatic updates** -- the app checks for updates automatically and notifies you when a new version is available. You can also check manually from Settings.
+
+## Menu bar
+
+When **Show in menu bar** is enabled, a paperplane icon appears in your macOS menu bar. It shows an unread badge when you have new messages.
+
+Right-click (or Control-click) the icon for quick actions:
+
+- Switch between saved servers
+- Reload the page
+- Check for updates
+- Quit Opengram
