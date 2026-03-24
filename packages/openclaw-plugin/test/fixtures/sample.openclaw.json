@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.3.7",
+    "lastTouchedAt": "2026-03-23T09:11:13.418Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-03-20T07:24:33.853Z",
+    "lastRunVersion": "2026.3.7",
+    "lastRunCommand": "onboard",
+    "lastRunMode": "local"
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai-codex/gpt-5.4"
+      },
+      "workspace": "/home/openclaw/.openclaw/workspace",
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      }
+    }
+  },
+  "tools": {
+    "profile": "coding",
+    "web": {
+      "search": {
+        "provider": "grok"
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {
+    "dmScope": "per-channel-peer",
+    "reset": {
+      "mode": "daily",
+      "atHour": 4
+    },
+    "resetByChannel": {
+      "opengram": {
+        "mode": "idle",
+        "idleMinutes": 52560000
+      }
+    }
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "session-memory": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "botToken": "redacted_bot_token",
+      "groupPolicy": "allowlist",
+      "streaming": "partial"
+    },
+    "opengram": {
+      "enabled": true,
+      "baseUrl": "http://localhost:3000",
+      "agents": [],
+      "dmPolicy": "pairing",
+      "allowFrom": ["user:primary"],
+      "instanceSecret": "og_LnwbvsjEQDowkjdhytjlRm6thyyaWTNC"
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "controlUi": {
+      "allowedOrigins": ["https://openclaw.tail2g322a.ts.net"]
+    },
+    "auth": {
+      "mode": "token",
+      "token": "redacted_auth_token"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "nodes": {
+      "denyCommands": [
+        "camera.snap",
+        "camera.clip",
+        "screen.record",
+        "contacts.add",
+        "calendar.add",
+        "reminders.add",
+        "sms.send"
+      ]
+    }
+  },
+  "skills": {
+    "install": {
+      "nodeManager": "npm"
+    }
+  },
+  "plugins": {
+    "allow": ["@opengramsh/openclaw-plugin", "telegram"],
+    "load": {
+      "paths": [
+        "/home/openclaw/.nvm/versions/node/v24.14.0/lib/node_modules/@opengramsh/openclaw-plugin/dist"
+      ]
+    },
+    "entries": {
+      "telegram": {
+        "enabled": true
+      },
+      "@opengramsh/openclaw-plugin": {
+        "enabled": true
+      }
+    }
+  }
+}

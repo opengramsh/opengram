@@ -64,6 +64,16 @@ openclaw opengram setup
 
 Both commands run the same interactive wizard -- they test the connection, configure the instance secret, let you select which agents to link, and optionally restart the gateway to apply changes.
 
+### Reimporting your OpenClaw agents
+
+If you've added new agents in OpenClaw and want to link them to Opengram, run the setup wizard again:
+
+```bash
+openclaw opengram setup
+```
+
+The wizard will detect all available OpenClaw agents and let you choose which ones to import. Previously linked agents remain selected by default -- you can add new ones or remove existing ones from the selection.
+
 ## Manual configuration
 
 If you prefer to skip the wizard entirely, add the plugin to your `openclaw.json` manually:
