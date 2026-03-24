@@ -1,0 +1,124 @@
+---
+title: Configuring Agents
+description: Add, edit, and manage agents in your Opengram instance using the web UI, config file, or admin API.
+---
+
+Configuring an agent in Opengram does not create a running AI agent. It registers an **agent identity** — a name, ID, description, and optional default model — that appears in the chat interface. An external agent framework such as the [OpenClaw plugin](/docs/agents/openclaw-plugin), or a [custom agent worker](/docs/agents/building-an-agent) you build yourself, then connects to Opengram, claims dispatched messages for that agent, and handles the actual AI processing. Think of it as defining a "seat" that an external agent fills.
+
+See the [Agents section](/docs/configuration#agents) in the Configuration docs for the full field reference.
+
+## Adding your first agent
+
+Running `opengram init` creates a default agent as part of the setup wizard. If you skipped the wizard or need additional agents, you can add them using any of the methods below.
+
+A minimal agent entry looks like this:
+
+```json title="opengram.config.json"
+{
+  "agents": [
+    {
+      "id": "assistant",
+      "name": "Assistant",
+      "description": "General-purpose AI assistant"
+    }
+  ]
+}
+```
+
+<Callout type="info">
+  For the complete field reference including `avatarUrl` and `defaultModelId`, see the [Agents section](/docs/configuration#agents) of the Configuration docs.
+</Callout>
+
+## Configuration methods
+
+There are four ways to manage agents.
+
+### Web UI
+
+Open the Opengram web interface, go to **Settings**, and select the **Agents** tab. From there you can add, edit, and delete agents. The dialog exposes three fields: **Name**, **ID**, and **Description**.
+
+Changes are applied immediately — no restart required.
+
+<Callout type="info">
+  The Agents tab does not expose `avatarUrl` or `defaultModelId`. To set those fields, use the **Raw Config** tab or edit the config file directly.
+</Callout>
+
+### Config file
+
+Edit `opengram.config.json` directly in a text editor. Add or modify entries in the `agents` array:
+
+```json title="opengram.config.json"
+{
+  "agents": [
+    {
+      "id": "assistant",
+      "name": "Assistant",
+      "description": "General-purpose AI assistant",
+      "defaultModelId": "claude-sonnet"
+    },
+    {
+      "id": "researcher",
+      "name": "Researcher",
+      "description": "Specialized in deep research tasks",
+      "defaultModelId": "gpt-5"
+    }
+  ]
+}
+```
+
+A restart is required for file changes to take effect. See [Config file location](/docs/configuration#config-file-location) for where the file lives in different deployment methods.
+
+### Admin API
+
+Send a `PATCH` request to `/api/v1/config/admin` with an `agents` array. Changes apply immediately without a restart.
+
+```bash
+curl -X PATCH http://localhost:3000/api/v1/config/admin \
+  -H "Authorization: Bearer og_your-secret-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agents": [
+      { "id": "assistant", "name": "Assistant", "description": "General-purpose AI assistant" },
+      { "id": "researcher", "name": "Researcher", "description": "Deep research agent" }
+    ]
+  }'
+```
+
+<Callout type="warning">
+  The `agents` array in the request body replaces the entire agent list. Always include all agents you want to keep.
+</Callout>
+
+### Raw Config tab
+
+In the web UI **Settings** page, the **Raw Config** tab lets you edit the full JSON configuration including fields not exposed by the Agents tab, such as `avatarUrl` and `defaultModelId`. The server validates the config before saving — invalid configurations are rejected with an error message.
+
+## Agent avatars
+
+Agent avatars are generated automatically using [FaceHash](https://facehash.dev), an open-source deterministic avatar library. Each agent gets a unique face derived from its name, so no manual avatar setup is needed.
+
+It is currently not possible to upload or override agent avatars.
+
+<Callout type="info">
+  Changing an agent's name will change its generated avatar.
+</Callout>
+
+## Default model
+
+The optional `defaultModelId` field pre-selects a model when a user starts a new chat with this agent. The value must match an `id` in the [`models`](/docs/configuration#models) array — if it references a model that does not exist, the server rejects the config with a validation error.
+
+When `defaultModelId` is not set, the instance-wide `defaultModelIdForNewChats` setting applies. If neither is configured, the user picks a model manually.
+
+## Validation rules
+
+- At least **one agent** must be configured. Deleting the last agent is not allowed.
+- Agent **IDs must be unique**. The web UI prevents adding an agent with a duplicate ID.
+- If `defaultModelId` is set, it must reference an existing model in the `models` array.
+- `id`, `name`, and `description` are required fields. `avatarUrl` and `defaultModelId` are optional.
+
+<Callout type="warning">
+  Changing an agent's `id` will break existing chat connections to that agent. The web UI shows a warning when you edit the ID field. Make sure the new ID matches what your agent worker uses as its `senderId`.
+</Callout>
+
+## Next steps
+
+Once configured, agents appear in the new-chat screen and can be selected by users. Your agent worker must use the same `id` as its `senderId` when posting messages through the API. For a full walkthrough of building a worker that claims dispatches and sends responses, see [Building an Agent](/docs/agents/building-an-agent).
