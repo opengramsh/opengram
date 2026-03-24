@@ -122,6 +122,23 @@ async function cmdUpgrade() {
     process.exit(1);
   }
 
+  // Upgrade OpenClaw plugin if installed
+  let pluginUpgraded = false;
+  try {
+    execSync('which opengram-openclaw', { stdio: ['ignore', 'pipe', 'ignore'] });
+    console.log('Upgrading OpenClaw plugin...');
+    try {
+      execSync('npm --loglevel error --silent --no-fund --no-audit install -g @opengramsh/openclaw-plugin@latest', {
+        stdio: 'inherit',
+      });
+      pluginUpgraded = true;
+    } catch {
+      console.error('OpenClaw plugin upgrade failed. You can upgrade it manually:\n  npm install -g @opengramsh/openclaw-plugin@latest');
+    }
+  } catch {
+    // Plugin not installed — skip
+  }
+
   const newVersion = getVersion();
 
   if (await isServiceRunningCheck()) {
@@ -134,6 +151,32 @@ async function cmdUpgrade() {
     console.log(`Already on the latest version (v${newVersion}).`);
   } else {
     console.log(`Upgraded: v${oldVersion} → v${newVersion}`);
+  }
+
+  // Offer to restart the OpenClaw gateway so it loads the updated plugin
+  if (pluginUpgraded) {
+    let openclawOnPath = false;
+    try {
+      execSync('which openclaw', { stdio: ['ignore', 'pipe', 'ignore'] });
+      openclawOnPath = true;
+    } catch { /* not on PATH */ }
+
+    if (openclawOnPath) {
+      const p = await import('@clack/prompts');
+      const restart = await p.confirm({
+        message: 'Restart OpenClaw gateway to load the updated plugin?',
+        initialValue: true,
+      });
+      if (!p.isCancel(restart) && restart) {
+        try {
+          execSync('openclaw gateway restart', { stdio: 'inherit' });
+        } catch {
+          console.warn('Could not restart gateway. Run manually: openclaw gateway restart');
+        }
+      } else {
+        console.log('Run `openclaw gateway restart` to apply the changes.');
+      }
+    }
   }
 }
 
