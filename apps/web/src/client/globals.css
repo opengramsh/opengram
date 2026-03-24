@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@source "../../node_modules/streamdown/dist";
+@source "../../../../node_modules/streamdown/dist";
 
 :root {
   --background: hsl(220 16% 8%);
