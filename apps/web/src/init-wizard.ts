@@ -175,7 +175,10 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
 
   p.note(
     `Automatically generates a short title for each chat using AI,\n` +
-      `so you don't have to name conversations manually.`,
+      `so you don't have to name conversations manually.\n\n` +
+      `If you enable this, you'll be asked to choose an AI provider,\n` +
+      `a model, and provide an API key.\n\n` +
+      `You can skip this and set it up later in the Opengram settings.`,
     "Auto-rename",
   );
   const enableAutoRename = await p.confirm({
