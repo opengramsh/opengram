@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://opengram.sh">
-    <img src="public/opengram-logo-sm.webp" width="120" alt="Opengram logo" />
+    <img src="apps/web/public/opengram-logo-sm.webp" width="120" alt="Opengram logo" />
   </a>
 </p>
 
