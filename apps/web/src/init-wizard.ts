@@ -252,20 +252,39 @@ export async function runInitWizard(opts: WizardOpts): Promise<WizardResult> {
 
     const modelChoice = await p.select({
       message: "Model for title generation",
-      options: selectedProvider.cheapModels.map((m) => ({
-        value: m.id,
-        label: m.label,
-      })),
+      options: [
+        ...selectedProvider.cheapModels.map((m) => ({
+          value: m.id,
+          label: m.label,
+        })),
+        { value: "__custom__", label: "Custom model…", hint: "enter any model ID" },
+      ],
     });
     if (p.isCancel(modelChoice)) {
       p.outro("Setup cancelled.");
       return { startServer: false };
     }
 
+    let effectiveModelId = modelChoice as string;
+    if (modelChoice === "__custom__") {
+      const customModel = await p.text({
+        message: "Enter model ID",
+        placeholder: "e.g. claude-haiku-4-5",
+        validate: (val) => {
+          if (!val?.trim()) return "Model ID cannot be empty";
+        },
+      });
+      if (p.isCancel(customModel)) {
+        p.outro("Setup cancelled.");
+        return { startServer: false };
+      }
+      effectiveModelId = customModel;
+    }
+
     autoRenameConfig = {
       enabled: true,
       provider: providerChoice as string,
-      modelId: modelChoice as string,
+      modelId: effectiveModelId,
     };
     if (chosenApiKey) {
       autoRenameConfig.apiKey = chosenApiKey;
