@@ -31,7 +31,7 @@ A minimal agent entry looks like this:
 
 ## Configuration methods
 
-There are four ways to manage agents.
+There are four ways to manage agents manually. If you use [OpenClaw](/docs/agents/openclaw-plugin), there is also an automated option.
 
 ### Web UI
 
@@ -91,6 +91,16 @@ curl -X PATCH http://localhost:3000/api/v1/config/admin \
 ### Raw Config tab
 
 In the web UI **Settings** page, the **Raw Config** tab lets you edit the full JSON configuration including fields not exposed by the Agents tab, such as `avatarUrl` and `defaultModelId`. The server validates the config before saving — invalid configurations are rejected with an error message.
+
+### OpenClaw plugin
+
+If your agents are managed by [OpenClaw](/docs/agents/openclaw-plugin), you can skip manual configuration entirely. The plugin's setup wizard detects all available OpenClaw agents and imports them into Opengram automatically:
+
+```bash
+openclaw opengram setup
+```
+
+The wizard creates the corresponding agent profiles in Opengram for you. To add agents later, just re-run the command — previously linked agents stay selected, and you can pick new ones from the list. See the [OpenClaw Plugin](/docs/agents/openclaw-plugin) docs for full setup instructions.
 
 ## Agent avatars
 
