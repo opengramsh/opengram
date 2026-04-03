@@ -173,6 +173,27 @@ describe("OpenGramClient", () => {
       );
     });
 
+    it("createChat omits modelId when no override is provided", async () => {
+      fetchSpy.mockResolvedValueOnce(mockResponse({ id: "new-chat" }));
+      const client = new OpenGramClient("http://localhost:3000");
+
+      await client.createChat({
+        agentIds: ["grami"],
+        title: "Test Chat",
+      });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "http://localhost:3000/api/v1/chats",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            agentIds: ["grami"],
+            title: "Test Chat",
+          }),
+        }),
+      );
+    });
+
     it("listChats builds query string", async () => {
       fetchSpy.mockResolvedValueOnce(
         mockResponse({ data: [], cursor: { hasMore: false } }),
