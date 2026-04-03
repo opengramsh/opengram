@@ -95,7 +95,7 @@ export class OpenGramClient {
 
   async createChat(params: {
     agentIds: string[];
-    modelId: string;
+    modelId?: string;
     title?: string;
     tags?: string[];
   }): Promise<Chat> {

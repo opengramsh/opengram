@@ -8,7 +8,7 @@ export const opengramChatTool: AgentTool = {
   label: "OpenGram Chat",
   description:
     "Manage OpenGram chats — create new chats, update metadata, or list existing chats. " +
-    "Creating a chat requires modelId — the tool will error without it. " +
+    "When modelId is omitted on create, OpenGram resolves the chat model from agent or instance defaults. " +
     "When creating a chat, always pass your own agent ID as agentId (found in your Runtime context as the `agent=` field), unless explicitly instructed otherwise. Never omit agentId — the default fallback will assign chats to the wrong agent.",
   parameters: Type.Object({
     action: Type.Union(
@@ -22,7 +22,7 @@ export const opengramChatTool: AgentTool = {
       Type.String({ description: "Agent ID for new chat (defaults to first configured agent)" }),
     ),
     modelId: Type.Optional(
-      Type.String({ description: "Model ID — REQUIRED for create. The tool will error without it." }),
+      Type.String({ description: "Model ID override for create. If omitted, OpenGram uses the agent or instance default model." }),
     ),
     title: Type.Optional(Type.String({ description: "Chat title" })),
     tags: Type.Optional(Type.Array(Type.String(), { description: "Chat tags" })),
@@ -37,16 +37,9 @@ export const opengramChatTool: AgentTool = {
         const cfg = getConfig();
         const agentId =
           params.agentId ?? cfg.channels?.opengram?.agents?.[0] ?? "unknown";
-        const modelId = params.modelId;
-        if (!modelId) {
-          return {
-            content: [{ type: "text" as const, text: "Error: modelId is required (no default model configured). Provide the modelId parameter." }],
-            details: { error: "modelId required" },
-          };
-        }
         const chat = await client.createChat({
           agentIds: [agentId],
-          modelId,
+          modelId: params.modelId,
           title: params.title,
           tags: params.tags,
         });

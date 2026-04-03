@@ -130,8 +130,9 @@ PDFs, and audio.
 
 Use `opengram_chat` to create, update, or list chats.
 
-**Create** — starts a new chat. Requires `modelId` (the model to use).
-Optionally set `title`, `tags`, and `agentId`.
+**Create** — starts a new chat. `modelId` is optional; if omitted, OpenGram
+uses the agent or instance default model. Optionally set `title`, `tags`, and
+`agentId`.
 
 **Update** — modify an existing chat. Requires `chatId`. You can change
 `title`, `tags`, or `pinned` status.

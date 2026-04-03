@@ -36,7 +36,7 @@ type ChatRecord = {
 
 type CreateChatInput = {
   agentIds: string[];
-  modelId: string;
+  modelId?: string;
   title?: string;
   tags?: string[];
   firstMessage?: string;
@@ -219,6 +219,24 @@ function ensureModelExists(modelId: string, allowedModelIds: Set<string>) {
   }
 }
 
+function resolveCreateChatModelId(
+  modelId: string | undefined,
+  agentIds: string[],
+  config: ReturnType<typeof loadOpengramConfig>,
+) {
+  if (modelId !== undefined) {
+    return modelId;
+  }
+
+  const agentsById = new Map(config.agents.map((agent) => [agent.id, agent]));
+  const primaryAgent = agentsById.get(agentIds[0] ?? '');
+
+  return primaryAgent?.defaultModelId
+    ?? config.defaultModelIdForNewChats
+    ?? config.models[0]?.id
+    ?? '';
+}
+
 function ensureAgentIds(agentIds: string[], allowedAgentIds: Set<string>) {
   if (!agentIds.length) {
     throw validationError('agentIds must contain at least one agent id.', { field: 'agentIds' });
@@ -376,8 +394,8 @@ export function createChat(input: CreateChatInput) {
   }
   assertStringArray(input.agentIds, 'agentIds');
 
-  if (typeof input.modelId !== 'string') {
-    throw validationError('modelId is required.', { field: 'modelId' });
+  if (input.modelId !== undefined && typeof input.modelId !== 'string') {
+    throw validationError('modelId must be a string.', { field: 'modelId' });
   }
 
   if (input.tags !== undefined) {
@@ -395,8 +413,9 @@ export function createChat(input: CreateChatInput) {
   const allowedModelIds = new Set(config.models.map((model) => model.id));
   const allowedAgentIds = new Set(config.agents.map((agent) => agent.id));
 
-  ensureModelExists(input.modelId, allowedModelIds);
   ensureAgentIds(input.agentIds, allowedAgentIds);
+  const resolvedModelId = resolveCreateChatModelId(input.modelId, input.agentIds, config);
+  ensureModelExists(resolvedModelId, allowedModelIds);
 
   const now = Date.now();
   const chatId = nanoid();
@@ -423,7 +442,7 @@ export function createChat(input: CreateChatInput) {
     JSON.stringify(tags),
     0,
     JSON.stringify(input.agentIds),
-    input.modelId,
+    resolvedModelId,
     0,
     now,
     0,
@@ -450,7 +469,7 @@ export function createChat(input: CreateChatInput) {
       firstMessageContent,
       null,
       'complete',
-      input.modelId,
+      resolvedModelId,
       null,
     );
   }
