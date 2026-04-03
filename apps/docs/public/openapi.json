@@ -723,8 +723,7 @@
           }
         },
         "required": [
-          "agentIds",
-          "modelId"
+          "agentIds"
         ]
       },
       "ChatList": {

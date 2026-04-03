@@ -22,7 +22,7 @@ export const ChatSchema = z.object({
 
 export const CreateChatBodySchema = z.object({
   agentIds: z.array(z.string()).min(1),
-  modelId: z.string(),
+  modelId: z.string().optional(),
   title: z.string().optional(),
   tags: z.array(z.string()).optional(),
   firstMessage: z.string().optional(),

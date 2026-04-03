@@ -47,8 +47,25 @@ function setInstanceSecretConfig(secret: string) {
   });
 }
 
-function setConfigOverrides(overrides: { security?: Record<string, unknown>; server?: Record<string, unknown> }) {
+function setConfigOverrides(
+  overrides: {
+    security?: Record<string, unknown>;
+    server?: Record<string, unknown>;
+    agents?: Record<string, unknown>[];
+    models?: Record<string, unknown>[];
+    defaultModelIdForNewChats?: string | undefined;
+  },
+) {
   const config = structuredClone(TEST_BASE_CONFIG) as Record<string, unknown>;
+  if (overrides.defaultModelIdForNewChats !== undefined || 'defaultModelIdForNewChats' in overrides) {
+    config.defaultModelIdForNewChats = overrides.defaultModelIdForNewChats;
+  }
+  if (overrides.agents) {
+    config.agents = overrides.agents;
+  }
+  if (overrides.models) {
+    config.models = overrides.models;
+  }
   if (overrides.security) {
     config.security = { ...TEST_BASE_CONFIG.security, ...overrides.security };
   }
@@ -178,6 +195,45 @@ describe('chats API', () => {
         details: { field: 'modelId' },
       },
     });
+  });
+
+  it('uses the primary agent default model when modelId is omitted', async () => {
+    const { response, json } = await createChat({ modelId: undefined });
+
+    expect(response.status).toBe(201);
+    expect(json.model_id).toBe('model-default');
+  });
+
+  it('falls back to the global default model when the agent has no default', async () => {
+    setConfigOverrides({
+      agents: [{ id: 'agent-default', name: 'Test Agent', description: 'test' }],
+      models: [
+        { id: 'model-default', name: 'Test Model', description: 'test' },
+        { id: 'model-global', name: 'Global Model', description: 'test' },
+      ],
+      defaultModelIdForNewChats: 'model-global',
+    });
+
+    const { response, json } = await createChat({ modelId: undefined });
+
+    expect(response.status).toBe(201);
+    expect(json.model_id).toBe('model-global');
+  });
+
+  it('falls back to the first configured model when no defaults are configured', async () => {
+    setConfigOverrides({
+      agents: [{ id: 'agent-default', name: 'Test Agent', description: 'test' }],
+      models: [
+        { id: 'model-first', name: 'First Model', description: 'test' },
+        { id: 'model-second', name: 'Second Model', description: 'test' },
+      ],
+      defaultModelIdForNewChats: undefined,
+    });
+
+    const { response, json } = await createChat({ modelId: undefined });
+
+    expect(response.status).toBe(201);
+    expect(json.model_id).toBe('model-first');
   });
 
   it('lists chats with cursor pagination', async () => {
